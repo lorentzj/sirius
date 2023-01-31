@@ -1,0 +1,127 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+    background-color: rgb(42, 42, 41);
+    color: white;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+.even_column {
+    flex: 1;
+    padding: 5px;
+}
+
+
+/* Header */
+
+#header {
+    background-color: rgb(68, 51, 64);
+    padding: 5px;
+}
+
+/* Editor */
+
+#editor_container {
+    display: flex;
+    height: 50vh;
+    overflow-y: scroll;    
+}
+
+#editor_line_numbers {
+    color: rgb(117, 117, 116);
+    flex: none;
+    padding: 3px;
+    white-space: pre;
+    font-family: monospace;
+    font-size: x-large;
+    min-width: 2em;
+    text-align: end;
+    margin-right: 1em;
+    user-select: none;
+}
+
+#editor {
+    padding: 3px;
+    white-space: pre;
+    caret-color: black;
+    font-family: monospace;
+    font-size: x-large;
+    flex: auto;
+    border: none;
+    outline: none;
+    caret-color: white;
+}
+
+span::selection {
+    background-color: rgb(13, 62, 117);
+}
+
+span.token.highlight {
+    background-color: rgb(81, 81, 80);
+}
+
+span.token.constant {
+    color: rgb(137, 197, 253);
+}
+
+span.token.identifier {
+    color: rgb(255, 255, 255);
+}
+
+span.token.keyword {
+    color: rgb(22, 250, 22);
+}
+
+span.token.assign {
+    color: rgb(154, 88, 27);
+}
+
+span.token.semicolon {
+    color: rgb(154, 88, 27);
+}
+
+span.token.operator {
+    color: rgb(189, 136, 83);
+}
+
+span.token.openparen, span.token.closeparen, span.token.opensqbracket, span.token.closesqbracket {
+    color: rgb(191, 50, 216);
+}
+
+span.token.type {
+    font-weight: bolder;
+}
+
+span.token.error {
+    text-decoration: wavy underline red;
+}
+
+/* Output */
+
+#output {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    background-color: rgb(68, 51, 64);
+    padding: 3px;
+}
+
+#log {
+    margin: 3px;
+    font-family: monospace;
+    font-size: x-large;
+    overflow-y: scroll;    
+}
+
+#errors {
+    color: red;
+    padding: 3px;
+    font-family: monospace;
+    font-size: x-large;
+    overflow-y: scroll;
+}

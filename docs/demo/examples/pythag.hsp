@@ -1,0 +1,5 @@
+let a = 3;
+let b = 4;
+let hyp = (a^2 + b^2)^0.5;
+
+print a, b, hyp;

@@ -1,0 +1,34 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <meta charset = "UTF-8">
+        <link rel = "stylesheet" href = "./css/main.css">
+        <script src = "./js/demo.js" type = "module"></script>
+        <title>Sirius</title>
+    </head>
+    <body>
+        <div id = "header">
+            <label for="demo_programs">Load an example program: </label>
+
+            <select name="demo_programs" id="demo_programs">
+                <option value = "empty"></option>
+            </select><br><br>
+            <button id="run">Run (Ctrl+Enter)</button>    
+        </div><br>
+        <div id="editor_container">
+            <div id="editor_line_numbers" class="column">1</div>
+            <div id="editor" contenteditable="true" spellcheck="false" class="column"><div class="code_line" data-line="1"><br data-sentinel="true"></div></div>
+        </div><br>
+
+        <div id="output">
+            <div class="even_column">
+                <h3>Errors</h3>
+                <div id="errors"></div>
+            </div>
+            <div class="even_column">
+                <h3>Log</h3>
+                <div id="log"></div>
+            </div>
+        </div>
+    </body>
+</html>
