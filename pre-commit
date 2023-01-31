@@ -19,3 +19,4 @@ echo "║                              DEMO                              ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 wasm-pack build --target web -d docs/demo/js || { exit 1; }
 tsc -p docs/demo || { exit 1; }
+rm docs/demo/js/.gitignore || { exit 1; }

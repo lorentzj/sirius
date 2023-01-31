@@ -1,0 +1,12 @@
+{
+  "name": "sirius",
+  "version": "0.1.0",
+  "files": [
+    "sirius_bg.wasm",
+    "sirius.js",
+    "sirius.d.ts"
+  ],
+  "module": "sirius.js",
+  "types": "sirius.d.ts",
+  "sideEffects": false
+}
