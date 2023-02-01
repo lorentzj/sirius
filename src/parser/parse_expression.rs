@@ -93,19 +93,36 @@ pub fn rotate_binary_op(lhs: Expression, op: Op, rhs: Expression) -> Expression 
         }
 
         ExpressionData::Tuple(v) => {
-            if precedence(&op) > precedence(&Op::Comma) {
-                let mut v = v.to_owned();
-                let last = v.pop().unwrap();
-                v.push(rotate_binary_op(last, op, rhs));
+            if lhs.allow_rotation {
+                if precedence(&op) > precedence(&Op::Comma) {
+                    let mut v = v.to_owned();
+                    let last = v.pop().unwrap();
+                    v.push(rotate_binary_op(last, op, rhs));
 
-                Expression::new(ExpressionData::Tuple(v), lhs_start, rhs_end, true)
+                    Expression::new(ExpressionData::Tuple(v), lhs_start, rhs_end, true)
+                } else {
+                    match op {
+                        Op::Comma => {
+                            let mut v = v.to_owned();
+                            v.push(rhs);
+                            Expression::new(ExpressionData::Tuple(v), lhs_start, rhs_end, true)
+                        }
+                        _ => Expression::new(
+                            ExpressionData::BinaryOp(Box::new(lhs), op, Box::new(rhs)),
+                            lhs_start,
+                            rhs_end,
+                            true,
+                        ),
+                    }
+                }
             } else {
                 match op {
-                    Op::Comma => {
-                        let mut v = v.to_owned();
-                        v.push(rhs);
-                        Expression::new(ExpressionData::Tuple(v), lhs_start, rhs_end, true)
-                    }
+                    Op::Comma => Expression::new(
+                        ExpressionData::Tuple(vec![lhs, rhs]),
+                        lhs_start,
+                        rhs_end,
+                        true,
+                    ),
                     _ => Expression::new(
                         ExpressionData::BinaryOp(Box::new(lhs), op, Box::new(rhs)),
                         lhs_start,
