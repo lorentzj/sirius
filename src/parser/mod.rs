@@ -11,7 +11,7 @@ pub use crate::parser::parse_type_expression::{parse_type_expression, TypeExpres
 
 use serde::Serialize;
 
-type TypeAnnotationUnparsed = Option<(usize, usize)>;
+type TypeAnnotationUnparsed = Option<(TokenID, TokenID)>;
 
 #[derive(Debug, PartialEq, Serialize)]
 pub enum Statement {
@@ -325,7 +325,12 @@ pub fn parse(code: &str) -> ParserOutput {
                                                     type_expression_start,
                                                     type_expression_end,
                                                 ) {
-                                                    Ok(type_expression) => {
+                                                    Ok((
+                                                        type_expression,
+                                                        mut type_bracket_pairs,
+                                                    )) => {
+                                                        bracket_pairs
+                                                            .append(&mut type_bracket_pairs);
                                                         statements.push(Statement::Let(
                                                             identifier,
                                                             Some(type_expression),

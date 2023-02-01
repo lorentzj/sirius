@@ -3,8 +3,6 @@ use crate::error::Error;
 use crate::lexer::{Op, Token, TokenType};
 use serde::Serialize;
 
-type TokenID = usize;
-
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum ExpressionData {
     Constant(f64),
@@ -238,7 +236,7 @@ pub fn parse_expression(
                 _ => {
                     return Err(Error::new(
                         ErrorType::ParseError,
-                        "unexpected token".to_string(),
+                        "unexpected token in expression".to_string(),
                         vec![token_id],
                     ));
                 }
