@@ -1,5 +1,6 @@
 import init, * as bindings from '../js/sirius.js';
 import * as editor from './editor.js';
+import * as output_area from './output_area.js';
 import { CodeLines } from './code_lines.js';
 import { load_demo_programs } from './demo_programs.js';
 document.body.onload = () => {
@@ -7,12 +8,16 @@ document.body.onload = () => {
         const editorElem = document.getElementById('editor');
         const editorLinesElem = document.getElementById('editor_line_numbers');
         const buttonElem = document.getElementById('run');
+        const displayErrorsElem = document.getElementById('display_errors');
+        const displayLogElem = document.getElementById('display_log');
         const errorElem = document.getElementById('errors');
         const logElem = document.getElementById('log');
         const progSelectorElem = document.getElementById('demo_programs');
         let codeLines = new CodeLines();
         if (editorElem !== null
             && editorLinesElem !== null
+            && displayErrorsElem !== null
+            && displayLogElem !== null
             && errorElem !== null
             && logElem !== null
             && buttonElem !== null
@@ -35,23 +40,24 @@ document.body.onload = () => {
                 }
                 updateEditor();
             });
+            output_area.initializeOutputArea(displayErrorsElem, displayLogElem, errorElem, logElem);
             const updateEditor = () => {
                 const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n')));
                 console.log(parsed);
                 editor.updateEditorWithCode(editorElem, editorLinesElem, codeLines.code, parsed);
                 editor.updateEditorWithErrors(parsed.errors, editorElem);
                 editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem);
-                updateErrorELement(errorElem, parsed.errors);
+                output_area.updateErrorELement(displayErrorsElem, errorElem, parsed.errors, parsed.tokens);
                 return parsed;
             };
             buttonElem.addEventListener('click', _ => {
                 const parsed = updateEditor();
                 if (parsed.errors.length === 0) {
                     const interpreted = JSON.parse(bindings.interpret(codeLines.code.join('\n')));
-                    logElem.innerText = interpreted.output;
+                    output_area.updateLogELement(displayLogElem, logElem, interpreted);
                     if (interpreted.error) {
                         editor.updateEditorWithErrors([interpreted.error], editorElem);
-                        updateErrorELement(errorElem, [interpreted.error]);
+                        output_area.updateErrorELement(displayErrorsElem, errorElem, [interpreted.error], parsed.tokens);
                     }
                 }
             });
@@ -77,11 +83,3 @@ document.body.onload = () => {
         }
     });
 };
-function updateErrorELement(errorElem, errors) {
-    errorElem.innerHTML = '';
-    for (const error of errors) {
-        const errorRowElem = document.createElement('div');
-        errorRowElem.innerText = error.error_type + ': ' + error.message;
-        errorElem.appendChild(errorRowElem);
-    }
-}

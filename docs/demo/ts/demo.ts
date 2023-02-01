@@ -1,6 +1,7 @@
 import init, * as bindings from '../js/sirius.js';
 import * as editor from './editor.js';
 import * as types from './types.js';
+import * as output_area from './output_area.js';
 import {CodeLines} from './code_lines.js';
 import {load_demo_programs} from './demo_programs.js';
 
@@ -9,6 +10,8 @@ document.body.onload = () => {
         const editorElem = document.getElementById('editor');
         const editorLinesElem = document.getElementById('editor_line_numbers');
         const buttonElem = document.getElementById('run');
+        const displayErrorsElem = document.getElementById('display_errors');
+        const displayLogElem = document.getElementById('display_log');
         const errorElem = document.getElementById('errors');
         const logElem = document.getElementById('log');
         const progSelectorElem = document.getElementById('demo_programs');
@@ -16,12 +19,14 @@ document.body.onload = () => {
         let codeLines = new CodeLines();
 
         if(
-            editorElem          !== null
-            && editorLinesElem  !== null 
-            && errorElem        !== null
-            && logElem          !== null
-            && buttonElem       !== null
-            && progSelectorElem !== null
+            editorElem           !== null
+            && editorLinesElem   !== null
+            && displayErrorsElem !== null
+            && displayLogElem    !== null
+            && errorElem         !== null
+            && logElem           !== null
+            && buttonElem        !== null
+            && progSelectorElem  !== null
         ) {
             for(const demo_program in demo_programs) {
                 const programOption = document.createElement('option');
@@ -45,13 +50,15 @@ document.body.onload = () => {
                 updateEditor();
             });
             
+            output_area.initializeOutputArea(displayErrorsElem, displayLogElem, errorElem, logElem);
+
             const updateEditor = () => {
                 const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n'))) as types.ParserOutput;
                 console.log(parsed);
                 editor.updateEditorWithCode(editorElem, editorLinesElem, codeLines.code, parsed);  
                 editor.updateEditorWithErrors(parsed.errors, editorElem);
                 editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem);
-                updateErrorELement(errorElem, parsed.errors);
+                output_area.updateErrorELement(displayErrorsElem, errorElem, parsed.errors, parsed.tokens);
                 return parsed;
             }
 
@@ -60,10 +67,10 @@ document.body.onload = () => {
 
                 if(parsed.errors.length === 0) {
                     const interpreted = JSON.parse(bindings.interpret(codeLines.code.join('\n'))) as types.InterpreterOutput;
-                    logElem.innerText = interpreted.output;
+                    output_area.updateLogELement(displayLogElem, logElem, interpreted);
                     if(interpreted.error) {
                         editor.updateEditorWithErrors([interpreted.error], editorElem);
-                        updateErrorELement(errorElem, [interpreted.error]);    
+                        output_area.updateErrorELement(displayErrorsElem, errorElem, [interpreted.error], parsed.tokens);    
                     }
                 }
             });
@@ -91,12 +98,3 @@ document.body.onload = () => {
         }
     });
 };
-
-function updateErrorELement(errorElem: HTMLElement, errors: types.Error[]) {
-    errorElem.innerHTML = '';
-    for(const error of errors) {
-        const errorRowElem = document.createElement('div');
-        errorRowElem.innerText = error.error_type + ': ' + error.message;
-        errorElem.appendChild(errorRowElem);
-    }
-}
