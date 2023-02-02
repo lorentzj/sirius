@@ -9,8 +9,6 @@ pub enum ExpressionData {
     Identifier(String),
     BinaryOp(Box<Expression>, Op, Box<Expression>),
     Tuple(Vec<Expression>),
-    FnCall(Box<Expression>, Vec<Expression>),
-    Accessor(Box<Expression>, Vec<Expression>),
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
@@ -265,6 +263,8 @@ pub fn parse_expression(
                 inner_expression.allow_rotation = false;
 
                 bracket_pairs.extend(inner_expression.bracket_pairs.iter());
+                inner_expression.start -= 1;
+                inner_expression.end += 1;
 
                 if bracket_type == BracketType::Paren {
                     if let Some(op) = op {

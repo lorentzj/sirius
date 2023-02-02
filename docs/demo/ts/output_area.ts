@@ -25,8 +25,8 @@ export function updateErrorELement(displayErrorsElem: HTMLElement, errorElem: HT
 
     for(const error of errors) {
         const errorRowElem = document.createElement('div');
-        const errorPosition = `Line: ${tokens[error.tokens[0]].line}, Col: ${tokens[error.tokens[0]].start}`;
-        errorRowElem.innerText = `${error.error_type}: ${error.message} (${errorPosition})`;
+        const errorPosition = `Ln ${tokens[error.tokens[0]].line + 1}`;
+        errorRowElem.innerText = `${error.error_type}: ${error.message} [${errorPosition}]`;
         errorElem.appendChild(errorRowElem);
     }
 }

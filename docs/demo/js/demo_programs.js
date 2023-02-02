@@ -10,8 +10,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 export function load_demo_programs() {
     return __awaiter(this, void 0, void 0, function* () {
         const pythag_source = yield fetch('./examples/pythag.hsp').then((response) => response.text());
+        const types_source = yield fetch('./examples/types.hsp').then((response) => response.text());
         return {
-            'Pythagoras': pythag_source
+            'Pythagoras': pythag_source,
+            'Types': types_source
         };
     });
 }

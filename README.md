@@ -2,4 +2,4 @@
 
 A simple language for mathematical transformations. 
 
-Try some example code in the **[Live Demo](https://lorentzj.github.io/sirius/demo)**.
+Try it out in the **[Live Demo](https://lorentzj.github.io/sirius/demo)**.

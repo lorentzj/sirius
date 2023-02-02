@@ -115,7 +115,7 @@ span.token.type {
     font-weight: bolder;
 }
 
-span.token.error {
+span.code.error {
     text-decoration: wavy underline red;
 }
 

@@ -234,6 +234,13 @@ export function updateEditorWithErrors(errors, editorElem) {
             if (tokenElem !== null) {
                 tokenElem.classList.add('error');
                 tokenElem.title = `${error.error_type}: ${error.message}`;
+                if (error.tokens.find(err => err === tokenId + 1)) {
+                    const nextElem = tokenElem.nextElementSibling;
+                    if (nextElem !== null) {
+                        nextElem.classList.add('error');
+                        nextElem.title = `${error.error_type}: ${error.message}`;
+                    }
+                }
             }
         });
     });

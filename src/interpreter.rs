@@ -88,26 +88,6 @@ pub fn interpret_expression(expression: Expression, context: &Context) -> Result
             )),
         },
 
-        ExpressionData::Accessor(_, _) => {
-            let tokens: Vec<TokenID> = (expression.start..expression.end).into_iter().collect();
-
-            Err(Error::new(
-                ErrorType::NotImplementedError,
-                "haven't implemented array access yet...".to_string(),
-                tokens,
-            ))
-        }
-
-        ExpressionData::FnCall(_, _) => {
-            let tokens: Vec<TokenID> = (expression.start..expression.end).into_iter().collect();
-
-            Err(Error::new(
-                ErrorType::NotImplementedError,
-                "haven't implemented function calls yet...".to_string(),
-                tokens,
-            ))
-        }
-
         ExpressionData::Tuple(v) => {
             let mut acc = vec![];
             for expression in v {

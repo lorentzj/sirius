@@ -6,6 +6,7 @@ pub enum ErrorType {
     BracketError,
     ParseError,
     UnboundIdentifierError,
+    TypeError,
     NotImplementedError,
     RuntimeError,
     InternalError,

@@ -6,9 +6,28 @@ use serde::Serialize;
 type BracketPairs = Vec<(TokenID, TokenID)>;
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
-pub enum TypeExpression {
+pub enum TypeExpressionData {
     Identifier(String),
     Tuple(Vec<TypeExpression>),
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize)]
+pub struct TypeExpression {
+    pub data: TypeExpressionData,
+    pub start: TokenID,
+    pub end: TokenID,
+    pub bracket_pairs: BracketPairs,
+}
+
+impl TypeExpression {
+    fn new(data: TypeExpressionData, start: TokenID, end: TokenID) -> Self {
+        TypeExpression {
+            data,
+            start,
+            end,
+            bracket_pairs: vec![],
+        }
+    }
 }
 
 pub fn parse_type_expression(
@@ -16,9 +35,13 @@ pub fn parse_type_expression(
     bracket_tree: Vec<BracketTree>,
     start: TokenID,
     end: TokenID,
-) -> Result<(TypeExpression, BracketPairs), Error> {
+) -> Result<TypeExpression, Error> {
     if bracket_tree.is_empty() {
-        Ok((TypeExpression::Tuple(vec![]), vec![]))
+        Ok(TypeExpression::new(
+            TypeExpressionData::Tuple(vec![]),
+            start,
+            end,
+        ))
     } else {
         let mut bracket_pairs: BracketPairs = vec![];
         let mut lhs: Option<TypeExpression> = None;
@@ -46,39 +69,51 @@ pub fn parse_type_expression(
                         }
                     }
                     TokenType::Identifier(identifier) => match lhs {
-                        Some(TypeExpression::Tuple(ref mut old_v)) => {
-                            if comma {
-                                if can_append {
-                                    let mut v = vec![];
-                                    v.append(old_v);
-                                    v.push(TypeExpression::Identifier(identifier.to_string()));
-                                    lhs = Some(TypeExpression::Tuple(v));
-                                } else {
-                                    let mut v = vec![];
-                                    v.append(old_v);
+                        Some(mut old_lhs) => {
+                            let old_lhs_start = old_lhs.start;
 
-                                    lhs = Some(TypeExpression::Tuple(vec![
-                                        TypeExpression::Tuple(v),
-                                        TypeExpression::Identifier(identifier.to_string()),
-                                    ]));
-                                    can_append = true;
-                                }
-                            } else {
-                                return Err(Error::new(
-                                    ErrorType::ParseError,
-                                    "unexpected identifier".to_string(),
-                                    vec![token_id],
-                                ));
-                            }
-                            comma = false;
-                        }
-                        Some(TypeExpression::Identifier(ref old_identifier)) => {
+                            let current_identifier = TypeExpression::new(
+                                TypeExpressionData::Identifier(identifier.to_string()),
+                                token_id,
+                                token_id + 1,
+                            );
+
                             if comma {
-                                lhs = Some(TypeExpression::Tuple(vec![
-                                    TypeExpression::Identifier(old_identifier.to_string()),
-                                    TypeExpression::Identifier(identifier.to_string()),
-                                ]));
-                                can_append = true;
+                                match old_lhs.data {
+                                    TypeExpressionData::Tuple(ref mut old_v) => {
+                                        if can_append {
+                                            let mut v = vec![];
+                                            v.append(old_v);
+                                            v.push(current_identifier);
+                                            lhs = Some(TypeExpression::new(
+                                                TypeExpressionData::Tuple(v),
+                                                old_lhs_start,
+                                                token_id + 1,
+                                            ));
+                                        } else {
+                                            lhs = Some(TypeExpression::new(
+                                                TypeExpressionData::Tuple(vec![
+                                                    old_lhs,
+                                                    current_identifier,
+                                                ]),
+                                                old_lhs_start,
+                                                token_id + 1,
+                                            ));
+                                            can_append = true;
+                                        }
+                                    }
+                                    TypeExpressionData::Identifier(_) => {
+                                        lhs = Some(TypeExpression::new(
+                                            TypeExpressionData::Tuple(vec![
+                                                old_lhs,
+                                                current_identifier,
+                                            ]),
+                                            old_lhs_start,
+                                            token_id + 1,
+                                        ));
+                                        can_append = true;
+                                    }
+                                }
                             } else {
                                 return Err(Error::new(
                                     ErrorType::ParseError,
@@ -89,7 +124,11 @@ pub fn parse_type_expression(
                             comma = false;
                         }
                         None => {
-                            lhs = Some(TypeExpression::Identifier(identifier.to_string()));
+                            lhs = Some(TypeExpression::new(
+                                TypeExpressionData::Identifier(identifier.to_string()),
+                                token_id,
+                                token_id + 1,
+                            ));
                         }
                     },
                     _ => {
@@ -100,32 +139,56 @@ pub fn parse_type_expression(
                         ));
                     }
                 },
+
                 BracketTree::Bracket(bracket_type, open_id, subtrees, close_id) => {
                     match bracket_type {
                         BracketType::Paren => {
-                            let (inner_expression, mut inner_brackets) =
+                            let mut inner_expression =
                                 parse_type_expression(tokens, subtrees, open_id, close_id + 1)?;
+                            bracket_pairs.append(&mut inner_expression.bracket_pairs);
 
-                            bracket_pairs.append(&mut inner_brackets);
+                            inner_expression.start -= 1;
+                            inner_expression.end += 1;
 
                             match lhs {
-                                Some(TypeExpression::Tuple(ref mut old_v)) => {
+                                Some(mut old_lhs) => {
+                                    let old_lhs_start = old_lhs.start;
                                     if comma {
-                                        if can_append {
-                                            let mut v = vec![];
-                                            v.append(old_v);
-                                            v.push(inner_expression);
-                                            lhs = Some(TypeExpression::Tuple(v));
-                                        } else {
-                                            let mut v = vec![];
-                                            v.append(old_v);
-
-                                            lhs = Some(TypeExpression::Tuple(vec![
-                                                TypeExpression::Tuple(v),
-                                                inner_expression,
-                                            ]));
+                                        match old_lhs.data {
+                                            TypeExpressionData::Tuple(ref mut old_v) => {
+                                                if can_append {
+                                                    let mut v = vec![];
+                                                    v.append(old_v);
+                                                    v.push(inner_expression);
+                                                    lhs = Some(TypeExpression::new(
+                                                        TypeExpressionData::Tuple(v),
+                                                        old_lhs_start,
+                                                        close_id + 1,
+                                                    ));
+                                                } else {
+                                                    lhs = Some(TypeExpression::new(
+                                                        TypeExpressionData::Tuple(vec![
+                                                            old_lhs,
+                                                            inner_expression,
+                                                        ]),
+                                                        old_lhs_start,
+                                                        close_id + 1,
+                                                    ));
+                                                }
+                                                can_append = true;
+                                            }
+                                            TypeExpressionData::Identifier(_) => {
+                                                lhs = Some(TypeExpression::new(
+                                                    TypeExpressionData::Tuple(vec![
+                                                        old_lhs,
+                                                        inner_expression,
+                                                    ]),
+                                                    old_lhs_start,
+                                                    close_id + 1,
+                                                ));
+                                                can_append = true;
+                                            }
                                         }
-                                        can_append = true;
                                     } else {
                                         return Err(Error::new(
                                             ErrorType::ParseError,
@@ -134,21 +197,7 @@ pub fn parse_type_expression(
                                         ));
                                     }
                                 }
-                                Some(TypeExpression::Identifier(ref old_identifier)) => {
-                                    if comma {
-                                        lhs = Some(TypeExpression::Tuple(vec![
-                                            TypeExpression::Identifier(old_identifier.to_string()),
-                                            inner_expression,
-                                        ]));
-                                        can_append = true;
-                                    } else {
-                                        return Err(Error::new(
-                                            ErrorType::ParseError,
-                                            "unexpected tuple".to_string(),
-                                            vec![open_id],
-                                        ));
-                                    }
-                                }
+
                                 None => {
                                     lhs = Some(inner_expression);
                                     can_append = false;
@@ -178,7 +227,10 @@ pub fn parse_type_expression(
         }
 
         match lhs {
-            Some(expression) => Ok((expression, bracket_pairs)),
+            Some(mut expression) => {
+                expression.bracket_pairs.append(&mut bracket_pairs);
+                Ok(expression)
+            }
             None => Err(Error::new(
                 ErrorType::ParseError,
                 "expected expression".to_string(),

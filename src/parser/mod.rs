@@ -7,7 +7,9 @@ use crate::lexer::{lex, Keyword, Token, TokenType};
 pub use crate::parser::match_brackets::TokenID;
 use crate::parser::match_brackets::{match_brackets, BracketType};
 pub use crate::parser::parse_expression::{parse_expression, Expression, ExpressionData};
-pub use crate::parser::parse_type_expression::{parse_type_expression, TypeExpression};
+pub use crate::parser::parse_type_expression::{
+    parse_type_expression, TypeExpression, TypeExpressionData,
+};
 
 use serde::Serialize;
 
@@ -325,12 +327,10 @@ pub fn parse(code: &str) -> ParserOutput {
                                                     type_expression_start,
                                                     type_expression_end,
                                                 ) {
-                                                    Ok((
-                                                        type_expression,
-                                                        mut type_bracket_pairs,
-                                                    )) => {
-                                                        bracket_pairs
-                                                            .append(&mut type_bracket_pairs);
+                                                    Ok(mut type_expression) => {
+                                                        bracket_pairs.append(
+                                                            &mut type_expression.bracket_pairs,
+                                                        );
                                                         statements.push(Statement::Let(
                                                             identifier,
                                                             Some(type_expression),
