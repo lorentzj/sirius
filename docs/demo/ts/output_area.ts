@@ -24,9 +24,36 @@ export function updateErrorELement(displayErrorsElem: HTMLElement, errorElem: HT
     }
 
     for(const error of errors) {
-        const errorRowElem = document.createElement('div');
-        const errorPosition = `Ln ${tokens[error.tokens[0]].line + 1}`;
-        errorRowElem.innerText = `${error.error_type}: ${error.message} [${errorPosition}]`;
+        const errorRowElem = document.createElement('details');
+        errorRowElem.classList.add('error_row');
+
+        const errorRowSummaryElem = document.createElement('summary');
+        errorRowSummaryElem.classList.add('error_summary');
+
+        const errorPositionElement = document.createElement('span');
+        errorPositionElement.innerText = `[Ln ${tokens[error.tokens[0]].line + 1}]`;
+        errorPositionElement.classList.add('error_position');
+
+        const errorTypeElement = document.createElement('span');
+        errorTypeElement.innerText = error.error_type;
+        errorTypeElement.classList.add('error_type');
+
+        const errorMessageElement = document.createTextNode(error.message);
+
+        errorRowSummaryElem.appendChild(errorPositionElement);
+        errorRowSummaryElem.appendChild(document.createTextNode(' '));
+        errorRowSummaryElem.appendChild(errorTypeElement);
+        errorRowSummaryElem.appendChild(document.createTextNode(': '));
+        errorRowSummaryElem.appendChild(errorMessageElement);
+
+        errorRowElem.appendChild(errorRowSummaryElem);
+
+        const errorDetailsElem = document.createElement('div');
+        errorDetailsElem.appendChild(errorMessageElement.cloneNode());
+        errorDetailsElem.classList.add('error_details');
+
+        errorRowElem.appendChild(errorDetailsElem);
+
         errorElem.appendChild(errorRowElem);
     }
 }

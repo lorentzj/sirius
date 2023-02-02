@@ -84,7 +84,7 @@ pub fn expression_type(expression: &Expression, context: &Context) -> Result<Typ
             } else {
                 Err(Error::new(
                     ErrorType::TypeError,
-                    "Cannot apply operator to tuple".to_string(),
+                    "cannot apply operator to tuple".to_string(),
                     tokens,
                 ))
             }

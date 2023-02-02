@@ -1,4 +1,5 @@
 :root {
+    --primary-bg-color: rgb(22, 22, 22);
     --secondary-bg-color: rgb(68, 51, 64);
     --button-color: rgb(83, 63, 79);
     --button-hover-color: rgb(112, 86, 107);
@@ -16,7 +17,7 @@ body > * {
 }
 
 body {
-    background-color: rgb(22, 22, 22);
+    background-color: var(--primary-bg-color);
     color: white;
 }
 
@@ -27,12 +28,13 @@ button {
     padding: 1em;
     text-align: center;
     text-decoration: none;
-    display: inline-block;
     margin: 5px;
+    display: inline-block;
 }
 
 button:hover {
-    background-color: var(--button-hover-color);}
+    background-color: var(--button-hover-color);
+}
 
 /* Header */
 
@@ -45,8 +47,8 @@ button:hover {
 
 #editor_container {
     display: flex;
-    height: 50vh;
-    overflow-y: scroll;
+    height: 60vh;
+    overflow-y: auto;
     resize: vertical;
 }
 
@@ -92,7 +94,7 @@ span.token.identifier {
 }
 
 span.token.keyword {
-    color: rgb(22, 250, 22);
+    color: rgb(133, 241, 90);
 }
 
 span.token.assign {
@@ -116,17 +118,22 @@ span.token.type {
 }
 
 span.code.error {
-    text-decoration: wavy underline red;
+    text-decoration: wavy underline rgb(255, 0, 0);
 }
 
 /* Output */
+
+#output_tabs {
+    background-color: var(--secondary-bg-color);
+    padding: 3px;
+}
 
 #output {
     flex-grow: 1;
     flex-basis: 0;
     background-color: var(--secondary-bg-color);
     padding: 3px;
-    overflow-y: scroll;
+    overflow-y: auto;
 }
 
 button.selected {
@@ -140,8 +147,29 @@ button.selected {
 }
 
 #errors {
-    color: red;
     padding: 3px;
     font-family: monospace;
     font-size: x-large;
+}
+
+.error_details {
+    text-indent: 3em;
+}
+
+.error_summary {
+    padding: 3px;
+    margin: 5px;
+
+    overflow: hidden;
+    white-space: nowrap;    
+    text-overflow: ellipsis;
+    user-select: none;
+}
+
+.error_summary:hover {
+    background-color: var(--button-hover-color);
+}
+
+.error_type {
+    color: rgb(255, 0, 0);
 }
