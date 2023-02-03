@@ -99,19 +99,16 @@ fn consume_let_token(
     tokens: &[Token],
     i: TokenID,
     state: LetStatementParserState,
-) -> Result<LetStatementParserState, (Error, TokenID)> {
+) -> Result<LetStatementParserState, Error> {
     match state {
         LetStatementParserState::Start => {
             if let TokenType::Identifier(identifier) = &tokens[i].token_type {
                 Ok(LetStatementParserState::Identifier(identifier.to_owned()))
             } else {
-                Err((
-                    Error::new(
-                        ErrorType::ParseError,
-                        "expected identifier".to_string(),
-                        vec![i],
-                    ),
-                    i + 1,
+                Err(Error::new(
+                    ErrorType::ParseError,
+                    "expected identifier".to_string(),
+                    vec![i],
                 ))
             }
         }
@@ -121,32 +118,23 @@ fn consume_let_token(
             } else if let TokenType::Assign = &tokens[i].token_type {
                 Ok(LetStatementParserState::Assign(identifier, None))
             } else {
-                Err((
-                    Error::new(
-                        ErrorType::ParseError,
-                        "expected \"=\" or \":\"".to_string(),
-                        vec![i],
-                    ),
-                    i + 1,
+                Err(Error::new(
+                    ErrorType::ParseError,
+                    "expected \"=\" or \":\"".to_string(),
+                    vec![i],
                 ))
             }
         }
         LetStatementParserState::Colon(identifier) => match &tokens[i].token_type {
-            TokenType::Assign => Err((
-                Error::new(
-                    ErrorType::ParseError,
-                    "expected type annotation".to_string(),
-                    vec![i],
-                ),
-                i + 1,
+            TokenType::Assign => Err(Error::new(
+                ErrorType::ParseError,
+                "expected type annotation".to_string(),
+                vec![i],
             )),
-            TokenType::Semicolon => Err((
-                Error::new(
-                    ErrorType::ParseError,
-                    "expected type annotation".to_string(),
-                    vec![i],
-                ),
-                i + 1,
+            TokenType::Semicolon => Err(Error::new(
+                ErrorType::ParseError,
+                "expected type annotation".to_string(),
+                vec![i],
             )),
             _ => Ok(LetStatementParserState::TypeAnnotation(
                 identifier,
@@ -158,9 +146,10 @@ fn consume_let_token(
                 TokenType::Assign => {
                     Ok(LetStatementParserState::Assign(identifier, type_annotation))
                 }
-                TokenType::Semicolon => Err((
-                    Error::new(ErrorType::ParseError, "expected \"=\"".to_string(), vec![i]),
-                    i + 1,
+                TokenType::Semicolon => Err(Error::new(
+                    ErrorType::ParseError,
+                    "expected \"=\"".to_string(),
+                    vec![i],
                 )),
                 _ => {
                     let mut new_annotation = type_annotation.unwrap();
@@ -174,13 +163,10 @@ fn consume_let_token(
         }
         LetStatementParserState::Assign(identifier, type_annotation) => {
             match &tokens[i].token_type {
-                TokenType::Semicolon => Err((
-                    Error::new(
-                        ErrorType::ParseError,
-                        "expected expression".to_string(),
-                        vec![i],
-                    ),
-                    i + 1,
+                TokenType::Semicolon => Err(Error::new(
+                    ErrorType::ParseError,
+                    "expected expression".to_string(),
+                    vec![i],
                 )),
                 _ => Ok(LetStatementParserState::Expression(
                     identifier,
@@ -209,7 +195,7 @@ fn consume_let_token(
                             type_annotation,
                             expression,
                         )),
-                        Err(error) => Err((error, i)),
+                        Err(error) => Err(error),
                     }
                 }
 
@@ -239,7 +225,17 @@ fn consume_let(
             Ok(next) => {
                 state = next;
             }
-            Err((error, end_i)) => return Err((error, end_i)),
+            Err(error) => {
+                i = start;
+                while i < tokens.len() {
+                    if tokens[i].token_type == TokenType::Semicolon {
+                        break;
+                    }
+
+                    i += 1;
+                }
+                return Err((error, i));
+            }
         }
         i += 1;
     }
@@ -359,7 +355,7 @@ pub fn parse(code: &str) -> ParserOutput {
                             }
                             Err((error, new_i)) => {
                                 errors.push(error);
-                                i = new_i;
+                                i = new_i + 1;
                             }
                         }
                     }

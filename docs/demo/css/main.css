@@ -3,6 +3,8 @@
     --secondary-bg-color: rgb(68, 51, 64);
     --button-color: rgb(83, 63, 79);
     --button-hover-color: rgb(112, 86, 107);
+    --rounded-corners: 3px;
+    --button-padding: 0.7em;
 }
 
 html, body {
@@ -18,21 +20,44 @@ body > * {
 
 body {
     background-color: var(--primary-bg-color);
-    color: white;
+    color: rgb(255, 255, 255);
+}
+
+select {
+    background-color: var(--button-color);
+    border: none;
+    color: rgb(255, 255, 255);
+    padding: var(--button-padding);
+    text-decoration: none;
+    margin: 3px;
+    border-radius: var(--rounded-corners);
+}
+
+option {
+    padding: var(--button-padding);
+}
+
+select::after {
+    content: "";
+    width: 0.8em;
+    height: 0.5em;
+    background-color: rgb(0, 0, 0);
+    clip-path: polygon(100% 0%, 0 0%, 50% 100%);
 }
 
 button {
     background-color: var(--button-color);
     border: none;
-    color: white;
-    padding: 1em;
+    color: rgb(255, 255, 255);
+    padding: var(--button-padding);
     text-align: center;
     text-decoration: none;
-    margin: 5px;
+    margin: 3px;
     display: inline-block;
+    border-radius: var(--rounded-corners);
 }
 
-button:hover {
+button:hover, select:hover {
     background-color: var(--button-hover-color);
 }
 
@@ -74,7 +99,7 @@ button:hover {
     flex: auto;
     border: none;
     outline: none;
-    caret-color: white;
+    caret-color: rgb(255, 255, 255);
 }
 
 *::selection {
@@ -94,7 +119,7 @@ span.token.identifier {
 }
 
 span.token.keyword {
-    color: rgb(133, 241, 90);
+    color: rgb(37, 255, 146);
 }
 
 span.token.assign {
@@ -106,11 +131,11 @@ span.token.semicolon {
 }
 
 span.token.operator {
-    color: rgb(189, 136, 83);
+    color: rgb(189, 173, 83);
 }
 
 span.token.openparen, span.token.closeparen, span.token.opensqbracket, span.token.closesqbracket {
-    color: rgb(191, 50, 216);
+    color: rgb(255, 255, 255);
 }
 
 span.token.type {
@@ -118,6 +143,10 @@ span.token.type {
 }
 
 span.code.error {
+    text-decoration: wavy underline rgb(255, 0, 0);
+}
+
+span.code.error::selection {
     text-decoration: wavy underline rgb(255, 0, 0);
 }
 
@@ -137,7 +166,8 @@ span.code.error {
 }
 
 button.selected {
-    outline: 5px solid black;
+    border: 4px solid black;
+    margin: 1px;
 }
 
 #log {
@@ -163,7 +193,6 @@ button.selected {
     overflow: hidden;
     white-space: nowrap;    
     text-overflow: ellipsis;
-    user-select: none;
 }
 
 .error_summary:hover {
@@ -172,4 +201,9 @@ button.selected {
 
 .error_type {
     color: rgb(255, 0, 0);
+}
+
+.error_message_code {
+    font-style: italic;
+    color: rgb(212, 212, 212);
 }
