@@ -37,14 +37,6 @@ option {
     padding: var(--button-padding);
 }
 
-select::after {
-    content: "";
-    width: 0.8em;
-    height: 0.5em;
-    background-color: rgb(0, 0, 0);
-    clip-path: polygon(100% 0%, 0 0%, 50% 100%);
-}
-
 button {
     background-color: var(--button-color);
     border: none;
@@ -201,6 +193,7 @@ button.selected {
 
 .error_type {
     color: rgb(255, 0, 0);
+    font-weight: bold;
 }
 
 .error_message_code {
