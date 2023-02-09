@@ -7,7 +7,8 @@ use serde::Serialize;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub enum Value {
-    Number(f64),
+    Float(f64),
+    Bool(bool),
     Tuple(Vec<Value>),
 }
 
@@ -20,52 +21,87 @@ pub struct InterpreterOutput {
 pub type Context = std::collections::HashMap<String, Value>;
 
 fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Result<Value, Error> {
-    if let (Value::Number(lhs), Value::Number(rhs)) = (lhs, rhs) {
-        match &op {
-            Op::Add => Ok(Value::Number(lhs + rhs)),
-            Op::Sub => Ok(Value::Number(lhs - rhs)),
-            Op::Mul => Ok(Value::Number(lhs * rhs)),
-            Op::Div => {
-                if rhs == 0. {
-                    Err(Error::new(
-                        ErrorType::RuntimeError,
-                        "division by zero".into(),
-                        0,
-                        0,
-                    ))
-                } else {
-                    Ok(Value::Number(lhs / rhs))
-                }
+    match &op {
+        Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp => {
+            let coerced_lhs_float = match lhs {
+                Value::Float(v) => Some(v),
+                Value::Bool(v) => Some(if v { 1. } else { 0. }),
+                _ => None,
             }
-            Op::Exp => Ok(Value::Number(lhs.powf(rhs))),
+            .unwrap();
 
-            Op::Dot => Err(Error::new(
-                ErrorType::NotImplementedError,
-                "haven't implemented dot operator yet...".into(),
-                0,
-                0,
-            )),
+            let coerced_rhs_float = match rhs {
+                Value::Float(v) => Some(v),
+                Value::Bool(v) => Some(if v { 1. } else { 0. }),
+                _ => None,
+            }
+            .unwrap();
 
-            Op::Comma => Err(Error::new(
-                ErrorType::InternalError,
-                "comma should have created tuple".into(),
-                0,
-                0,
-            )),
+            match &op {
+                Op::Add => Ok(Value::Float(coerced_lhs_float + coerced_rhs_float)),
+                Op::Sub => Ok(Value::Float(coerced_lhs_float - coerced_rhs_float)),
+                Op::Mul => Ok(Value::Float(coerced_lhs_float * coerced_rhs_float)),
+                Op::Div => {
+                    if coerced_rhs_float == 0. {
+                        Err(Error::new(
+                            ErrorType::RuntimeError,
+                            "division by zero".into(),
+                            0,
+                            0,
+                        ))
+                    } else {
+                        Ok(Value::Float(coerced_lhs_float / coerced_rhs_float))
+                    }
+                }
+
+                Op::Exp => Ok(Value::Float(coerced_lhs_float.powf(coerced_rhs_float))),
+
+                _ => panic!(),
+            }
         }
-    } else {
-        Err(Error::new(
+
+        Op::And | Op::Or => {
+            let coerced_lhs_bool = match lhs {
+                Value::Float(v) => Some(v == 0.),
+                Value::Bool(v) => Some(v),
+                _ => None,
+            }
+            .unwrap();
+
+            let coerced_rhs_bool = match rhs {
+                Value::Float(v) => Some(v == 0.),
+                Value::Bool(v) => Some(v),
+                _ => None,
+            }
+            .unwrap();
+
+            match &op {
+                Op::And => Ok(Value::Bool(coerced_lhs_bool && coerced_rhs_bool)),
+                Op::Or => Ok(Value::Bool(coerced_lhs_bool || coerced_rhs_bool)),
+                _ => panic!(),
+            }
+        }
+
+        Op::Comma => Err(Error::new(
+            ErrorType::InternalError,
+            "comma should have created tuple".into(),
+            0,
+            0,
+        )),
+
+        Op::Dot => Err(Error::new(
             ErrorType::NotImplementedError,
-            "cannot apply operator to tuple".into(),
+            "have not implemented dot operator".into(),
             0,
             0,
-        ))
+        )),
     }
 }
 
 pub fn interpret_expression(expression: &Expression, context: &Context) -> Result<Value, Error> {
     match expression {
-        Expression::Constant { val, .. } => Ok(Value::Number(*val)),
+        Expression::Float { val, .. } => Ok(Value::Float(*val)),
+        Expression::Bool { val, .. } => Ok(Value::Bool(*val)),
         Expression::BinOp {
             start,
             lhs,
@@ -116,7 +152,8 @@ pub fn interpret_expression(expression: &Expression, context: &Context) -> Resul
 
 pub fn print_value(value: Value) -> String {
     match value {
-        Value::Number(x) => x.to_string(),
+        Value::Float(val) => val.to_string(),
+        Value::Bool(val) => val.to_string(),
         Value::Tuple(v) => {
             if v.is_empty() {
                 "()".into()

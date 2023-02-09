@@ -10,9 +10,14 @@ lalrpop_mod!(#[allow(clippy::all)] pub grammar);
 
 #[derive(Serialize, Debug)]
 pub enum Expression {
-    Constant {
+    Float {
         start: usize,
         val: f64,
+        end: usize,
+    },
+    Bool {
+        start: usize,
+        val: bool,
         end: usize,
     },
     Identifier {
@@ -42,7 +47,8 @@ pub enum Expression {
 impl Expression {
     pub fn range(&self) -> (usize, usize) {
         match self {
-            Expression::Constant { start, end, .. } => (*start, *end),
+            Expression::Float { start, end, .. } => (*start, *end),
+            Expression::Bool { start, end, .. } => (*start, *end),
             Expression::Identifier { start, end, .. } => (*start, *end),
             Expression::BinOp { start, end, .. } => (*start, *end),
             Expression::OpenTuple { start, end, .. } => (*start, *end),
@@ -53,7 +59,14 @@ impl Expression {
     #[cfg(test)]
     fn short_fmt(&self) -> String {
         match self {
-            Expression::Constant { val, .. } => format!("{}", val),
+            Expression::Float { val, .. } => format!("{}", val),
+            Expression::Bool { val, .. } => {
+                if *val {
+                    "true".into()
+                } else {
+                    "false".into()
+                }
+            }
             Expression::Identifier { name, .. } => format!("{}", name),
             Expression::BinOp { lhs, op, rhs, .. } => {
                 format!("({}{:?}{})", lhs.short_fmt(), op, rhs.short_fmt())
@@ -147,7 +160,7 @@ pub fn parse(code: &str) -> ParserOutput {
                 Tok::Identifier(n) => format!("unexpected identifier '{}'", n),
                 Tok::Op(op) => format!("unexpected operator '{:?}'", op),
                 Tok::Keyword(k) => format!("unexpected keyword '{:?}'", k),
-                Tok::Constant(_) => "unexpected constant".into(),
+                Tok::Float(_) => "unexpected constant".into(),
                 Tok::Error(m) => m,
                 _ => format!("unexpected token '{:?}'", token.1),
             },
@@ -172,7 +185,7 @@ pub fn parse(code: &str) -> ParserOutput {
                 Tok::Identifier(n) => format!("unexpected identifier '{}'", n),
                 Tok::Op(op) => format!("unexpected operator '{:?}'", op),
                 Tok::Keyword(k) => format!("unexpected keyword '{:?}'", k),
-                Tok::Constant(_) => "unexpected constant".into(),
+                Tok::Float(_) => "unexpected constant".into(),
                 Tok::Error(m) => m,
                 _ => format!("unexpected token '{:?}'", token.1),
             },
@@ -204,11 +217,11 @@ mod tests {
 
     #[test]
     fn op_precedence() {
-        let test_str = "print (a^2/3 + 4/0.1*b*c^2 - 3/2)^(d, 0.5^e - 3);";
+        let test_str = "print (a^2/3 + 4/0.1*b*c^2 - 3 & 4/2)^(d, 0.5^e - 3);";
         let tree = parse(test_str);
         assert_eq!(
             tree.ast[0].short_fmt(),
-            "print (((((a^2)/3)+(((4/0.1)*b)*(c^2)))-(3/2))^(d,((0.5^e)-3)));"
+            "print ((((((a^2)/3)+(((4/0.1)*b)*(c^2)))-3)&(4/2))^(d,((0.5^e)-3)));"
         );
     }
 

@@ -5,13 +5,15 @@ use std::str::CharIndices;
 
 #[derive(Clone, PartialEq, Eq, Serialize)]
 pub enum Op {
-    Comma,
+    Dot,
     Exp,
     Mul,
     Div,
     Add,
     Sub,
-    Dot,
+    And,
+    Or,
+    Comma,
 }
 
 impl fmt::Debug for Op {
@@ -23,6 +25,8 @@ impl fmt::Debug for Op {
             Op::Div => write!(f, "/"),
             Op::Add => write!(f, "+"),
             Op::Sub => write!(f, "-"),
+            Op::And => write!(f, "&"),
+            Op::Or => write!(f, "|"),
             Op::Comma => write!(f, ","),
         }
     }
@@ -32,6 +36,8 @@ impl fmt::Debug for Op {
 pub enum Keyword {
     Print,
     Let,
+    True,
+    False,
 }
 
 impl fmt::Debug for Keyword {
@@ -39,6 +45,8 @@ impl fmt::Debug for Keyword {
         match self {
             Keyword::Let => write!(f, "let"),
             Keyword::Print => write!(f, "print"),
+            Keyword::True => write!(f, "true"),
+            Keyword::False => write!(f, "false"),
         }
     }
 }
@@ -48,7 +56,7 @@ pub enum Tok {
     OpenParen,
     CloseParen,
     Op(Op),
-    Constant(f64),
+    Float(f64),
     Identifier(String),
     Keyword(Keyword),
     Assign,
@@ -63,7 +71,7 @@ impl fmt::Debug for Tok {
             Tok::OpenParen => write!(f, "("),
             Tok::CloseParen => write!(f, "("),
             Tok::Op(op) => write!(f, "{:?}", op),
-            Tok::Constant(v) => write!(f, "{}", v),
+            Tok::Float(v) => write!(f, "{}", v),
             Tok::Identifier(n) => write!(f, "{}", n),
             Tok::Keyword(k) => write!(f, "{:?}", k),
             Tok::Assign => write!(f, "="),
@@ -79,6 +87,10 @@ fn parse_substring(s: &str) -> Result<Tok, String> {
         Ok(Tok::Keyword(Keyword::Let))
     } else if s == "print" {
         Ok(Tok::Keyword(Keyword::Print))
+    } else if s == "true" {
+        Ok(Tok::Keyword(Keyword::True))
+    } else if s == "false" {
+        Ok(Tok::Keyword(Keyword::False))
     } else {
         match s.chars().next() {
             Some('0'..='9') => {
@@ -88,7 +100,7 @@ fn parse_substring(s: &str) -> Result<Tok, String> {
                         if n.is_infinite() {
                             Err("number overflowed f64".into())
                         } else {
-                            Ok(Tok::Constant(n))
+                            Ok(Tok::Float(n))
                         }
                     }
                     Err(msg) => Err(msg.to_string()),
@@ -280,6 +292,22 @@ impl<'input> Iterator for Lexer<'input> {
                                 self.col,
                             ))
                         }
+                        '&' => {
+                            return Some(Token::new(
+                                Tok::Op(Op::And),
+                                self.line,
+                                self.col - 1,
+                                self.col,
+                            ))
+                        }
+                        '|' => {
+                            return Some(Token::new(
+                                Tok::Op(Op::Or),
+                                self.line,
+                                self.col - 1,
+                                self.col,
+                            ))
+                        }
                         ',' => {
                             return Some(Token::new(
                                 Tok::Op(Op::Comma),
@@ -350,10 +378,10 @@ mod tests {
             Token::new(Tok::Op(Op::Add), 0, 8, 9),
             Token::new(Tok::Identifier("g".into()), 0, 10, 11),
             Token::new(Tok::Op(Op::Mul), 0, 12, 13),
-            Token::new(Tok::Constant(12.0), 0, 14, 16),
+            Token::new(Tok::Float(12.0), 0, 14, 16),
             Token::new(Tok::CloseParen, 0, 16, 17),
             Token::new(Tok::Op(Op::Exp), 0, 17, 18),
-            Token::new(Tok::Constant(2.0), 0, 18, 19),
+            Token::new(Tok::Float(2.0), 0, 18, 19),
             Token::new(Tok::Op(Op::Div), 0, 19, 20),
             Token::new(Tok::Identifier("hij".into()), 0, 20, 23),
         ];
@@ -405,7 +433,7 @@ mod tests {
             Token::new(Tok::Op(Op::Dot), 0, 1, 2),
             Token::new(Tok::Identifier("b".into()), 0, 2, 3),
             Token::new(Tok::Op(Op::Add), 0, 4, 5),
-            Token::new(Tok::Constant(12.3), 0, 6, 10),
+            Token::new(Tok::Float(12.3), 0, 6, 10),
             Token::new(Tok::Op(Op::Sub), 0, 11, 12),
             Token::new(Tok::Error("invalid float literal".into()), 0, 13, 18),
             Token::new(Tok::Op(Op::Mul), 0, 19, 20),

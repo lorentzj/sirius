@@ -1,18 +1,21 @@
 use crate::error::{Error, ErrorType};
+use crate::lexer::Op;
 use crate::parser::{Expression, Statement};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     F64,
+    Bool,
     Tuple(Vec<Type>),
 }
 
 pub fn print_type(t: &Type) -> String {
     match t {
-        Type::F64 => "f64".to_string(),
+        Type::F64 => "f64".into(),
+        Type::Bool => "bool".into(),
         Type::Tuple(v) => {
             if v.is_empty() {
-                "()".to_string()
+                "()".into()
             } else {
                 let mut out = "(".to_string();
                 for val in v {
@@ -36,10 +39,12 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, Error> {
         Expression::Identifier { start, name, end } => {
             if name.eq("f64") {
                 Ok(Type::F64)
+            } else if name.eq("bool") {
+                Ok(Type::Bool)
             } else {
                 Err(Error::new(
                     ErrorType::TypeError,
-                    "only \"f64\" is a valid primitive".to_string(),
+                    "only 'f64' and 'bool' are valid primitives".to_string(),
                     *start,
                     *end,
                 ))
@@ -79,7 +84,8 @@ pub fn expression_type(expression: &Expression, context: &Context) -> Result<Typ
                 end,
             )),
         },
-        Expression::Constant { .. } => Ok(Type::F64),
+        Expression::Float { .. } => Ok(Type::F64),
+        Expression::Bool { .. } => Ok(Type::Bool),
         Expression::Tuple { inner, .. } => {
             let mut members = vec![];
             for expression in inner {
@@ -95,19 +101,77 @@ pub fn expression_type(expression: &Expression, context: &Context) -> Result<Typ
             end,
         )),
 
-        Expression::BinOp { lhs, rhs, .. } => {
-            if let (Type::F64, Type::F64) = (
-                expression_type(lhs, context)?,
-                expression_type(rhs, context)?,
-            ) {
-                Ok(Type::F64)
-            } else {
-                Err(Error::new(
-                    ErrorType::TypeError,
-                    "cannot apply operator to tuple".into(),
-                    start,
-                    end,
-                ))
+        Expression::BinOp { lhs, rhs, op, .. } => {
+            let lhs_type = expression_type(lhs, context)?;
+            let rhs_type = expression_type(rhs, context)?;
+
+            match &op {
+                Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp => {
+                    if let Type::Tuple(_) = lhs_type {
+                        Err(Error::new(
+                            ErrorType::TypeError,
+                            "cannot apply operator to tuple".into(),
+                            start,
+                            end,
+                        ))
+                    } else if let Type::Tuple(_) = rhs_type {
+                        Err(Error::new(
+                            ErrorType::TypeError,
+                            "cannot apply operator to tuple".into(),
+                            start,
+                            end,
+                        ))
+                    } else {
+                        Ok(Type::F64)
+                    }
+                }
+                Op::And | Op::Or => {
+                    if let Type::Tuple(_) = lhs_type {
+                        Err(Error::new(
+                            ErrorType::TypeError,
+                            "cannot apply operator to tuple".into(),
+                            start,
+                            end,
+                        ))
+                    } else if Type::F64 == lhs_type {
+                        Err(Error::new(
+                            ErrorType::TypeError,
+                            "cannot apply boolean operator to float".into(),
+                            start,
+                            end,
+                        ))
+                    } else if let Type::Tuple(_) = rhs_type {
+                        Err(Error::new(
+                            ErrorType::TypeError,
+                            "cannot apply operator to tuple".into(),
+                            start,
+                            end,
+                        ))
+                    } else if Type::F64 == rhs_type {
+                        Err(Error::new(
+                            ErrorType::TypeError,
+                            "cannot apply boolean operator to float".into(),
+                            start,
+                            end,
+                        ))
+                    } else {
+                        Ok(Type::Bool)
+                    }
+                }
+
+                Op::Comma => Err(Error::new(
+                    ErrorType::InternalError,
+                    "comma should have created tuple".into(),
+                    0,
+                    0,
+                )),
+
+                Op::Dot => Err(Error::new(
+                    ErrorType::NotImplementedError,
+                    "have not implemented dot operator".into(),
+                    0,
+                    0,
+                )),
             }
         }
     }
@@ -122,11 +186,11 @@ pub fn typecheck(statements: &[Statement]) -> Vec<Error> {
             Statement::Let { name, ann, val } => match expression_type(val, &context) {
                 Ok(t) => {
                     if let Some(ann) = ann {
-                        let (ann_start, ann_end) = ann.range();
-
                         match annotation_type(ann) {
                             Ok(ann_t) => {
                                 if ann_t != t {
+                                    let (val_start, val_end) = val.range();
+
                                     errors.push(Error::new(
                                         ErrorType::TypeError,
                                         format!(
@@ -134,8 +198,8 @@ pub fn typecheck(statements: &[Statement]) -> Vec<Error> {
                                             print_type(&ann_t),
                                             print_type(&t)
                                         ),
-                                        ann_start,
-                                        ann_end,
+                                        val_start,
+                                        val_end,
                                     ));
                                 }
                             }

@@ -243,8 +243,8 @@ function createCodeSpan(token, i, isType) {
         if (token.data.Op !== undefined) {
             span.classList.add('operator');
         }
-        else if (token.data.Constant !== undefined) {
-            span.classList.add('constant');
+        else if (token.data.Float !== undefined) {
+            span.classList.add('float');
         }
         else if (token.data.Identifier !== undefined) {
             span.classList.add('identifier');

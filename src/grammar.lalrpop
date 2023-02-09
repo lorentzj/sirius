@@ -90,6 +90,22 @@ pub Expr: Box<Expression> = {
     }),
 
     #[precedence(level="6")] #[assoc(side="left")]
+    <start: @L> <lhs: Expr> "&&" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
+        start,
+        lhs,
+        op: Op::And,
+        rhs,
+        end
+    }),
+    <start: @L> <lhs: Expr> "||" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
+        start,
+        lhs,
+        op: Op::Or,
+        rhs,
+        end
+    }),
+
+    #[precedence(level="7")] #[assoc(side="left")]
     <start: @L> <lhs: Expr> "," <rhs: Expr> <end: @R> => {
         match *lhs {
              Expression::OpenTuple{mut inner, ..} => {
@@ -109,13 +125,16 @@ pub Expr: Box<Expression> = {
 };
 
 Term: Box<Expression> = {
-    <start: @L> <val: "constant"> <end: @R> => Box::new(Expression::Constant{<>}),
+    <start: @L> <val: "true"> <end: @R> => Box::new(Expression::Bool{start, val: true, end}),
+    <start: @L> <val: "false"> <end: @R> => Box::new(Expression::Bool{start, val: false, end}),
+    <start: @L> <val: "float"> <end: @R> => Box::new(Expression::Float{<>}),
     <start: @L> <name: "identifier"> <end: @R> => Box::new(Expression::Identifier{<>}),
     <start: @L> "(" <inner: Expr> ")" <end: @R> => {
         highlight_map.insert(start, vec![end - 1]);
         highlight_map.insert(end - 1, vec![start]);
         match *inner {
-            Expression::Constant{val, ..} => Box::new(Expression::Constant{ start, val, end }),
+            Expression::Bool{val, ..} => Box::new(Expression::Bool{ start, val, end }),
+            Expression::Float{val, ..} => Box::new(Expression::Float{ start, val, end }),
             Expression::Identifier{name, ..} => Box::new(Expression::Identifier{ start, name, end }),
             Expression::BinOp{lhs, op, rhs, ..} => Box::new(Expression::BinOp{ start, lhs, op, rhs, end }),
             Expression::OpenTuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
@@ -131,17 +150,21 @@ extern {
     enum crate::lexer::Tok {
         "("          => crate::lexer::Tok::OpenParen,
         ")"          => crate::lexer::Tok::CloseParen,
-        ","          => crate::lexer::Tok::Op(Op::Comma),
+        "."          => crate::lexer::Tok::Op(Op::Dot),
         "^"          => crate::lexer::Tok::Op(Op::Exp),
         "*"          => crate::lexer::Tok::Op(Op::Mul),
         "/"          => crate::lexer::Tok::Op(Op::Div),
         "+"          => crate::lexer::Tok::Op(Op::Add),
         "-"          => crate::lexer::Tok::Op(Op::Sub),
-        "."          => crate::lexer::Tok::Op(Op::Dot),
-        "constant"   => crate::lexer::Tok::Constant(<f64>),
+        "&&"          => crate::lexer::Tok::Op(Op::And),
+        "||"          => crate::lexer::Tok::Op(Op::Or),
+        ","          => crate::lexer::Tok::Op(Op::Comma),
+        "float"   => crate::lexer::Tok::Float(<f64>),
         "identifier" => crate::lexer::Tok::Identifier(<String>),
         "let"        => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Let),
         "print"      => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Print),
+        "true"       => crate::lexer::Tok::Keyword(crate::lexer::Keyword::True),
+        "false"      => crate::lexer::Tok::Keyword(crate::lexer::Keyword::False),
         "="          => crate::lexer::Tok::Assign,
         ";"          => crate::lexer::Tok::Semicolon,
         ":"          => crate::lexer::Tok::Colon,

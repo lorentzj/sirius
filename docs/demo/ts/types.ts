@@ -8,7 +8,7 @@ export interface Error {
 export type Tok = 
     string |
     {Op: string} |
-    {Constant: number} |
+    {Float: number} |
     {Identifier: string} |
     {Keyword: string} |
     {Error: string};

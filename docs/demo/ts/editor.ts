@@ -260,8 +260,8 @@ function createCodeSpan(token: types.Token | null, i: number | null, isType: boo
         span.dataset['charEnd'] = token.end.toString();
         if((token.data as {Op: string}).Op !== undefined) {
             span.classList.add('operator');
-        } else if((token.data as {Constant: number}).Constant !== undefined) {
-            span.classList.add('constant');
+        } else if((token.data as {Float: number}).Float !== undefined) {
+            span.classList.add('float');
         } else if((token.data as {Identifier: string}).Identifier !== undefined) {
             span.classList.add('identifier');
         } else if((token.data as {Keyword: string}).Keyword !== undefined) {
