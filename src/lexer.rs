@@ -36,6 +36,7 @@ impl fmt::Debug for Op {
 pub enum Keyword {
     Print,
     Let,
+    If,
     True,
     False,
 }
@@ -45,6 +46,7 @@ impl fmt::Debug for Keyword {
         match self {
             Keyword::Let => write!(f, "let"),
             Keyword::Print => write!(f, "print"),
+            Keyword::If => write!(f, "if"),
             Keyword::True => write!(f, "true"),
             Keyword::False => write!(f, "false"),
         }
@@ -55,6 +57,8 @@ impl fmt::Debug for Keyword {
 pub enum Tok {
     OpenParen,
     CloseParen,
+    OpenCurly,
+    CloseCurly,
     Op(Op),
     Float(f64),
     Identifier(String),
@@ -69,15 +73,17 @@ impl fmt::Debug for Tok {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Tok::OpenParen => write!(f, "("),
-            Tok::CloseParen => write!(f, "("),
-            Tok::Op(op) => write!(f, "{:?}", op),
-            Tok::Float(v) => write!(f, "{}", v),
-            Tok::Identifier(n) => write!(f, "{}", n),
-            Tok::Keyword(k) => write!(f, "{:?}", k),
+            Tok::CloseParen => write!(f, ")"),
+            Tok::OpenCurly => write!(f, "{{"),
+            Tok::CloseCurly => write!(f, "}}"),
+            Tok::Op(op) => write!(f, "{op:?}"),
+            Tok::Float(v) => write!(f, "{v}"),
+            Tok::Identifier(n) => write!(f, "{n}"),
+            Tok::Keyword(k) => write!(f, "{k:?}"),
             Tok::Assign => write!(f, "="),
             Tok::Semicolon => write!(f, ";"),
             Tok::Colon => write!(f, ":"),
-            Tok::Error(m) => write!(f, "error({})", m),
+            Tok::Error(m) => write!(f, "error({m})"),
         }
     }
 }
@@ -87,6 +93,8 @@ fn parse_substring(s: &str) -> Result<Tok, String> {
         Ok(Tok::Keyword(Keyword::Let))
     } else if s == "print" {
         Ok(Tok::Keyword(Keyword::Print))
+    } else if s == "if" {
+        Ok(Tok::Keyword(Keyword::If))
     } else if s == "true" {
         Ok(Tok::Keyword(Keyword::True))
     } else if s == "false" {
@@ -244,6 +252,22 @@ impl<'input> Iterator for Lexer<'input> {
                                 self.col,
                             ))
                         }
+                        '{' => {
+                            return Some(Token::new(
+                                Tok::OpenCurly,
+                                self.line,
+                                self.col - 1,
+                                self.col,
+                            ))
+                        }
+                        '}' => {
+                            return Some(Token::new(
+                                Tok::CloseCurly,
+                                self.line,
+                                self.col - 1,
+                                self.col,
+                            ))
+                        }
                         '.' => {
                             return Some(Token::new(
                                 Tok::Op(Op::Dot),
@@ -322,7 +346,7 @@ impl<'input> Iterator for Lexer<'input> {
 
                         _ => {
                             return Some(Token::new(
-                                Tok::Error(format!("unknown token '{}'", char)),
+                                Tok::Error(format!("unknown token '{char}'")),
                                 self.line,
                                 self.col - 1,
                                 self.col,

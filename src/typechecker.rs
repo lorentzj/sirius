@@ -1,32 +1,36 @@
+use std::fmt;
+
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
 use crate::parser::{Expression, Statement};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub enum Type {
     F64,
     Bool,
     Tuple(Vec<Type>),
 }
 
-pub fn print_type(t: &Type) -> String {
-    match t {
-        Type::F64 => "f64".into(),
-        Type::Bool => "bool".into(),
-        Type::Tuple(v) => {
-            if v.is_empty() {
-                "()".into()
-            } else {
-                let mut out = "(".to_string();
-                for val in v {
-                    out.push_str(&print_type(val));
-                    out.push(',');
-                    out.push(' ');
+impl fmt::Debug for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::F64 => write!(f, "f64"),
+            Type::Bool => write!(f, "bool"),
+            Type::Tuple(v) => {
+                if v.is_empty() {
+                    write!(f, "())")
+                } else {
+                    let mut out = "(".to_string();
+                    for t in v {
+                        out.push_str(&format!("{t:?}"));
+                        out.push(',');
+                        out.push(' ');
+                    }
+                    out.pop();
+                    out.pop();
+                    out.push(')');
+                    write!(f, "{out}")
                 }
-                out.pop();
-                out.pop();
-                out.push(')');
-                out
             }
         }
     }
@@ -79,7 +83,7 @@ pub fn expression_type(expression: &Expression, context: &Context) -> Result<Typ
             Some(t) => Ok(t.clone()),
             None => Err(Error::new(
                 ErrorType::UnboundIdentifierError,
-                format!("identifier '{}' is not bound", name),
+                format!("identifier '{name}' is not bound"),
                 start,
                 end,
             )),
@@ -177,13 +181,12 @@ pub fn expression_type(expression: &Expression, context: &Context) -> Result<Typ
     }
 }
 
-pub fn typecheck(statements: &[Statement]) -> Vec<Error> {
+pub fn typecheck(statements: &[Statement], context: &mut Context) -> Vec<Error> {
     let mut errors = vec![];
-    let mut context = Context::new();
 
     for statement in statements {
         match statement {
-            Statement::Let { name, ann, val } => match expression_type(val, &context) {
+            Statement::Let { name, ann, val } => match expression_type(val, context) {
                 Ok(t) => {
                     if let Some(ann) = ann {
                         match annotation_type(ann) {
@@ -193,11 +196,7 @@ pub fn typecheck(statements: &[Statement]) -> Vec<Error> {
 
                                     errors.push(Error::new(
                                         ErrorType::TypeError,
-                                        format!(
-                                            "annotation '{}' does not match expression '{}'",
-                                            print_type(&ann_t),
-                                            print_type(&t)
-                                        ),
+                                        format!("annotation '{ann_t:?}' does not match expression '{t:?}'"),
                                         val_start,
                                         val_end,
                                     ));
@@ -210,8 +209,27 @@ pub fn typecheck(statements: &[Statement]) -> Vec<Error> {
                 }
                 Err(error) => errors.push(error),
             },
-            Statement::Print(expression) => match expression_type(expression, &context) {
+            Statement::Print { val } => match expression_type(val, context) {
                 Ok(_) => (),
+                Err(error) => errors.push(error),
+            },
+
+            Statement::If { cond, inner } => match expression_type(cond, context) {
+                Ok(t) => {
+                    if t != Type::Bool {
+                        let (cond_start, cond_end) = cond.range();
+
+                        errors.push(Error::new(
+                            ErrorType::TypeError,
+                            format!("condition must be bool; found type '{t:?}'"),
+                            cond_start,
+                            cond_end,
+                        ));
+                    }
+
+                    let mut inner_errors = typecheck(inner, context);
+                    errors.append(&mut inner_errors);
+                }
                 Err(error) => errors.push(error),
             },
         }

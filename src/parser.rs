@@ -95,7 +95,13 @@ pub enum Statement {
         ann: Option<Box<Expression>>,
         val: Box<Expression>,
     },
-    Print(Box<Expression>),
+    Print {
+        val: Box<Expression>,
+    },
+    If {
+        cond: Box<Expression>,
+        inner: Vec<Statement>,
+    },
 }
 
 impl Statement {
@@ -103,11 +109,20 @@ impl Statement {
     fn short_fmt(&self) -> String {
         match self {
             Statement::Let { name, ann, val } => match ann {
-                Some(ann) => format!("let {}: {} = {};", name, ann.short_fmt(), val.short_fmt()),
-                None => format!("let {} = {};", name, val.short_fmt()),
+                Some(ann) => format!("let {name}: {} = {};", ann.short_fmt(), val.short_fmt()),
+                None => format!("let {name} = {};", val.short_fmt()),
             },
-            Statement::Print(v) => {
-                format!("print {};", v.short_fmt())
+            Statement::Print { val } => {
+                format!("print {};", val.short_fmt())
+            }
+            Statement::If { cond, inner } => {
+                let mut res = String::new();
+                res.push_str(&format!("if {} {{\n", cond.short_fmt()));
+
+                for stmt in inner {
+                    res.push_str(&stmt.short_fmt());
+                }
+                res
             }
         }
     }
@@ -140,7 +155,7 @@ pub fn parse(code: &str) -> ParserOutput {
             for statement in &ast {
                 if let Statement::Let { ann: Some(ann), .. } = statement {
                     let (ann_start, ann_end) = ann.range();
-                    let tokens: Vec<usize> = (ann_start..ann_end).into_iter().collect();
+                    let tokens: Vec<usize> = (ann_start..ann_end).collect();
                     type_tokens.extend(&tokens);
                 }
             }
@@ -157,9 +172,9 @@ pub fn parse(code: &str) -> ParserOutput {
         Err(ParseError::ExtraToken { token }) => errors.push(Error::new(
             ErrorType::ParseError,
             match token.1 {
-                Tok::Identifier(n) => format!("unexpected identifier '{}'", n),
-                Tok::Op(op) => format!("unexpected operator '{:?}'", op),
-                Tok::Keyword(k) => format!("unexpected keyword '{:?}'", k),
+                Tok::Identifier(n) => format!("unexpected identifier '{n}'"),
+                Tok::Op(op) => format!("unexpected operator '{op:?}'"),
+                Tok::Keyword(k) => format!("unexpected keyword '{k:?}'"),
                 Tok::Float(_) => "unexpected constant".into(),
                 Tok::Error(m) => m,
                 _ => format!("unexpected token '{:?}'", token.1),
@@ -182,9 +197,9 @@ pub fn parse(code: &str) -> ParserOutput {
         Err(ParseError::UnrecognizedToken { token, .. }) => errors.push(Error::new(
             ErrorType::ParseError,
             match token.1 {
-                Tok::Identifier(n) => format!("unexpected identifier '{}'", n),
-                Tok::Op(op) => format!("unexpected operator '{:?}'", op),
-                Tok::Keyword(k) => format!("unexpected keyword '{:?}'", k),
+                Tok::Identifier(n) => format!("unexpected identifier '{n}'"),
+                Tok::Op(op) => format!("unexpected operator '{op:?}'"),
+                Tok::Keyword(k) => format!("unexpected keyword '{k:?}'"),
                 Tok::Float(_) => "unexpected constant".into(),
                 Tok::Error(m) => m,
                 _ => format!("unexpected token '{:?}'", token.1),

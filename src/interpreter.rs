@@ -1,4 +1,6 @@
-use crate::parser::{Expression, ParserOutput, Statement};
+use std::collections::{HashMap, HashSet};
+
+use crate::parser::{Expression, Statement};
 
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
@@ -14,11 +16,12 @@ pub enum Value {
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct InterpreterOutput {
-    output: String,
-    error: Option<Error>,
+    pub output: String,
+    pub error: Option<Error>,
+    pub defined_idents: HashSet<String>,
 }
 
-pub type Context = std::collections::HashMap<String, Value>;
+pub type Context = HashMap<String, Value>;
 
 fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Result<Value, Error> {
     match &op {
@@ -127,7 +130,7 @@ pub fn interpret_expression(expression: &Expression, context: &Context) -> Resul
             Some(val) => Ok(val.to_owned()),
             None => Err(Error::new(
                 ErrorType::UnboundIdentifierError,
-                format!("identifier '{}' is not bound", name),
+                format!("identifier '{name}' is not bound"),
                 *start,
                 *end,
             )),
@@ -173,31 +176,26 @@ pub fn print_value(value: Value) -> String {
     }
 }
 
-pub fn interpret(parser_output: &ParserOutput) -> InterpreterOutput {
+pub fn interpret(ast: &[Statement], context: &mut Context) -> InterpreterOutput {
     let mut output = String::new();
-    let mut context = Context::new();
+    let mut defined_idents: HashSet<String> = HashSet::new();
 
-    if !parser_output.errors.is_empty() {
-        return InterpreterOutput {
-            output: "".into(),
-            error: None,
-        };
-    }
-
-    for statement in &parser_output.ast {
+    for statement in ast {
         match statement {
-            Statement::Let { name, val, .. } => match interpret_expression(val, &context) {
+            Statement::Let { name, val, .. } => match interpret_expression(val, context) {
                 Ok(value) => {
                     context.insert(name.clone(), value);
+                    defined_idents.insert(name.clone());
                 }
                 Err(error) => {
                     return InterpreterOutput {
                         output,
                         error: Some(error),
+                        defined_idents,
                     }
                 }
             },
-            Statement::Print(val) => match interpret_expression(val, &context) {
+            Statement::Print { val } => match interpret_expression(val, context) {
                 Ok(value) => {
                     output.push_str(&print_value(value));
                     output.push('\n');
@@ -206,6 +204,33 @@ pub fn interpret(parser_output: &ParserOutput) -> InterpreterOutput {
                     return InterpreterOutput {
                         output,
                         error: Some(error),
+                        defined_idents,
+                    }
+                }
+            },
+            Statement::If { cond, inner } => match interpret_expression(cond, context) {
+                Ok(value) => {
+                    if Value::Bool(true) == value {
+                        let inner_output = interpret(inner, context);
+
+                        output.push_str(&inner_output.output);
+
+                        if inner_output.error.is_some() {
+                            return InterpreterOutput {
+                                output,
+                                error: inner_output.error,
+                                defined_idents,
+                            };
+                        }
+
+                        context.drain_filter(|k, _v| inner_output.defined_idents.contains(k));
+                    }
+                }
+                Err(error) => {
+                    return InterpreterOutput {
+                        output,
+                        error: Some(error),
+                        defined_idents,
                     }
                 }
             },
@@ -215,5 +240,6 @@ pub fn interpret(parser_output: &ParserOutput) -> InterpreterOutput {
     InterpreterOutput {
         output,
         error: None,
+        defined_idents,
     }
 }

@@ -26,11 +26,26 @@ pub Stmt: Statement = {
             }
         }
     },
-    "print" <v: Expr> ";" => {
-        Statement::Print(match *v {
+    "print" <val: Expr> ";" => {
+        Statement::Print{ val: match *val {
             Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
-            _ => v
-        })
+            _ => val
+        }}
+    },
+
+    "if" <cond: Expr> <inner: Block> => {
+        Statement::If{ cond: match *cond {
+            Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
+            _ => cond
+        }, inner }
+    }
+}
+
+pub Block: Vec<Statement> = {
+    <start: @L> "{" <inner: Stmt*> "}" <end: @R> => {
+        highlight_map.insert(start, vec![end - 1]);
+        highlight_map.insert(end - 1, vec![start]);
+        inner
     }
 }
 
@@ -90,14 +105,14 @@ pub Expr: Box<Expression> = {
     }),
 
     #[precedence(level="6")] #[assoc(side="left")]
-    <start: @L> <lhs: Expr> "&&" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
+    <start: @L> <lhs: Expr> "&" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
         start,
         lhs,
         op: Op::And,
         rhs,
         end
     }),
-    <start: @L> <lhs: Expr> "||" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
+    <start: @L> <lhs: Expr> "|" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
         start,
         lhs,
         op: Op::Or,
@@ -150,19 +165,22 @@ extern {
     enum crate::lexer::Tok {
         "("          => crate::lexer::Tok::OpenParen,
         ")"          => crate::lexer::Tok::CloseParen,
+        "{"          => crate::lexer::Tok::OpenCurly,
+        "}"          => crate::lexer::Tok::CloseCurly,
         "."          => crate::lexer::Tok::Op(Op::Dot),
         "^"          => crate::lexer::Tok::Op(Op::Exp),
         "*"          => crate::lexer::Tok::Op(Op::Mul),
         "/"          => crate::lexer::Tok::Op(Op::Div),
         "+"          => crate::lexer::Tok::Op(Op::Add),
         "-"          => crate::lexer::Tok::Op(Op::Sub),
-        "&&"          => crate::lexer::Tok::Op(Op::And),
-        "||"          => crate::lexer::Tok::Op(Op::Or),
+        "&"          => crate::lexer::Tok::Op(Op::And),
+        "|"          => crate::lexer::Tok::Op(Op::Or),
         ","          => crate::lexer::Tok::Op(Op::Comma),
-        "float"   => crate::lexer::Tok::Float(<f64>),
+        "float"      => crate::lexer::Tok::Float(<f64>),
         "identifier" => crate::lexer::Tok::Identifier(<String>),
         "let"        => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Let),
         "print"      => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Print),
+        "if"         => crate::lexer::Tok::Keyword(crate::lexer::Keyword::If),
         "true"       => crate::lexer::Tok::Keyword(crate::lexer::Keyword::True),
         "false"      => crate::lexer::Tok::Keyword(crate::lexer::Keyword::False),
         "="          => crate::lexer::Tok::Assign,

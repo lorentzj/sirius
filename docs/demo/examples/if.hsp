@@ -1,0 +1,16 @@
+let t = true;
+let f = false;
+
+if t & (t | f) {
+    print 1;
+    
+    let x = true | f;
+
+    if x {
+        print 2;
+    }
+
+    if false {
+        print 3;
+    }
+}
