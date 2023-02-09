@@ -1,4 +1,5 @@
 export class CompositeAction {
+    actionList;
     constructor(actionList) {
         this.actionList = actionList;
     }
@@ -10,6 +11,9 @@ export class CompositeAction {
     }
 }
 export class ActionHistory {
+    history;
+    currentAction;
+    maxHistoryLength;
     constructor(maxHistoryLength) {
         this.history = [];
         this.currentAction = -1;

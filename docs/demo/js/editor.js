@@ -166,8 +166,8 @@ export function updateEditorWithCode(editorElem, editorLinesElem, code, parseOut
                 lineElement.appendChild(before_token_code_span);
             }
             const token_code = lineCode.slice(parseOutput.tokens[token_i].start, parseOutput.tokens[token_i].end);
-            const token_code_span = createCodeSpan(parseOutput.tokens[token_i], token_i, parseOutput.type_tokens.has(token_i));
-            setMouseOverHandler(editorElem, token_code_span, token_i, parseOutput);
+            const token_code_span = createCodeSpan(parseOutput.tokens[token_i], token_i, parseOutput.typeTokens.has(token_i));
+            setMouseOverHandler(editorElem, token_code_span, token_i, parseOutput.highlightMap);
             token_code_span.textContent = token_code;
             lineElement.appendChild(token_code_span);
             line_i = parseOutput.tokens[token_i].end;
@@ -193,34 +193,21 @@ export function updateEditorWithCode(editorElem, editorLinesElem, code, parseOut
     }
     editorLinesElem.innerHTML = '1\n' + lines.join('\n');
 }
-function setMouseOverHandler(editorElem, codeSpan, tokenId, parseOutput) {
-    const isBracket = codeSpan.classList.contains('openparen')
-        || codeSpan.classList.contains('closeparen')
-        || codeSpan.classList.contains('opensqbracket')
-        || codeSpan.classList.contains('closesqbracket');
-    let highlightMatches = [];
-    if (isBracket) {
-        highlightMatches.push(tokenId);
-        // parseOutput.bracket_pairs.forEach(([first, second], _) => {
-        //     if(first == tokenId) {
-        //         highlightMatches.push(second);
-        //     } else if(second == tokenId) {
-        //         highlightMatches.push(first);
-        //     }
-        // });
-    }
+function setMouseOverHandler(editorElem, codeSpan, tokenId, highlightMap) {
+    let highlightMatches = [tokenId];
+    highlightMatches.push(...highlightMap.get(tokenId) || []);
     codeSpan.addEventListener('mouseenter', (_) => {
         highlightMatches.forEach(tokenId => {
             const tokenSelector = `span.token[data-token-id='${tokenId}']`;
             const tokenElem = editorElem.querySelector(tokenSelector);
-            tokenElem === null || tokenElem === void 0 ? void 0 : tokenElem.classList.add('highlight');
+            tokenElem?.classList.add('highlight');
         });
     });
     codeSpan.addEventListener('mouseleave', (_) => {
         highlightMatches.forEach(tokenId => {
             const tokenSelector = `span.token[data-token-id='${tokenId}']`;
             const tokenElem = editorElem.querySelector(tokenSelector);
-            tokenElem === null || tokenElem === void 0 ? void 0 : tokenElem.classList.remove('highlight');
+            tokenElem?.classList.remove('highlight');
         });
     });
 }

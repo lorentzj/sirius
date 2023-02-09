@@ -54,9 +54,14 @@ document.body.onload = () => {
 
             const updateEditor = () => {
                 const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n'))) as types.ParserOutput;
-                parsed.type_tokens = new Set(parsed.type_tokens as unknown as number[]);
+                parsed.typeTokens = new Set(parsed.typeTokens as unknown as number[]);
+                let map: Map<number, number[]> = new Map();
 
-                console.log(parsed);
+                Object.keys(parsed.highlightMap as unknown as {[k: string]: number[]}).forEach(key => {
+                    map.set(Number.parseInt(key), (parsed.highlightMap as unknown as {[k: string]: number[]})[key]);
+                });
+
+                parsed.highlightMap = map;
                 
                 editor.updateEditorWithCode(editorElem, editorLinesElem, codeLines.code, parsed);  
                 editor.updateEditorWithErrors(parsed.errors, editorElem);

@@ -175,8 +175,8 @@ export function updateEditorWithCode(editorElem: HTMLElement, editorLinesElem: H
             }
 
             const token_code = lineCode.slice(parseOutput.tokens[token_i].start, parseOutput.tokens[token_i].end);
-            const token_code_span = createCodeSpan(parseOutput.tokens[token_i], token_i, parseOutput.type_tokens.has(token_i));
-            setMouseOverHandler(editorElem, token_code_span, token_i, parseOutput);
+            const token_code_span = createCodeSpan(parseOutput.tokens[token_i], token_i, parseOutput.typeTokens.has(token_i));
+            setMouseOverHandler(editorElem, token_code_span, token_i, parseOutput.highlightMap);
             token_code_span.textContent = token_code;
             lineElement.appendChild(token_code_span);
 
@@ -207,25 +207,9 @@ export function updateEditorWithCode(editorElem: HTMLElement, editorLinesElem: H
     editorLinesElem.innerHTML = '1\n' + lines.join('\n');
 }
 
-function setMouseOverHandler(editorElem: HTMLElement, codeSpan: HTMLElement, tokenId: number, parseOutput: types.ParserOutput) {
-    const isBracket = 
-           codeSpan.classList.contains('openparen')
-        || codeSpan.classList.contains('closeparen')
-        || codeSpan.classList.contains('opensqbracket')
-        || codeSpan.classList.contains('closesqbracket');
-
-    let highlightMatches: number[] = [];
-
-    if(isBracket) {
-        highlightMatches.push(tokenId);
-        // parseOutput.bracket_pairs.forEach(([first, second], _) => {
-        //     if(first == tokenId) {
-        //         highlightMatches.push(second);
-        //     } else if(second == tokenId) {
-        //         highlightMatches.push(first);
-        //     }
-        // });
-    }
+function setMouseOverHandler(editorElem: HTMLElement, codeSpan: HTMLElement, tokenId: number, highlightMap: Map<number, number[]>) {
+    let highlightMatches: number[] = [tokenId];
+    highlightMatches.push(...highlightMap.get(tokenId) || []);
 
     codeSpan.addEventListener('mouseenter', (_) => {
         highlightMatches.forEach(tokenId => {

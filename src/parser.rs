@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use lalrpop_util::ParseError;
 use serde::Serialize;
 
@@ -99,10 +101,12 @@ impl Statement {
 }
 
 #[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct ParserOutput {
     pub tokens: Vec<Token>,
     pub errors: Vec<Error>,
     pub type_tokens: Vec<usize>,
+    pub highlight_map: HashMap<usize, Vec<usize>>,
     pub ast: Vec<Statement>,
 }
 
@@ -110,8 +114,10 @@ pub fn parse(code: &str) -> ParserOutput {
     let tokens: Vec<_> = Lexer::new(code).collect();
     let mut errors: Vec<Error> = vec![];
     let mut type_tokens: Vec<usize> = vec![];
+    let mut highlight_map: HashMap<usize, Vec<usize>> = HashMap::default();
 
     match grammar::ASTParser::new().parse(
+        &mut highlight_map,
         tokens
             .iter()
             .enumerate()
@@ -130,6 +136,7 @@ pub fn parse(code: &str) -> ParserOutput {
                 tokens,
                 errors,
                 type_tokens,
+                highlight_map,
                 ast,
             };
         }
@@ -179,6 +186,7 @@ pub fn parse(code: &str) -> ParserOutput {
         tokens,
         errors,
         type_tokens: vec![],
+        highlight_map: HashMap::default(),
         ast: vec![],
     }
 }

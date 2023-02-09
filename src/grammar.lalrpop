@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use crate::parser::{Statement, Expression};
 use crate::lexer::Op;
-grammar;
+
+grammar(highlight_map: &mut  HashMap<usize, Vec<usize>>);
 
 pub AST: Vec<Statement> = {
     Stmt* => <>
@@ -109,6 +112,8 @@ Term: Box<Expression> = {
     <start: @L> <val: "constant"> <end: @R> => Box::new(Expression::Constant{<>}),
     <start: @L> <name: "identifier"> <end: @R> => Box::new(Expression::Identifier{<>}),
     <start: @L> "(" <inner: Expr> ")" <end: @R> => {
+        highlight_map.insert(start, vec![end - 1]);
+        highlight_map.insert(end - 1, vec![start]);
         match *inner {
             Expression::Constant{val, ..} => Box::new(Expression::Constant{ start, val, end }),
             Expression::Identifier{name, ..} => Box::new(Expression::Identifier{ start, name, end }),

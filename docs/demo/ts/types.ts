@@ -23,7 +23,8 @@ export type Token = {
 export type ParserOutput = {
     tokens: Token[],
     errors: Error[],
-    type_tokens: Set<number>,
+    typeTokens: Set<number>,
+    highlightMap: Map<number, number[]>
     ast: any
 };
 

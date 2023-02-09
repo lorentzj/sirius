@@ -1,5 +1,53 @@
 import { ActionHistory } from './action_history.js';
 export class CodeLines {
+    static InsertAction = class {
+        lines;
+        start;
+        end;
+        content;
+        constructor(lines, start, content) {
+            this.lines = lines;
+            this.start = start;
+            const newLines = content.split('\n');
+            this.end = { line: start.line + newLines.length - 1, offset: 0 };
+            if (newLines.length === 1) {
+                this.end.offset = start.offset + newLines[0].length;
+            }
+            else {
+                this.end.offset = newLines[newLines.length - 1].length;
+            }
+            this.content = content;
+        }
+        inverse() {
+            return new CodeLines.DeleteAction(this.lines, this.start, this.end);
+        }
+        execute() {
+            this.lines.insertWithoutRecord(this.start, this.content);
+            return true;
+        }
+    };
+    static DeleteAction = class {
+        lines;
+        start;
+        end;
+        content;
+        constructor(lines, start, end) {
+            this.lines = lines;
+            this.start = start;
+            this.end = end;
+            this.content = lines.getText(start, end);
+        }
+        inverse() {
+            return new CodeLines.InsertAction(this.lines, this.start, this.content);
+        }
+        execute() {
+            this.lines.deleteWithoutRecord(this.start, this.end);
+            return true;
+        }
+    };
+    code;
+    lastCaretPosition;
+    history;
     constructor() {
         this.code = [''];
         this.lastCaretPosition = { line: 0, offset: 0 };
@@ -69,40 +117,3 @@ export class CodeLines {
         this.history.redoAction();
     }
 }
-CodeLines.InsertAction = class {
-    constructor(lines, start, content) {
-        this.lines = lines;
-        this.start = start;
-        const newLines = content.split('\n');
-        this.end = { line: start.line + newLines.length - 1, offset: 0 };
-        if (newLines.length === 1) {
-            this.end.offset = start.offset + newLines[0].length;
-        }
-        else {
-            this.end.offset = newLines[newLines.length - 1].length;
-        }
-        this.content = content;
-    }
-    inverse() {
-        return new CodeLines.DeleteAction(this.lines, this.start, this.end);
-    }
-    execute() {
-        this.lines.insertWithoutRecord(this.start, this.content);
-        return true;
-    }
-};
-CodeLines.DeleteAction = class {
-    constructor(lines, start, end) {
-        this.lines = lines;
-        this.start = start;
-        this.end = end;
-        this.content = lines.getText(start, end);
-    }
-    inverse() {
-        return new CodeLines.InsertAction(this.lines, this.start, this.content);
-    }
-    execute() {
-        this.lines.deleteWithoutRecord(this.start, this.end);
-        return true;
-    }
-};

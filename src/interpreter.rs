@@ -1,4 +1,4 @@
-use crate::parser::{Expression, Statement};
+use crate::parser::{Expression, ParserOutput, Statement};
 
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
@@ -136,11 +136,18 @@ pub fn print_value(value: Value) -> String {
     }
 }
 
-pub fn interpret(statements: &[Statement]) -> InterpreterOutput {
+pub fn interpret(parser_output: &ParserOutput) -> InterpreterOutput {
     let mut output = String::new();
     let mut context = Context::new();
 
-    for statement in statements {
+    if !parser_output.errors.is_empty() {
+        return InterpreterOutput {
+            output: "".into(),
+            error: None,
+        };
+    }
+
+    for statement in &parser_output.ast {
         match statement {
             Statement::Let { name, val, .. } => match interpret_expression(val, &context) {
                 Ok(value) => {

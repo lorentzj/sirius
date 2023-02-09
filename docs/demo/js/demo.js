@@ -43,8 +43,12 @@ document.body.onload = () => {
             output_area.initializeOutputArea(displayErrorsElem, displayLogElem, errorElem, logElem);
             const updateEditor = () => {
                 const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n')));
-                parsed.type_tokens = new Set(parsed.type_tokens);
-                console.log(parsed);
+                parsed.typeTokens = new Set(parsed.typeTokens);
+                let map = new Map();
+                Object.keys(parsed.highlightMap).forEach(key => {
+                    map.set(Number.parseInt(key), parsed.highlightMap[key]);
+                });
+                parsed.highlightMap = map;
                 editor.updateEditorWithCode(editorElem, editorLinesElem, codeLines.code, parsed);
                 editor.updateEditorWithErrors(parsed.errors, editorElem);
                 editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem);
