@@ -1,4 +1,4 @@
-use crate::parser::{Expression, ExpressionData, Statement, TokenID};
+use crate::parser::{Expression, Statement};
 
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
@@ -19,19 +19,20 @@ pub struct InterpreterOutput {
 
 pub type Context = std::collections::HashMap<String, Value>;
 
-fn execute_op(lhs: Value, rhs: Value, op: Op) -> Result<Value, Error> {
+fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Result<Value, Error> {
     if let (Value::Number(lhs), Value::Number(rhs)) = (lhs, rhs) {
-        match op {
-            Op::Plus => Ok(Value::Number(lhs + rhs)),
-            Op::Minus => Ok(Value::Number(lhs - rhs)),
+        match &op {
+            Op::Add => Ok(Value::Number(lhs + rhs)),
+            Op::Sub => Ok(Value::Number(lhs - rhs)),
             Op::Mul => Ok(Value::Number(lhs * rhs)),
             Op::Div => {
                 if rhs == 0. {
-                    Err(Error {
-                        error_type: ErrorType::RuntimeError,
-                        message: "division by zero".to_string(),
-                        tokens: vec![],
-                    })
+                    Err(Error::new(
+                        ErrorType::RuntimeError,
+                        "division by zero".into(),
+                        0,
+                        0,
+                    ))
                 } else {
                     Ok(Value::Number(lhs / rhs))
                 }
@@ -40,61 +41,76 @@ fn execute_op(lhs: Value, rhs: Value, op: Op) -> Result<Value, Error> {
 
             Op::Dot => Err(Error::new(
                 ErrorType::NotImplementedError,
-                "haven't implemented dot operator yet...".to_string(),
-                vec![],
+                "haven't implemented dot operator yet...".into(),
+                0,
+                0,
             )),
 
-            Op::Comma => Err(Error {
-                error_type: ErrorType::InternalError,
-                message: "comma should have created tuple".to_string(),
-                tokens: vec![],
-            }),
+            Op::Comma => Err(Error::new(
+                ErrorType::InternalError,
+                "comma should have created tuple".into(),
+                0,
+                0,
+            )),
         }
     } else {
-        Err(Error {
-            error_type: ErrorType::NotImplementedError,
-            message: "cannot apply operator to tuple".to_string(),
-            tokens: vec![],
-        })
+        Err(Error::new(
+            ErrorType::NotImplementedError,
+            "cannot apply operator to tuple".into(),
+            0,
+            0,
+        ))
     }
 }
 
-pub fn interpret_expression(expression: Expression, context: &Context) -> Result<Value, Error> {
-    match expression.data {
-        ExpressionData::Constant(val) => Ok(Value::Number(val)),
-        ExpressionData::BinaryOp(lhs, op, rhs) => {
-            let lhs_start = lhs.start;
-            let rhs_end = rhs.end;
+pub fn interpret_expression(expression: &Expression, context: &Context) -> Result<Value, Error> {
+    match expression {
+        Expression::Constant { val, .. } => Ok(Value::Number(*val)),
+        Expression::BinOp {
+            start,
+            lhs,
+            op,
+            rhs,
+            end,
+        } => {
             let (lhs, rhs) = (
-                interpret_expression(*lhs, context)?,
-                interpret_expression(*rhs, context)?,
+                interpret_expression(lhs, context)?,
+                interpret_expression(rhs, context)?,
             );
             match execute_op(lhs, rhs, op) {
                 Ok(v) => Ok(v),
                 Err(mut error) => {
-                    let tokens: Vec<TokenID> = (lhs_start..rhs_end).into_iter().collect();
-                    error.tokens.extend_from_slice(&tokens);
+                    error.start = *start;
+                    error.end = *end;
                     Err(error)
                 }
             }
         }
 
-        ExpressionData::Identifier(name) => match context.get(&name) {
+        Expression::Identifier { start, name, end } => match context.get(&name.clone()) {
             Some(val) => Ok(val.to_owned()),
             None => Err(Error::new(
                 ErrorType::UnboundIdentifierError,
                 format!("identifier '{}' is not bound", name),
-                vec![expression.start],
+                *start,
+                *end,
             )),
         },
 
-        ExpressionData::Tuple(v) => {
-            let mut acc = vec![];
-            for expression in v {
-                acc.push(interpret_expression(expression, context)?);
+        Expression::Tuple { inner, .. } => {
+            let mut members = vec![];
+            for expression in inner {
+                members.push(interpret_expression(expression, context)?);
             }
-            Ok(Value::Tuple(acc))
+            Ok(Value::Tuple(members))
         }
+
+        Expression::OpenTuple { start, end, .. } => Err(Error::new(
+            ErrorType::InternalError,
+            "open tuple".into(),
+            *start,
+            *end,
+        )),
     }
 }
 
@@ -103,7 +119,7 @@ pub fn print_value(value: Value) -> String {
         Value::Number(x) => x.to_string(),
         Value::Tuple(v) => {
             if v.is_empty() {
-                "()".to_string()
+                "()".into()
             } else {
                 let mut out = "(".to_string();
                 for val in v {
@@ -120,16 +136,15 @@ pub fn print_value(value: Value) -> String {
     }
 }
 
-pub fn interpret(statements: Vec<Statement>) -> InterpreterOutput {
-    let mut output = "".to_string();
+pub fn interpret(statements: &[Statement]) -> InterpreterOutput {
+    let mut output = String::new();
     let mut context = Context::new();
 
     for statement in statements {
         match statement {
-            Statement::Let(name, _, expression) => match interpret_expression(expression, &context)
-            {
+            Statement::Let { name, val, .. } => match interpret_expression(val, &context) {
                 Ok(value) => {
-                    context.insert(name, value);
+                    context.insert(name.clone(), value);
                 }
                 Err(error) => {
                     return InterpreterOutput {
@@ -138,7 +153,7 @@ pub fn interpret(statements: Vec<Statement>) -> InterpreterOutput {
                     }
                 }
             },
-            Statement::Print(expression) => match interpret_expression(expression, &context) {
+            Statement::Print(val) => match interpret_expression(val, &context) {
                 Ok(value) => {
                     output.push_str(&print_value(value));
                     output.push('\n');

@@ -43,6 +43,8 @@ document.body.onload = () => {
             output_area.initializeOutputArea(displayErrorsElem, displayLogElem, errorElem, logElem);
             const updateEditor = () => {
                 const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n')));
+                parsed.type_tokens = new Set(parsed.type_tokens);
+                console.log(parsed);
                 editor.updateEditorWithCode(editorElem, editorLinesElem, codeLines.code, parsed);
                 editor.updateEditorWithErrors(parsed.errors, editorElem);
                 editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem);

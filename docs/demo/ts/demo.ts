@@ -54,6 +54,10 @@ document.body.onload = () => {
 
             const updateEditor = () => {
                 const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n'))) as types.ParserOutput;
+                parsed.type_tokens = new Set(parsed.type_tokens as unknown as number[]);
+
+                console.log(parsed);
+                
                 editor.updateEditorWithCode(editorElem, editorLinesElem, codeLines.code, parsed);  
                 editor.updateEditorWithErrors(parsed.errors, editorElem);
                 editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem);

@@ -1,0 +1,145 @@
+use crate::parser::{Statement, Expression};
+use crate::lexer::Op;
+grammar;
+
+pub AST: Vec<Statement> = {
+    Stmt* => <>
+}
+
+pub Stmt: Statement = {
+    "let" <n: "identifier"> <ann: (":" Expr)?> "=" <val: Expr> ";" => {
+        Statement::Let {
+            name: n, 
+            ann: match ann {
+                Some(ann) => match *ann.1 {
+                    Expression::OpenTuple{ start, inner, end } => Some(Box::new(Expression::Tuple{ start, inner, end })),
+                    ann => Some(Box::new(ann))
+                },
+                None => None
+            },
+            val: match *val {
+                Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
+                _ => val
+            }
+        }
+    },
+    "print" <v: Expr> ";" => {
+        Statement::Print(match *v {
+            Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
+            _ => v
+        })
+    }
+}
+
+pub Expr: Box<Expression> = {
+    #[precedence(level="1")]
+    <t: Term> => t,
+
+    #[precedence(level="2")] #[assoc(side="left")]
+    <start: @L> <lhs: Expr> "." <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
+        start,
+        lhs,
+        op: Op::Dot,
+        rhs,
+        end
+    }),
+
+    #[precedence(level="3")] #[assoc(side="left")]
+    <start: @L> <lhs: Expr> "^" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
+        start,
+        lhs,
+        op: Op::Exp,
+        rhs,
+        end
+    }),
+
+    #[precedence(level="4")] #[assoc(side="left")]
+    <start: @L> <lhs: Expr> "*" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
+        start,
+        lhs,
+        op: Op::Mul,
+        rhs,
+        end
+    }),
+    <start: @L> <lhs: Expr> "/" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
+        start,
+        lhs,
+        op: Op::Div,
+        rhs,
+        end
+    }),
+
+
+    #[precedence(level="5")] #[assoc(side="left")]
+    <start: @L> <lhs: Expr> "+" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
+        start,
+        lhs,
+        op: Op::Add,
+        rhs,
+        end
+    }),
+    <start: @L> <lhs: Expr> "-" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
+        start,
+        lhs,
+        op: Op::Sub,
+        rhs,
+        end
+    }),
+
+    #[precedence(level="6")] #[assoc(side="left")]
+    <start: @L> <lhs: Expr> "," <rhs: Expr> <end: @R> => {
+        match *lhs {
+             Expression::OpenTuple{mut inner, ..} => {
+                inner.push(*rhs);
+                Box::new(Expression::OpenTuple{ start, inner, end })
+             }
+             _ => Box::new(Expression::OpenTuple{
+                start,
+                inner: vec![
+                    *lhs,
+                    *rhs
+                ],
+                end
+            })
+        }
+    }
+};
+
+Term: Box<Expression> = {
+    <start: @L> <val: "constant"> <end: @R> => Box::new(Expression::Constant{<>}),
+    <start: @L> <name: "identifier"> <end: @R> => Box::new(Expression::Identifier{<>}),
+    <start: @L> "(" <inner: Expr> ")" <end: @R> => {
+        match *inner {
+            Expression::Constant{val, ..} => Box::new(Expression::Constant{ start, val, end }),
+            Expression::Identifier{name, ..} => Box::new(Expression::Identifier{ start, name, end }),
+            Expression::BinOp{lhs, op, rhs, ..} => Box::new(Expression::BinOp{ start, lhs, op, rhs, end }),
+            Expression::OpenTuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
+            Expression::Tuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
+        }
+    }
+};
+
+extern {
+    type Location = usize;
+    type Error = crate::error::Error;
+
+    enum crate::lexer::Tok {
+        "("          => crate::lexer::Tok::OpenParen,
+        ")"          => crate::lexer::Tok::CloseParen,
+        ","          => crate::lexer::Tok::Op(Op::Comma),
+        "^"          => crate::lexer::Tok::Op(Op::Exp),
+        "*"          => crate::lexer::Tok::Op(Op::Mul),
+        "/"          => crate::lexer::Tok::Op(Op::Div),
+        "+"          => crate::lexer::Tok::Op(Op::Add),
+        "-"          => crate::lexer::Tok::Op(Op::Sub),
+        "."          => crate::lexer::Tok::Op(Op::Dot),
+        "constant"   => crate::lexer::Tok::Constant(<f64>),
+        "identifier" => crate::lexer::Tok::Identifier(<String>),
+        "let"        => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Let),
+        "print"      => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Print),
+        "="          => crate::lexer::Tok::Assign,
+        ";"          => crate::lexer::Tok::Semicolon,
+        ":"          => crate::lexer::Tok::Colon,
+        "error"      => crate::lexer::Tok::Error(<String>),
+    }
+}

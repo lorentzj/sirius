@@ -1,30 +1,52 @@
-use crate::error::{Error, ErrorType};
-
 use serde::Serialize;
+use std::fmt;
+use std::iter::Peekable;
+use std::str::CharIndices;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub enum Op {
     Comma,
     Exp,
     Mul,
     Div,
-    Plus,
-    Minus,
+    Add,
+    Sub,
     Dot,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Clone, Copy)]
+impl fmt::Debug for Op {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Op::Dot => write!(f, "."),
+            Op::Exp => write!(f, "^"),
+            Op::Mul => write!(f, "*"),
+            Op::Div => write!(f, "/"),
+            Op::Add => write!(f, "+"),
+            Op::Sub => write!(f, "-"),
+            Op::Comma => write!(f, ","),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub enum Keyword {
     Print,
     Let,
 }
 
-#[derive(Debug, PartialEq, Serialize, Clone)]
-pub enum TokenType {
+impl fmt::Debug for Keyword {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Keyword::Let => write!(f, "let"),
+            Keyword::Print => write!(f, "print"),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Serialize)]
+pub enum Tok {
     OpenParen,
     CloseParen,
-    OpenSqBracket,
-    CloseSqBracket,
     Op(Op),
     Constant(f64),
     Identifier(String),
@@ -32,14 +54,31 @@ pub enum TokenType {
     Assign,
     Semicolon,
     Colon,
-    Error,
+    Error(String),
 }
 
-fn parse_substring(s: &str) -> Result<TokenType, String> {
+impl fmt::Debug for Tok {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Tok::OpenParen => write!(f, "("),
+            Tok::CloseParen => write!(f, "("),
+            Tok::Op(op) => write!(f, "{:?}", op),
+            Tok::Constant(v) => write!(f, "{}", v),
+            Tok::Identifier(n) => write!(f, "{}", n),
+            Tok::Keyword(k) => write!(f, "{:?}", k),
+            Tok::Assign => write!(f, "="),
+            Tok::Semicolon => write!(f, ";"),
+            Tok::Colon => write!(f, ":"),
+            Tok::Error(m) => write!(f, "error({})", m),
+        }
+    }
+}
+
+fn parse_substring(s: &str) -> Result<Tok, String> {
     return if s == "let" {
-        Ok(TokenType::Keyword(Keyword::Let))
+        Ok(Tok::Keyword(Keyword::Let))
     } else if s == "print" {
-        Ok(TokenType::Keyword(Keyword::Print))
+        Ok(Tok::Keyword(Keyword::Print))
     } else {
         match s.chars().next() {
             Some('0'..='9') => {
@@ -47,35 +86,35 @@ fn parse_substring(s: &str) -> Result<TokenType, String> {
                 match parsed_number {
                     Ok(n) => {
                         if n.is_infinite() {
-                            Err("number overflowed f64".to_string())
+                            Err("number overflowed f64".into())
                         } else {
-                            Ok(TokenType::Constant(n))
+                            Ok(Tok::Constant(n))
                         }
                     }
                     Err(msg) => Err(msg.to_string()),
                 }
             }
             _ => match s {
-                "let" => Ok(TokenType::Keyword(Keyword::Let)),
-                "print" => Ok(TokenType::Keyword(Keyword::Print)),
-                _ => Ok(TokenType::Identifier(s.to_string())),
+                "let" => Ok(Tok::Keyword(Keyword::Let)),
+                "print" => Ok(Tok::Keyword(Keyword::Print)),
+                _ => Ok(Tok::Identifier(s.into())),
             },
         }
     };
 }
 
-#[derive(Debug, PartialEq, Serialize, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Token {
-    pub token_type: TokenType,
+    pub data: Tok,
     pub line: usize,
     pub start: usize,
     pub end: usize,
 }
 
 impl Token {
-    fn new(token_type: TokenType, line: usize, start: usize, end: usize) -> Token {
+    fn new(data: Tok, line: usize, start: usize, end: usize) -> Token {
         Token {
-            token_type,
+            data,
             line,
             start,
             end,
@@ -83,91 +122,182 @@ impl Token {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize)]
-pub struct LexerOutput {
-    pub tokens: Vec<Token>,
-    pub errors: Vec<Error>,
+pub struct Lexer<'input> {
+    code: &'input str,
+    char_inds: Peekable<CharIndices<'input>>,
+    curr_substring_start: Option<usize>,
+    curr_substring_all_digits: bool,
+    line: usize,
+    col: usize,
 }
 
-pub fn lex(text: &str) -> LexerOutput {
-    let mut tokens: Vec<Token> = vec![];
-    let mut errors: Vec<Error> = vec![];
-    let mut curr_substring = String::new();
-    let mut line = 0;
-    let mut col = 0;
+impl<'input> Lexer<'input> {
+    pub fn new(input: &'input str) -> Self {
+        Lexer {
+            code: input,
+            char_inds: input.char_indices().peekable(),
+            curr_substring_start: None,
+            curr_substring_all_digits: true,
+            line: 0,
+            col: 0,
+        }
+    }
+}
 
-    for char in text.chars() {
-        match char {
-            '0'..='9' | 'A'..='Z' | 'a'..='z' | '\\' | '\u{0370}'..='\u{03FF}' | '_' => {
-                curr_substring.push(char);
-            }
+impl<'input> Iterator for Lexer<'input> {
+    type Item = Token;
 
-            _ => {
-                if !curr_substring.is_empty() {
-                    if char == '.' {
-                        let all_digits = curr_substring.bytes().all(|c| c.is_ascii_digit());
-                        if all_digits {
-                            curr_substring.push(char);
-                            col += 1;
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(&(i, char)) = self.char_inds.peek() {
+            match char {
+                '0'..='9' | 'A'..='Z' | 'a'..='z' | '\u{0370}'..='\u{03FF}' | '_' => {
+                    self.char_inds.next();
+
+                    if self.curr_substring_start.is_none() {
+                        self.curr_substring_start = Some(i);
+                        self.curr_substring_all_digits &= char.is_ascii_digit();
+                    }
+
+                    self.col += 1;
+                }
+
+                _ => {
+                    if let Some(curr_substring_start) = self.curr_substring_start {
+                        if char == '.' && self.curr_substring_all_digits {
+                            self.char_inds.next();
+                            self.col += 1;
                             continue;
                         }
+
+                        self.curr_substring_all_digits = true;
+                        self.curr_substring_start = None;
+
+                        match parse_substring(&self.code[curr_substring_start..i]) {
+                            Ok(token_type) => {
+                                return Some(Token::new(
+                                    token_type,
+                                    self.line,
+                                    self.col + curr_substring_start - i,
+                                    self.col,
+                                ))
+                            }
+
+                            Err(msg) => {
+                                return Some(Token::new(
+                                    Tok::Error(msg),
+                                    self.line,
+                                    self.col + curr_substring_start - i,
+                                    self.col,
+                                ));
+                            }
+                        }
                     }
 
-                    match parse_substring(&curr_substring) {
-                        Ok(token_type) => tokens.push(Token::new(
-                            token_type,
-                            line,
-                            col - curr_substring.len(),
-                            col,
-                        )),
+                    self.char_inds.next();
 
-                        Err(msg) => {
-                            tokens.push(Token::new(
-                                TokenType::Error,
-                                line,
-                                col - curr_substring.len(),
-                                col,
-                            ));
+                    match char {
+                        '\n' => {
+                            self.line += 1;
+                            self.col = 0;
+                        }
+                        _ => self.col += 1,
+                    }
 
-                            errors.push(Error::new(
-                                ErrorType::TokenError,
-                                msg,
-                                vec![tokens.len() - 1],
+                    match char {
+                        ' ' | '\t' | '\n' => (),
+                        ';' => {
+                            return Some(Token::new(
+                                Tok::Semicolon,
+                                self.line,
+                                self.col - 1,
+                                self.col,
                             ))
                         }
-                    }
-                    curr_substring = "".to_string();
-                }
+                        ':' => {
+                            return Some(Token::new(Tok::Colon, self.line, self.col - 1, self.col))
+                        }
+                        '(' => {
+                            return Some(Token::new(
+                                Tok::OpenParen,
+                                self.line,
+                                self.col - 1,
+                                self.col,
+                            ))
+                        }
+                        ')' => {
+                            return Some(Token::new(
+                                Tok::CloseParen,
+                                self.line,
+                                self.col - 1,
+                                self.col,
+                            ))
+                        }
+                        '.' => {
+                            return Some(Token::new(
+                                Tok::Op(Op::Dot),
+                                self.line,
+                                self.col - 1,
+                                self.col,
+                            ))
+                        }
+                        '^' => {
+                            return Some(Token::new(
+                                Tok::Op(Op::Exp),
+                                self.line,
+                                self.col - 1,
+                                self.col,
+                            ))
+                        }
+                        '*' => {
+                            return Some(Token::new(
+                                Tok::Op(Op::Mul),
+                                self.line,
+                                self.col - 1,
+                                self.col,
+                            ))
+                        }
+                        '/' => {
+                            return Some(Token::new(
+                                Tok::Op(Op::Div),
+                                self.line,
+                                self.col - 1,
+                                self.col,
+                            ))
+                        }
+                        '+' => {
+                            return Some(Token::new(
+                                Tok::Op(Op::Add),
+                                self.line,
+                                self.col - 1,
+                                self.col,
+                            ))
+                        }
+                        '-' => {
+                            return Some(Token::new(
+                                Tok::Op(Op::Sub),
+                                self.line,
+                                self.col - 1,
+                                self.col,
+                            ))
+                        }
+                        ',' => {
+                            return Some(Token::new(
+                                Tok::Op(Op::Comma),
+                                self.line,
+                                self.col - 1,
+                                self.col,
+                            ))
+                        }
+                        '=' => {
+                            return Some(Token::new(Tok::Assign, self.line, self.col - 1, self.col))
+                        }
 
-                match char {
-                    ' ' | '\t' | '\n' => (),
-                    ';' => tokens.push(Token::new(TokenType::Semicolon, line, col, col + 1)),
-                    ':' => tokens.push(Token::new(TokenType::Colon, line, col, col + 1)),
-                    '(' => tokens.push(Token::new(TokenType::OpenParen, line, col, col + 1)),
-                    ')' => tokens.push(Token::new(TokenType::CloseParen, line, col, col + 1)),
-                    '[' => tokens.push(Token::new(TokenType::OpenSqBracket, line, col, col + 1)),
-                    ']' => tokens.push(Token::new(TokenType::CloseSqBracket, line, col, col + 1)),
-                    '.' => tokens.push(Token::new(TokenType::Op(Op::Dot), line, col, col + 1)),
-                    '^' => tokens.push(Token::new(TokenType::Op(Op::Exp), line, col, col + 1)),
-                    '*' => tokens.push(Token::new(TokenType::Op(Op::Mul), line, col, col + 1)),
-                    '/' => tokens.push(Token::new(TokenType::Op(Op::Div), line, col, col + 1)),
-                    '+' => tokens.push(Token::new(TokenType::Op(Op::Plus), line, col, col + 1)),
-                    '-' => tokens.push(Token::new(TokenType::Op(Op::Minus), line, col, col + 1)),
-                    ',' => tokens.push(Token::new(TokenType::Op(Op::Comma), line, col, col + 1)),
-                    '=' => tokens.push(Token::new(TokenType::Assign, line, col, col + 1)),
-
-                    _ => {
-                        if !tokens.is_empty()
-                            && tokens.last().unwrap().token_type == TokenType::Error
-                        {
-                            let n_tokens = tokens.len();
-                            tokens[n_tokens].end += 1;
-                        } else {
-                            tokens.push(Token::new(TokenType::Error, line, col, col + 1));
-                            errors.push(Error::new(
-                                ErrorType::TokenError,
-                                "unknown token".to_string(),
-                                vec![tokens.len() - 1],
+                        _ => {
+                            return Some(Token::new(
+                                Tok::Error(format!("unknown token '{}'", char)),
+                                self.line,
+                                self.col - 1,
+                                self.col,
                             ));
                         }
                     }
@@ -175,40 +305,113 @@ pub fn lex(text: &str) -> LexerOutput {
             }
         }
 
-        match char {
-            '\n' => {
-                line += 1;
-                col = 0;
+        if let Some(curr_substring_start) = self.curr_substring_start {
+            self.curr_substring_start = None;
+
+            match parse_substring(&self.code[curr_substring_start..]) {
+                Ok(token_type) => Some(Token::new(
+                    token_type,
+                    self.line,
+                    self.col + curr_substring_start - self.code.len(),
+                    self.col,
+                )),
+
+                Err(msg) => Some(Token::new(
+                    Tok::Error(msg),
+                    self.line,
+                    self.col + curr_substring_start - self.code.len(),
+                    self.col,
+                )),
             }
-            _ => col += 1,
+        } else {
+            None
         }
     }
+}
 
-    if !curr_substring.is_empty() {
-        match parse_substring(&curr_substring) {
-            Ok(token_type) => tokens.push(Token::new(
-                token_type,
-                line,
-                col - curr_substring.len(),
-                col,
-            )),
+#[cfg(test)]
+mod tests {
+    use super::{Lexer, Op, Tok, Token};
 
-            Err(msg) => {
-                tokens.push(Token::new(
-                    TokenType::Error,
-                    line,
-                    col - curr_substring.len(),
-                    col,
-                ));
-
-                errors.push(Error::new(
-                    ErrorType::TokenError,
-                    msg,
-                    vec![tokens.len() - 1],
-                ))
-            }
-        }
+    #[test]
+    fn empty() {
+        let tokens: Vec<Token> = Lexer::new("").collect();
+        assert!(tokens.is_empty());
     }
 
-    LexerOutput { tokens, errors }
+    #[test]
+    fn one_line() {
+        let test_str = "(abcdef + g * 12)^2/hij";
+        let tokens: Vec<Token> = Lexer::new(test_str).collect();
+
+        let expected_tokens = vec![
+            Token::new(Tok::OpenParen, 0, 0, 1),
+            Token::new(Tok::Identifier("abcdef".into()), 0, 1, 7),
+            Token::new(Tok::Op(Op::Add), 0, 8, 9),
+            Token::new(Tok::Identifier("g".into()), 0, 10, 11),
+            Token::new(Tok::Op(Op::Mul), 0, 12, 13),
+            Token::new(Tok::Constant(12.0), 0, 14, 16),
+            Token::new(Tok::CloseParen, 0, 16, 17),
+            Token::new(Tok::Op(Op::Exp), 0, 17, 18),
+            Token::new(Tok::Constant(2.0), 0, 18, 19),
+            Token::new(Tok::Op(Op::Div), 0, 19, 20),
+            Token::new(Tok::Identifier("hij".into()), 0, 20, 23),
+        ];
+
+        assert_eq!(tokens, expected_tokens);
+    }
+
+    #[test]
+    fn multi_line() {
+        let test_str = "this is\n*a test*\n with lots of newlines\n";
+        let tokens: Vec<Token> = Lexer::new(test_str).collect();
+
+        let expected_tokens = vec![
+            Token::new(Tok::Identifier("this".into()), 0, 0, 4),
+            Token::new(Tok::Identifier("is".into()), 0, 5, 7),
+            Token::new(Tok::Op(Op::Mul), 1, 0, 1),
+            Token::new(Tok::Identifier("a".into()), 1, 1, 2),
+            Token::new(Tok::Identifier("test".into()), 1, 3, 7),
+            Token::new(Tok::Op(Op::Mul), 1, 7, 8),
+            Token::new(Tok::Identifier("with".into()), 2, 1, 5),
+            Token::new(Tok::Identifier("lots".into()), 2, 6, 10),
+            Token::new(Tok::Identifier("of".into()), 2, 11, 13),
+            Token::new(Tok::Identifier("newlines".into()), 2, 14, 22),
+        ];
+
+        assert_eq!(tokens, expected_tokens);
+    }
+
+    #[test]
+    fn bad_literals() {
+        let test_str = "1e9999 1xyz";
+        let tokens: Vec<Token> = Lexer::new(test_str).collect();
+
+        let expected_tokens = vec![
+            Token::new(Tok::Error("number overflowed f64".into()), 0, 0, 6),
+            Token::new(Tok::Error("invalid float literal".into()), 0, 7, 11),
+        ];
+
+        assert_eq!(tokens, expected_tokens);
+    }
+
+    #[test]
+    fn dot_op_and_decimal() {
+        let test_str = "a.b + 12.3 - 12..1 * 100.1.2";
+        let tokens: Vec<Token> = Lexer::new(test_str).collect();
+
+        let expected_tokens = vec![
+            Token::new(Tok::Identifier("a".into()), 0, 0, 1),
+            Token::new(Tok::Op(Op::Dot), 0, 1, 2),
+            Token::new(Tok::Identifier("b".into()), 0, 2, 3),
+            Token::new(Tok::Op(Op::Add), 0, 4, 5),
+            Token::new(Tok::Constant(12.3), 0, 6, 10),
+            Token::new(Tok::Op(Op::Sub), 0, 11, 12),
+            Token::new(Tok::Error("invalid float literal".into()), 0, 13, 18),
+            Token::new(Tok::Op(Op::Mul), 0, 19, 20),
+            Token::new(Tok::Error("invalid float literal".into()), 0, 21, 28),
+        ];
+
+        assert_eq!(tokens, expected_tokens);
+    }
 }

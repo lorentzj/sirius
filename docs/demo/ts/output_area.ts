@@ -46,8 +46,8 @@ export function updateErrorELement(displayErrorsElem: HTMLElement, errorElem: HT
     }
 
     errors = errors.sort((a, b) => {
-        const aErrorLine = tokens[a.tokens[0]].line + 1;
-        const bErrorLine = tokens[b.tokens[0]].line + 1;
+        const aErrorLine = tokens[a.start].line + 1;
+        const bErrorLine = tokens[b.start].line + 1;
         return aErrorLine - bErrorLine;
     });
 
@@ -59,7 +59,7 @@ export function updateErrorELement(displayErrorsElem: HTMLElement, errorElem: HT
         errorRowSummaryElem.classList.add('error_summary');
 
         const errorPositionElement = document.createElement('span');
-        errorPositionElement.innerText = `[Ln ${tokens[error.tokens[0]].line + 1}]`;
+        errorPositionElement.innerText = `[Ln ${tokens[error.start].line + 1}]`;
         errorPositionElement.classList.add('error_position');
 
         const errorTypeElement = document.createElement('span');

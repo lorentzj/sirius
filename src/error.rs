@@ -2,13 +2,11 @@ use serde::Serialize;
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum ErrorType {
-    TokenError,
-    BracketError,
     ParseError,
-    UnboundIdentifierError,
     TypeError,
-    NotImplementedError,
+    UnboundIdentifierError,
     RuntimeError,
+    NotImplementedError,
     InternalError,
 }
 
@@ -16,15 +14,17 @@ pub enum ErrorType {
 pub struct Error {
     pub error_type: ErrorType,
     pub message: String,
-    pub tokens: Vec<usize>,
+    pub start: usize,
+    pub end: usize,
 }
 
 impl Error {
-    pub fn new(error_type: ErrorType, message: String, tokens: Vec<usize>) -> Error {
+    pub fn new(error_type: ErrorType, message: String, start: usize, end: usize) -> Error {
         Error {
             error_type,
             message,
-            tokens,
+            start,
+            end,
         }
     }
 }

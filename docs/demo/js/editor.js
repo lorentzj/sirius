@@ -165,9 +165,8 @@ export function updateEditorWithCode(editorElem, editorLinesElem, code, parseOut
                 before_token_code_span.dataset['charEnd'] = (line_i + before_token_code.length).toString();
                 lineElement.appendChild(before_token_code_span);
             }
-            const token_is_type = parseOutput.type_tokens.find((id) => id === token_i) !== undefined;
             const token_code = lineCode.slice(parseOutput.tokens[token_i].start, parseOutput.tokens[token_i].end);
-            const token_code_span = createCodeSpan(parseOutput.tokens[token_i], token_i, token_is_type);
+            const token_code_span = createCodeSpan(parseOutput.tokens[token_i], token_i, parseOutput.type_tokens.has(token_i));
             setMouseOverHandler(editorElem, token_code_span, token_i, parseOutput);
             token_code_span.textContent = token_code;
             lineElement.appendChild(token_code_span);
@@ -202,14 +201,13 @@ function setMouseOverHandler(editorElem, codeSpan, tokenId, parseOutput) {
     let highlightMatches = [];
     if (isBracket) {
         highlightMatches.push(tokenId);
-        parseOutput.bracket_pairs.forEach(([first, second], _) => {
-            if (first == tokenId) {
-                highlightMatches.push(second);
-            }
-            else if (second == tokenId) {
-                highlightMatches.push(first);
-            }
-        });
+        // parseOutput.bracket_pairs.forEach(([first, second], _) => {
+        //     if(first == tokenId) {
+        //         highlightMatches.push(second);
+        //     } else if(second == tokenId) {
+        //         highlightMatches.push(first);
+        //     }
+        // });
     }
     codeSpan.addEventListener('mouseenter', (_) => {
         highlightMatches.forEach(tokenId => {
@@ -228,13 +226,13 @@ function setMouseOverHandler(editorElem, codeSpan, tokenId, parseOutput) {
 }
 export function updateEditorWithErrors(errors, editorElem) {
     errors.forEach(error => {
-        error.tokens.forEach(tokenId => {
+        for (let tokenId = error.start; tokenId < error.end; tokenId++) {
             const tokenSelector = `span.token[data-token-id='${tokenId}']`;
             const tokenElem = editorElem.querySelector(tokenSelector);
             if (tokenElem !== null) {
                 tokenElem.classList.add('error');
                 tokenElem.title = `${error.error_type}: ${error.message}`;
-                if (error.tokens.find(err => err === tokenId + 1)) {
+                if (tokenId + 1 < error.end) {
                     const nextElem = tokenElem.nextElementSibling;
                     if (nextElem !== null) {
                         nextElem.classList.add('error');
@@ -242,7 +240,7 @@ export function updateEditorWithErrors(errors, editorElem) {
                     }
                 }
             }
-        });
+        }
     });
 }
 function createCodeSpan(token, i, isType) {
@@ -255,20 +253,23 @@ function createCodeSpan(token, i, isType) {
         span.classList.add('token');
         span.dataset['charStart'] = token.start.toString();
         span.dataset['charEnd'] = token.end.toString();
-        if (token.token_type.Op !== undefined) {
+        if (token.data.Op !== undefined) {
             span.classList.add('operator');
         }
-        else if (token.token_type.Constant !== undefined) {
+        else if (token.data.Constant !== undefined) {
             span.classList.add('constant');
         }
-        else if (token.token_type.Identifier !== undefined) {
+        else if (token.data.Identifier !== undefined) {
             span.classList.add('identifier');
         }
-        else if (token.token_type.Keyword !== undefined) {
+        else if (token.data.Keyword !== undefined) {
             span.classList.add('keyword');
         }
+        else if (token.data.Error !== undefined) {
+            span.classList.add('error');
+        }
         else {
-            span.classList.add(token.token_type.toLowerCase());
+            span.classList.add(token.data.toLowerCase());
         }
         if (isType) {
             span.classList.add('type');

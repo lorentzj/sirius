@@ -126,7 +126,7 @@ span.token.operator {
     color: rgb(189, 173, 83);
 }
 
-span.token.openparen, span.token.closeparen, span.token.opensqbracket, span.token.closesqbracket {
+span.token.openparen, span.token.closeparen {
     color: rgb(255, 255, 255);
 }
 
@@ -199,4 +199,12 @@ button.selected {
 .error_message_code {
     font-style: italic;
     color: rgb(212, 212, 212);
+}
+
+.error_message_code::before {
+    content: "'";
+}
+
+.error_message_code::after {
+    content: "'";
 }

@@ -1,17 +1,20 @@
 export interface Error {
     error_type: string,
     message: string,
-    tokens: number[]
+    start: number,
+    end: number
 };
 
-export type TokenType = 
+export type Tok = 
+    string |
     {Op: string} |
     {Constant: number} |
     {Identifier: string} |
-    {Keyword: string};
+    {Keyword: string} |
+    {Error: string};
 
-export interface Token {
-    token_type: string | TokenType,
+export type Token = {
+    data: Tok,
     line: number,
     start: number,
     end: number
@@ -20,8 +23,8 @@ export interface Token {
 export type ParserOutput = {
     tokens: Token[],
     errors: Error[],
-    bracket_pairs: [number, number][],
-    type_tokens: number[];
+    type_tokens: Set<number>,
+    ast: any
 };
 
 export type InterpreterOutput = {
