@@ -4,7 +4,6 @@ use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
 use crate::parser::{Expression, Statement};
 use crate::stack;
-use crate::stack::FrameTrait;
 
 #[derive(PartialEq, Clone)]
 pub enum Type {

@@ -6,7 +6,6 @@ use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
 
 use crate::stack;
-use crate::stack::FrameTrait;
 
 use serde::Serialize;
 
