@@ -14,3 +14,16 @@ if t & (t | f) {
         print 3;
     }
 }
+
+let x = true;
+
+if x {
+    let x = false;
+    if x {
+        print false;
+    }
+}
+
+if x {
+    print true; 
+}

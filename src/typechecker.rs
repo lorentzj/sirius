@@ -3,6 +3,8 @@ use std::fmt;
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
 use crate::parser::{Expression, Statement};
+use crate::stack;
+use crate::stack::FrameTrait;
 
 #[derive(PartialEq, Clone)]
 pub enum Type {
@@ -35,8 +37,6 @@ impl fmt::Debug for Type {
         }
     }
 }
-
-pub type Context = std::collections::HashMap<String, Type>;
 
 pub fn annotation_type(annotation: &Expression) -> Result<Type, Error> {
     match &annotation {
@@ -75,11 +75,11 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, Error> {
     }
 }
 
-pub fn expression_type(expression: &Expression, context: &Context) -> Result<Type, Error> {
+pub fn expression_type(expression: &Expression, frame: &stack::Frame<Type>) -> Result<Type, Error> {
     let (start, end) = expression.range();
 
     match &expression {
-        Expression::Identifier { name, .. } => match context.get(name) {
+        Expression::Identifier { name, .. } => match frame.get(name) {
             Some(t) => Ok(t.clone()),
             None => Err(Error::new(
                 ErrorType::UnboundIdentifierError,
@@ -93,7 +93,7 @@ pub fn expression_type(expression: &Expression, context: &Context) -> Result<Typ
         Expression::Tuple { inner, .. } => {
             let mut members = vec![];
             for expression in inner {
-                members.push(expression_type(expression, context)?);
+                members.push(expression_type(expression, frame)?);
             }
             Ok(Type::Tuple(members))
         }
@@ -106,8 +106,8 @@ pub fn expression_type(expression: &Expression, context: &Context) -> Result<Typ
         )),
 
         Expression::BinOp { lhs, rhs, op, .. } => {
-            let lhs_type = expression_type(lhs, context)?;
-            let rhs_type = expression_type(rhs, context)?;
+            let lhs_type = expression_type(lhs, frame)?;
+            let rhs_type = expression_type(rhs, frame)?;
 
             match &op {
                 Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp => {
@@ -181,12 +181,19 @@ pub fn expression_type(expression: &Expression, context: &Context) -> Result<Typ
     }
 }
 
-pub fn typecheck(statements: &[Statement], context: &mut Context) -> Vec<Error> {
+pub fn typecheck(statements: &[Statement], frame: Option<&mut stack::Frame<Type>>) -> Vec<Error> {
+    let mut empty_frame = stack::Frame::<Type>::new();
+    let frame = match frame {
+        Some(frame) => frame,
+        None => &mut empty_frame,
+    };
+
+    frame.push_scope();
     let mut errors = vec![];
 
     for statement in statements {
         match statement {
-            Statement::Let { name, ann, val } => match expression_type(val, context) {
+            Statement::Let { name, ann, val } => match expression_type(val, frame) {
                 Ok(t) => {
                     if let Some(ann) = ann {
                         match annotation_type(ann) {
@@ -205,16 +212,16 @@ pub fn typecheck(statements: &[Statement], context: &mut Context) -> Vec<Error> 
                             Err(error) => errors.push(error),
                         }
                     }
-                    context.insert(name.into(), t);
+                    frame.insert(name.into(), t);
                 }
                 Err(error) => errors.push(error),
             },
-            Statement::Print { val } => match expression_type(val, context) {
+            Statement::Print { val } => match expression_type(val, frame) {
                 Ok(_) => (),
                 Err(error) => errors.push(error),
             },
 
-            Statement::If { cond, inner } => match expression_type(cond, context) {
+            Statement::If { cond, inner } => match expression_type(cond, frame) {
                 Ok(t) => {
                     if t != Type::Bool {
                         let (cond_start, cond_end) = cond.range();
@@ -227,7 +234,8 @@ pub fn typecheck(statements: &[Statement], context: &mut Context) -> Vec<Error> 
                         ));
                     }
 
-                    let mut inner_errors = typecheck(inner, context);
+                    let mut inner_errors = typecheck(inner, Some(frame));
+                    frame.pop_scope();
                     errors.append(&mut inner_errors);
                 }
                 Err(error) => errors.push(error),

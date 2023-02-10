@@ -1,9 +1,12 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use crate::parser::{Expression, Statement};
 
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
+
+use crate::stack;
+use crate::stack::FrameTrait;
 
 use serde::Serialize;
 
@@ -20,8 +23,6 @@ pub struct InterpreterOutput {
     pub error: Option<Error>,
     pub defined_idents: HashSet<String>,
 }
-
-pub type Context = HashMap<String, Value>;
 
 fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Result<Value, Error> {
     match &op {
@@ -101,7 +102,10 @@ fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Result<Value, Error> {
     }
 }
 
-pub fn interpret_expression(expression: &Expression, context: &Context) -> Result<Value, Error> {
+pub fn interpret_expression(
+    expression: &Expression,
+    frame: &stack::Frame<Value>,
+) -> Result<Value, Error> {
     match expression {
         Expression::Float { val, .. } => Ok(Value::Float(*val)),
         Expression::Bool { val, .. } => Ok(Value::Bool(*val)),
@@ -113,8 +117,8 @@ pub fn interpret_expression(expression: &Expression, context: &Context) -> Resul
             end,
         } => {
             let (lhs, rhs) = (
-                interpret_expression(lhs, context)?,
-                interpret_expression(rhs, context)?,
+                interpret_expression(lhs, frame)?,
+                interpret_expression(rhs, frame)?,
             );
             match execute_op(lhs, rhs, op) {
                 Ok(v) => Ok(v),
@@ -126,7 +130,7 @@ pub fn interpret_expression(expression: &Expression, context: &Context) -> Resul
             }
         }
 
-        Expression::Identifier { start, name, end } => match context.get(&name.clone()) {
+        Expression::Identifier { start, name, end } => match frame.get(&name.clone()) {
             Some(val) => Ok(val.to_owned()),
             None => Err(Error::new(
                 ErrorType::UnboundIdentifierError,
@@ -139,7 +143,7 @@ pub fn interpret_expression(expression: &Expression, context: &Context) -> Resul
         Expression::Tuple { inner, .. } => {
             let mut members = vec![];
             for expression in inner {
-                members.push(interpret_expression(expression, context)?);
+                members.push(interpret_expression(expression, frame)?);
             }
             Ok(Value::Tuple(members))
         }
@@ -176,15 +180,23 @@ pub fn print_value(value: Value) -> String {
     }
 }
 
-pub fn interpret(ast: &[Statement], context: &mut Context) -> InterpreterOutput {
+pub fn interpret(ast: &[Statement], frame: Option<&mut stack::Frame<Value>>) -> InterpreterOutput {
+    let mut empty_frame = stack::Frame::<Value>::new();
+    let frame = match frame {
+        Some(frame) => frame,
+        None => &mut empty_frame,
+    };
+
+    frame.push_scope();
+
     let mut output = String::new();
     let mut defined_idents: HashSet<String> = HashSet::new();
 
     for statement in ast {
         match statement {
-            Statement::Let { name, val, .. } => match interpret_expression(val, context) {
+            Statement::Let { name, val, .. } => match interpret_expression(val, frame) {
                 Ok(value) => {
-                    context.insert(name.clone(), value);
+                    frame.insert(name.clone(), value);
                     defined_idents.insert(name.clone());
                 }
                 Err(error) => {
@@ -195,7 +207,7 @@ pub fn interpret(ast: &[Statement], context: &mut Context) -> InterpreterOutput 
                     }
                 }
             },
-            Statement::Print { val } => match interpret_expression(val, context) {
+            Statement::Print { val } => match interpret_expression(val, frame) {
                 Ok(value) => {
                     output.push_str(&print_value(value));
                     output.push('\n');
@@ -208,10 +220,10 @@ pub fn interpret(ast: &[Statement], context: &mut Context) -> InterpreterOutput 
                     }
                 }
             },
-            Statement::If { cond, inner } => match interpret_expression(cond, context) {
+            Statement::If { cond, inner } => match interpret_expression(cond, frame) {
                 Ok(value) => {
                     if Value::Bool(true) == value {
-                        let inner_output = interpret(inner, context);
+                        let inner_output = interpret(inner, Some(frame));
 
                         output.push_str(&inner_output.output);
 
@@ -223,7 +235,7 @@ pub fn interpret(ast: &[Statement], context: &mut Context) -> InterpreterOutput 
                             };
                         }
 
-                        context.drain_filter(|k, _v| inner_output.defined_idents.contains(k));
+                        frame.pop_scope();
                     }
                 }
                 Err(error) => {

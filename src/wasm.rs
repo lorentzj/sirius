@@ -13,8 +13,7 @@ pub fn parse(code: String) -> String {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
     let mut parsed = parser::parse(&code);
-    let mut global_context = typechecker::Context::new();
-    let mut typecheck = typechecker::typecheck(&parsed.ast, &mut global_context);
+    let mut typecheck = typechecker::typecheck(&parsed.ast, None);
     parsed.errors.append(&mut typecheck);
 
     serde_json::to_string(&parsed).unwrap()
@@ -25,13 +24,11 @@ pub fn interpret(code: String) -> String {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
     let mut parsed = parser::parse(&code);
-    let mut global_context = typechecker::Context::new();
-    let mut typecheck = typechecker::typecheck(&parsed.ast, &mut global_context);
+    let mut typecheck = typechecker::typecheck(&parsed.ast, None);
     parsed.errors.append(&mut typecheck);
 
     let output = if parsed.errors.is_empty() {
-        let mut global_context = interpreter::Context::new();
-        interpreter::interpret(&parsed.ast, &mut global_context)
+        interpreter::interpret(&parsed.ast, None)
     } else {
         interpreter::InterpreterOutput {
             output: "".into(),
