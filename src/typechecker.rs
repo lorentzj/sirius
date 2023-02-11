@@ -221,8 +221,9 @@ pub fn expression_type(
                     Err(Error::new(
                         ErrorType::TypeError,
                         format!(
-                            "expected {} arguments to function '{}'; got {}",
+                            "expected {} argument{} to function '{}'; got {}",
                             arg_types.len(),
+                            if arg_types.len() == 1 { "" } else { "s" },
                             name,
                             args.len()
                         ),
@@ -342,27 +343,28 @@ fn typecheck_block(
                     let (val_start, val_end) = val.range();
                     match expression_type(val, frame, functions) {
                         Ok(supplied_return_type) => {
-                            let (_, return_type) = functions.get(curr_function).unwrap();
-                            if let Some(return_type) = return_type {
-                                if *return_type != supplied_return_type {
+                            if let Some((_, return_type)) = functions.get(curr_function) {
+                                if let Some(return_type) = return_type {
+                                    if *return_type != supplied_return_type {
+                                        errors.push(Error::new(
+                                            ErrorType::TypeError,
+                                            format!(
+                                                "return type of function '{curr_function}' should be '{return_type:?}'; found '{supplied_return_type:?}'"
+                                            ),
+                                            val_start,
+                                            val_end,
+                                        ));
+                                    }
+                                } else {
                                     errors.push(Error::new(
                                         ErrorType::TypeError,
                                         format!(
-                                            "return type of function '{curr_function}' should be '{return_type:?}'; found '{supplied_return_type:?}'"
+                                            "return type of function '{curr_function}' should be void; found '{supplied_return_type:?}'"
                                         ),
                                         val_start,
                                         val_end,
                                     ));
                                 }
-                            } else {
-                                errors.push(Error::new(
-                                    ErrorType::TypeError,
-                                    format!(
-                                        "return type of function '{curr_function}' should be void; found '{supplied_return_type:?}'"
-                                    ),
-                                    val_start,
-                                    val_end,
-                                ));
                             }
                         }
 

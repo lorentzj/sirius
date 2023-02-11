@@ -92,19 +92,10 @@ pub Block: Vec<Statement> = {
 
 pub Expr: Box<Expression> = {
     #[precedence(level="1")]
-    <start: @L> <name: "identifier"> "(" <args: (Expr ",") *> <last_arg: Expr?> ")" <end: @R> => {        
-        let mut args: Vec<Expression> = args.into_iter().map(|(arg, _)| *arg).collect();
-        if let Some(last_arg) = last_arg {
-            args.push(*last_arg);
-        }
-        Box::new(Expression::FnCall{
-            start,
-            name,
-            args,
-            end
-        })
-    },
     <t: Term> => t,
+    <start: @L> <name: "identifier"> <args: FnCallParams> <end: @R> => {
+        Box::new(Expression::FnCall{<>})
+    },
 
     #[precedence(level="2")] #[assoc(side="left")]
     <start: @L> <lhs: Expr> "." <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
@@ -187,6 +178,19 @@ pub Expr: Box<Expression> = {
         end
     })
 };
+
+FnCallParams: Vec<Expression> = {
+    "(" <arg: Expr> ")" => {
+        vec![*arg]
+    },
+
+    "(" <args: OpenTuple> ")" => {
+        match *args {
+            Expression::OpenTuple{inner, ..} => inner,
+            _ => panic!()
+        }
+    }
+}
 
 OpenTuple: Box<Expression> = {
     <start: @L> <lhs: Expr> "," <rhs: Expr> <end: @R> => {
