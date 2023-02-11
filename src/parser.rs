@@ -42,6 +42,12 @@ pub enum Expression {
         inner: Vec<Expression>,
         end: usize,
     },
+    FnCall {
+        start: usize,
+        name: String,
+        args: Vec<Expression>,
+        end: usize,
+    },
 }
 
 impl Expression {
@@ -53,6 +59,7 @@ impl Expression {
             Expression::BinOp { start, end, .. } => (*start, *end),
             Expression::OpenTuple { start, end, .. } => (*start, *end),
             Expression::Tuple { start, end, .. } => (*start, *end),
+            Expression::FnCall { start, end, .. } => (*start, *end),
         }
     }
 
@@ -83,7 +90,21 @@ impl Expression {
                 result.push_str(")");
                 result
             }
-            Expression::OpenTuple { .. } => "{!! Open Tuple !!}".into(),
+
+            Expression::FnCall { name, args, .. } => {
+                let mut result = name.clone();
+                result.push_str("(");
+                for (i, expr) in args.iter().enumerate() {
+                    result.push_str(&expr.short_fmt());
+                    if i < args.len() - 1 {
+                        result.push_str(",");
+                    }
+                }
+                result.push_str(")");
+                result
+            }
+
+            Expression::OpenTuple { .. } => panic!(),
         }
     }
 }
@@ -91,31 +112,51 @@ impl Expression {
 #[derive(Serialize, Debug)]
 pub enum Statement {
     Let {
+        start: usize,
         name: String,
         ann: Option<Box<Expression>>,
         val: Box<Expression>,
+        end: usize,
     },
     Print {
+        start: usize,
         val: Box<Expression>,
+        end: usize,
+    },
+    Return {
+        start: usize,
+        val: Option<Box<Expression>>,
+        end: usize,
     },
     If {
+        start: usize,
         cond: Box<Expression>,
         inner: Vec<Statement>,
+        end: usize,
     },
 }
 
 impl Statement {
+    fn _range(&self) -> (usize, usize) {
+        match self {
+            Statement::If { start, end, .. } => (*start, *end),
+            Statement::Let { start, end, .. } => (*start, *end),
+            Statement::Print { start, end, .. } => (*start, *end),
+            Statement::Return { start, end, .. } => (*start, *end),
+        }
+    }
+
     #[cfg(test)]
     fn short_fmt(&self) -> String {
         match self {
-            Statement::Let { name, ann, val } => match ann {
+            Statement::Let { name, ann, val, .. } => match ann {
                 Some(ann) => format!("let {name}: {} = {};", ann.short_fmt(), val.short_fmt()),
                 None => format!("let {name} = {};", val.short_fmt()),
             },
-            Statement::Print { val } => {
+            Statement::Print { val, .. } => {
                 format!("print {};", val.short_fmt())
             }
-            Statement::If { cond, inner } => {
+            Statement::If { cond, inner, .. } => {
                 let mut res = String::new();
                 res.push_str(&format!("if {} {{\n", cond.short_fmt()));
 
@@ -126,6 +167,12 @@ impl Statement {
 
                 res.push('}');
                 res
+            }
+            Statement::Return { val, .. } => {
+                format!(
+                    "return {};",
+                    val.as_ref().map(|v| v.short_fmt()).unwrap_or("".into())
+                )
             }
         }
     }

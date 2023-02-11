@@ -68,8 +68,8 @@ export function updateErrorELement(displayErrorsElem, errorElem, errors, tokens)
     }
 }
 export function updateLogELement(displayLogElem, logElem, interpreted) {
-    logElem.innerText = interpreted.output;
-    if (interpreted.output.length !== 0) {
+    logElem.innerText = interpreted.stdout;
+    if (interpreted.stdout.length !== 0) {
         displayLogElem.click();
     }
 }

@@ -14,7 +14,7 @@ pub fn parse(code: String) -> String {
 
     if parsed.errors.is_empty() {
         let mut typecheck = typechecker::typecheck(&parsed.ast);
-        parsed.errors.append(&mut typecheck);    
+        parsed.errors.append(&mut typecheck);
     }
 
     serde_json::to_string(&parsed).unwrap()
@@ -32,11 +32,12 @@ pub fn interpret(code: String) -> String {
     }
 
     let output = if parsed.errors.is_empty() {
-        interpreter::interpret(parsed.ast)
+        interpreter::interpret(&parsed.ast)
     } else {
         interpreter::InterpreterOutput {
-            output: "".into(),
-            error: None
+            stdout: "".into(),
+            value: None,
+            error: None,
         }
     };
 

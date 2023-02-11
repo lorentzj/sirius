@@ -1,9 +1,12 @@
+use std::collections::HashMap;
 use std::fmt;
 
-use crate::error::{Error, ErrorType};
+use crate::error::{cardinal, Error, ErrorType};
 use crate::lexer::Op;
 use crate::parser::{Expression, Statement, AST};
 use crate::stack::Frame;
+
+type GlobalFunctionTypes = HashMap<String, (Vec<Type>, Option<Type>)>;
 
 #[derive(PartialEq, Clone)]
 pub enum Type {
@@ -74,7 +77,11 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, Error> {
     }
 }
 
-pub fn expression_type(expression: &Expression, frame: &Frame<Type>) -> Result<Type, Error> {
+pub fn expression_type(
+    expression: &Expression,
+    frame: &Frame<Type>,
+    functions: &GlobalFunctionTypes,
+) -> Result<Type, Error> {
     let (start, end) = expression.range();
 
     match &expression {
@@ -82,7 +89,7 @@ pub fn expression_type(expression: &Expression, frame: &Frame<Type>) -> Result<T
             Some(t) => Ok(t.clone()),
             None => Err(Error::new(
                 ErrorType::UnboundIdentifierError,
-                format!("identifier '{name}' is not bound"),
+                format!("identifier '{name}' not found in scope"),
                 start,
                 end,
             )),
@@ -92,21 +99,16 @@ pub fn expression_type(expression: &Expression, frame: &Frame<Type>) -> Result<T
         Expression::Tuple { inner, .. } => {
             let mut members = vec![];
             for expression in inner {
-                members.push(expression_type(expression, frame)?);
+                members.push(expression_type(expression, frame, functions)?);
             }
             Ok(Type::Tuple(members))
         }
 
-        Expression::OpenTuple { .. } => Err(Error::new(
-            ErrorType::InternalError,
-            "open tuple".into(),
-            start,
-            end,
-        )),
+        Expression::OpenTuple { .. } => panic!(),
 
         Expression::BinOp { lhs, rhs, op, .. } => {
-            let lhs_type = expression_type(lhs, frame)?;
-            let rhs_type = expression_type(rhs, frame)?;
+            let lhs_type = expression_type(lhs, frame, functions)?;
+            let rhs_type = expression_type(rhs, frame, functions)?;
 
             match &op {
                 Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp => {
@@ -162,26 +164,79 @@ pub fn expression_type(expression: &Expression, frame: &Frame<Type>) -> Result<T
                     }
                 }
 
-                Op::Comma => Err(Error::new(
-                    ErrorType::InternalError,
-                    "comma should have created tuple".into(),
-                    0,
-                    0,
-                )),
+                Op::Comma => panic!(),
 
                 Op::Dot => Err(Error::new(
                     ErrorType::NotImplementedError,
                     "have not implemented dot operator".into(),
-                    0,
-                    0,
+                    start,
+                    end,
                 )),
+            }
+        }
+
+        Expression::FnCall {
+            start,
+            name,
+            args,
+            end,
+        } => {
+            if let Some((arg_types, return_type)) = functions.get(name) {
+                if args.len() != arg_types.len() {
+                    Err(Error::new(
+                        ErrorType::TypeError,
+                        format!("expected {} arguments; got {}", arg_types.len(), args.len()),
+                        *start,
+                        *end,
+                    ))
+                } else {
+                    for (i, arg) in args.iter().enumerate() {
+                        let supplied_arg_type = expression_type(arg, frame, functions)?;
+                        if supplied_arg_type != arg_types[i] {
+                            return Err(Error::new(
+                                ErrorType::TypeError,
+                                format!(
+                                    "expected '{:?}' as {} argument; got '{:?}'",
+                                    arg_types[i],
+                                    cardinal(i + 1),
+                                    supplied_arg_type
+                                ),
+                                *start,
+                                *end,
+                            ));
+                        }
+                    }
+
+                    if let Some(return_type) = return_type {
+                        Ok(return_type.clone())
+                    } else {
+                        Err(Error::new(
+                            ErrorType::TypeError,
+                            format!("function '{name}' has void return type"),
+                            *start,
+                            *end,
+                        ))
+                    }
+                }
+            } else {
+                Err(Error::new(
+                    ErrorType::UnboundIdentifierError,
+                    format!("function '{name}' not found in scope"),
+                    *start,
+                    *end,
+                ))
             }
         }
     }
 }
 
-fn typecheck_block(statements: &[Statement], frame: Option<&mut Frame<Type>>) -> Vec<Error> {
-    let mut empty_frame = Frame::<Type>::default();
+fn typecheck_block(
+    statements: &[Statement],
+    frame: Option<&mut Frame<Type>>,
+    functions: &GlobalFunctionTypes,
+    curr_function: &str,
+) -> Vec<Error> {
+    let mut empty_frame = Frame::default();
     let frame = match frame {
         Some(frame) => frame,
         None => &mut empty_frame,
@@ -192,7 +247,7 @@ fn typecheck_block(statements: &[Statement], frame: Option<&mut Frame<Type>>) ->
 
     for statement in statements {
         match statement {
-            Statement::Let { name, ann, val } => match expression_type(val, frame) {
+            Statement::Let { name, ann, val, .. } => match expression_type(val, frame, functions) {
                 Ok(t) => {
                     if let Some(ann) = ann {
                         match annotation_type(ann) {
@@ -215,12 +270,12 @@ fn typecheck_block(statements: &[Statement], frame: Option<&mut Frame<Type>>) ->
                 }
                 Err(error) => errors.push(error),
             },
-            Statement::Print { val } => match expression_type(val, frame) {
+            Statement::Print { val, .. } => match expression_type(val, frame, functions) {
                 Ok(_) => (),
                 Err(error) => errors.push(error),
             },
 
-            Statement::If { cond, inner } => match expression_type(cond, frame) {
+            Statement::If { cond, inner, .. } => match expression_type(cond, frame, functions) {
                 Ok(t) => {
                     if t != Type::Bool {
                         let (cond_start, cond_end) = cond.range();
@@ -233,11 +288,56 @@ fn typecheck_block(statements: &[Statement], frame: Option<&mut Frame<Type>>) ->
                         ));
                     }
 
-                    let mut inner_errors = typecheck_block(inner, Some(frame));
+                    let mut inner_errors =
+                        typecheck_block(inner, Some(frame), functions, curr_function);
                     frame.pop_scope();
                     errors.append(&mut inner_errors);
                 }
                 Err(error) => errors.push(error),
+            },
+            Statement::Return { start, val, .. } => match val {
+                Some(val) => {
+                    let (val_start, val_end) = val.range();
+                    match expression_type(val, frame, functions) {
+                        Ok(supplied_return_type) => {
+                            let (_, return_type) = functions.get(curr_function).unwrap();
+                            if let Some(return_type) = return_type {
+                                if *return_type != supplied_return_type {
+                                    errors.push(Error::new(
+                                        ErrorType::TypeError,
+                                        format!(
+                                            "return type should be '{return_type:?}'; found '{supplied_return_type:?}'"
+                                        ),
+                                        val_start,
+                                        val_end,
+                                    ));
+                                }
+                            } else {
+                                errors.push(Error::new(
+                                    ErrorType::TypeError,
+                                    format!(
+                                        "return type should be void; found '{supplied_return_type:?}'"
+                                    ),
+                                    val_start,
+                                    val_end,
+                                ));
+                            }
+                        }
+
+                        Err(error) => errors.push(error),
+                    }
+                }
+                None => {
+                    let (_, return_type) = functions.get(curr_function).unwrap();
+                    if return_type.is_some() {
+                        errors.push(Error::new(
+                            ErrorType::TypeError,
+                            format!("return type should be '{return_type:?}'; found void"),
+                            *start,
+                            *start + 1,
+                        ));
+                    }
+                }
             },
         }
     }
@@ -278,7 +378,37 @@ pub fn typecheck(ast: &AST) -> Vec<Error> {
         )),
     }
 
-    for (_, function) in ast.iter() {
+    let functions: GlobalFunctionTypes = ast
+        .iter()
+        .filter_map(|(name, function)| {
+            let mut arg_types = vec![];
+
+            for (_, arg_ann) in &function.args {
+                match annotation_type(arg_ann) {
+                    Ok(t) => arg_types.push(t),
+                    Err(error) => {
+                        errors.push(error);
+                        return None;
+                    }
+                }
+            }
+
+            let return_type = match &function.return_type {
+                Some(return_type) => match annotation_type(return_type) {
+                    Ok(t) => Some(t),
+                    Err(error) => {
+                        errors.push(error);
+                        None
+                    }
+                },
+                None => None,
+            };
+
+            Some((name.clone(), (arg_types, return_type)))
+        })
+        .collect();
+
+    for (function_name, function) in ast.iter() {
         let mut frame = Frame::<Type>::default();
         frame.push_scope();
         for (name, ann) in &function.args {
@@ -292,7 +422,12 @@ pub fn typecheck(ast: &AST) -> Vec<Error> {
             }
         }
 
-        errors.append(&mut typecheck_block(&function.inner, Some(&mut frame)));
+        errors.append(&mut typecheck_block(
+            &function.inner,
+            Some(&mut frame),
+            &functions,
+            function_name,
+        ));
     }
 
     errors

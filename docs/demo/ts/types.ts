@@ -29,6 +29,6 @@ export type ParserOutput = {
 };
 
 export type InterpreterOutput = {
-    output: string,
+    stdout: string,
     error: Error | null
 }

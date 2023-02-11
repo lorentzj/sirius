@@ -89,8 +89,8 @@ export function updateErrorELement(displayErrorsElem: HTMLElement, errorElem: HT
 }
 
 export function updateLogELement(displayLogElem: HTMLElement, logElem: HTMLElement, interpreted: types.InterpreterOutput) {
-    logElem.innerText = interpreted.output;
-    if(interpreted.output.length !== 0) {
+    logElem.innerText = interpreted.stdout;
+    if(interpreted.stdout.length !== 0) {
         displayLogElem.click();
     }
 }

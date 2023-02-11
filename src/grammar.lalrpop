@@ -29,42 +29,57 @@ pub Fn: Function = {
 }
 
 pub Stmt: Statement = {
-    "let" <name: "identifier"> <ann: (":" Expr)?> "=" <val: Expr> ";" => {
+    <start: @L> "let" <name: "identifier"> <ann: (":" Expr)?> "=" <val: Expr> ";" <end: @R> => {
         Statement::Let {
+            start,
             name, 
             ann: ann.map(|ann| Box::new(*ann.1)),
-            val
+            val,
+            end
         }
     },
 
-    "let" <name: "identifier"> <ann: (":" Expr)?> "=" <val: OpenTuple> ";" => {
+    <start: @L> "let" <name: "identifier"> <ann: (":" Expr)?> "=" <val: OpenTuple> ";" <end: @R> => {
         Statement::Let {
+            start,
             name: name, 
             ann: ann.map(|ann| Box::new(*ann.1)),
             val: match *val {
                 Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
                 _ => panic!()
-            }
+            },
+            end
         }
     },
 
-    "print" <val: Expr> ";" => {
+    <start: @L> "print" <val: Expr> ";" <end: @R> => {
         Statement::Print{<>}
     },
 
-    "print" <val: OpenTuple> ";" => {
-        Statement::Print{ val: match *val {
+    <start: @L> "print" <val: OpenTuple> <end: @R> ";" => {
+        Statement::Print{ start, val: match *val {
             Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
             _ => panic!()
-        }}
+        }, end }
     },
 
-    "if" <cond: Expr> <inner: Block> => {
-        Statement::If{ cond: match *cond {
+    <start: @L> "if" <cond: Expr> <inner: Block> <end: @R> => {
+        Statement::If{ start, cond: match *cond {
             Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
             _ => cond
-        }, inner }
-    }
+        }, inner, end }
+    },
+
+    <start: @L> "return" <val: Expr?> ";" <end: @R> => {
+        Statement::Return{<>}
+    },
+
+    <start: @L> "return" <val: OpenTuple> <end: @R> ";" => {
+        Statement::Return{ start, val: match *val {
+            Expression::OpenTuple{ start, inner, end } => Some(Box::new(Expression::Tuple{ start, inner, end })),
+            _ => panic!()
+        }, end }
+    },
 }
 
 pub Block: Vec<Statement> = {
@@ -80,6 +95,19 @@ pub Expr: Box<Expression> = {
     <t: Term> => t,
 
     #[precedence(level="2")] #[assoc(side="left")]
+    <start: @L> <name: "identifier"> "(" <args: (Expr ",") *> <last_arg: Expr?> ")" <end: @R> => {        
+        let mut args: Vec<Expression> = args.into_iter().map(|(arg, _)| *arg).collect();
+        if let Some(last_arg) = last_arg {
+            args.push(*last_arg);
+        }
+        Box::new(Expression::FnCall{
+            start,
+            name,
+            args,
+            end
+        })
+    },
+
     <start: @L> <lhs: Expr> "." <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
         start,
         lhs,
@@ -195,6 +223,7 @@ Term: Box<Expression> = {
             Expression::Float{val, ..} => Box::new(Expression::Float{ start, val, end }),
             Expression::Identifier{name, ..} => Box::new(Expression::Identifier{ start, name, end }),
             Expression::BinOp{lhs, op, rhs, ..} => Box::new(Expression::BinOp{ start, lhs, op, rhs, end }),
+            Expression::FnCall{name, args, ..} => Box::new(Expression::FnCall{ start, name, args, end }),
             Expression::OpenTuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
             Expression::Tuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
         }
