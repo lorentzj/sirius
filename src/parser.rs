@@ -133,11 +133,13 @@ impl Statement {
 
 #[derive(Serialize, Debug)]
 pub struct Function {
-    name: String,
-    args: HashMap<String, Expression>,
-    return_type: Option<Expression>,
-    inner: Vec<Statement>,
+    pub name: String,
+    pub args: Vec<(String, Expression)>,
+    pub return_type: Option<Expression>,
+    pub inner: Vec<Statement>,
 }
+
+pub type AST = HashMap<String, Function>;
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -146,7 +148,7 @@ pub struct ParserOutput {
     pub errors: Vec<Error>,
     pub type_tokens: Vec<usize>,
     pub highlight_map: HashMap<usize, Vec<usize>>,
-    pub ast: Vec<Statement>,
+    pub ast: AST,
 }
 
 pub fn parse(code: &str) -> ParserOutput {
@@ -163,11 +165,25 @@ pub fn parse(code: &str) -> ParserOutput {
             .map(|(i, token)| Ok((i, token.data.clone(), i + 1))),
     ) {
         Ok(ast) => {
-            for statement in &ast {
-                if let Statement::Let { ann: Some(ann), .. } = statement {
+            for (_, function) in ast.iter() {
+                for (_, ann) in &function.args {
                     let (ann_start, ann_end) = ann.range();
                     let tokens: Vec<usize> = (ann_start..ann_end).collect();
                     type_tokens.extend(&tokens);
+                }
+
+                if let Some(ann) = &function.return_type {
+                    let (ann_start, ann_end) = ann.range();
+                    let tokens: Vec<usize> = (ann_start..ann_end).collect();
+                    type_tokens.extend(&tokens);
+                }
+
+                for statement in &function.inner {
+                    if let Statement::Let { ann: Some(ann), .. } = statement {
+                        let (ann_start, ann_end) = ann.range();
+                        let tokens: Vec<usize> = (ann_start..ann_end).collect();
+                        type_tokens.extend(&tokens);
+                    }
                 }
             }
 
@@ -226,7 +242,7 @@ pub fn parse(code: &str) -> ParserOutput {
         errors,
         type_tokens: vec![],
         highlight_map: HashMap::default(),
-        ast: vec![],
+        ast: HashMap::default(),
     }
 }
 
@@ -236,53 +252,38 @@ mod tests {
 
     #[test]
     fn lead_op() {
-        let test_str = "let x = +";
+        let test_str = "fn main() { let x = + }";
         let message = parse(test_str).errors[0].message.clone();
         assert_eq!(message, "unexpected operator '+'");
     }
 
     #[test]
     fn op_precedence() {
-        let test_str = "print (a^2/3 + 4/0.1*b*c^2 - 3 & 4/2)^(d, 0.5^e - 3);";
+        let test_str = "fn main() { print (a^2/3 + 4/0.1*b*c^2 - 3 & 4/2)^(d, 0.5^e - 3); }";
         let tree = parse(test_str);
         assert_eq!(
-            tree.ast[0].short_fmt(),
+            tree.ast["main"].inner[0].short_fmt(),
             "print ((((((a^2)/3)+(((4/0.1)*b)*(c^2)))-3)&(4/2))^(d,((0.5^e)-3)));"
         );
     }
 
     #[test]
     fn tuples() {
-        let test_str = "let x = (a + 2, (b, c, (d, e), e), f^2, (g, h)), (i, j), k;";
+        let test_str = "fn main() { let x = (a + 2, (b, c, (d, e), e), f^2, (g, h)), (i, j), k; }";
         let tree = parse(test_str);
         assert_eq!(
-            tree.ast[0].short_fmt(),
+            tree.ast["main"].inner[0].short_fmt(),
             "let x = (((a+2),(b,c,(d,e),e),(f^2),(g,h)),(i,j),k);"
         )
     }
 
     #[test]
     fn annotation() {
-        let test_str = "let y: (f64, 64) = x, 2;";
+        let test_str = "fn main() { let y: (f64, 64) = x, 2; }";
         let tree = parse(test_str);
-        assert_eq!(tree.ast[0].short_fmt(), "let y: (f64,64) = (x,2);")
-    }
-
-    #[test]
-    fn function_parse() {
-        let test_str = "
-            fn test_func() {
-
-            }
-        ";
-        let mut highlight_map: std::collections::HashMap<usize, Vec<usize>> = std::collections::HashMap::default();
-
-        let tokens: Vec<_> = crate::lexer::Lexer::new(test_str).collect();
-        let tokens = tokens
-            .iter()
-            .enumerate()
-            .map(|(i, token)| Ok((i, token.data.clone(), i + 1)));
-
-        println!("{:?}", super::grammar::FnParser::new().parse(&mut highlight_map, tokens));
+        assert_eq!(
+            tree.ast["main"].inner[0].short_fmt(),
+            "let y: (f64,64) = (x,2);"
+        )
     }
 }

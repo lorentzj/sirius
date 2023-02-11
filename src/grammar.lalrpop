@@ -5,11 +5,7 @@ use crate::lexer::Op;
 
 grammar(highlight_map: &mut HashMap<usize, Vec<usize>>);
 
-pub AST: Vec<Statement> = {
-    Stmt* => <>
-}
-
-pub NewAST: HashMap<String, Function> = {
+pub AST: HashMap<String, Function> = {
     <fns: Fn*> => fns.into_iter().map(|func| (func.name.clone(), func)).collect()
 }
 
@@ -17,13 +13,10 @@ pub Fn: Function = {
     "fn" <name: "identifier"> "(" <arg_list: ("identifier" ":" Expr ",")*> <last_arg: ("identifier" ":" Expr)?> ")" <return_type: (":" Expr)?>  "{" <inner: Stmt*> "}" => {
         let return_type = return_type.map(|r| *r.1);
 
-        let mut args = HashMap::<String, Expression>::new();
-        for (name, _, ann, _) in arg_list {
-            args.insert(name, *ann);
-        }
+        let mut args: Vec<(String, Expression)> = arg_list.into_iter().map(|(name, _, ann, _)| (name, *ann)).collect();
 
         if let Some((name, _, ann)) = last_arg {
-            args.insert(name, *ann);
+            args.push((name, *ann));
         }
 
         Function {

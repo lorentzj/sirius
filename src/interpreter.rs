@@ -1,11 +1,9 @@
 use std::collections::HashSet;
 
-use crate::parser::{Expression, Statement};
-
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
-
-use crate::stack;
+use crate::parser::{Expression, Statement, AST};
+use crate::stack::Frame;
 
 use serde::Serialize;
 
@@ -20,7 +18,6 @@ pub enum Value {
 pub struct InterpreterOutput {
     pub output: String,
     pub error: Option<Error>,
-    pub defined_idents: HashSet<String>,
 }
 
 fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Result<Value, Error> {
@@ -89,10 +86,7 @@ fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Result<Value, Error> {
     }
 }
 
-pub fn interpret_expression(
-    expression: &Expression,
-    frame: &stack::Frame<Value>,
-) -> Result<Value, Error> {
+pub fn interpret_expression(expression: &Expression, frame: &Frame<Value>) -> Result<Value, Error> {
     match expression {
         Expression::Float { val, .. } => Ok(Value::Float(*val)),
         Expression::Bool { val, .. } => Ok(Value::Bool(*val)),
@@ -167,8 +161,8 @@ pub fn print_value(value: Value) -> String {
     }
 }
 
-pub fn interpret(ast: &[Statement], frame: Option<&mut stack::Frame<Value>>) -> InterpreterOutput {
-    let mut empty_frame = stack::Frame::<Value>::default();
+fn interpret_block(block: &[Statement], frame: Option<&mut Frame<Value>>) -> InterpreterOutput {
+    let mut empty_frame = Frame::<Value>::default();
     let frame = match frame {
         Some(frame) => frame,
         None => &mut empty_frame,
@@ -179,7 +173,7 @@ pub fn interpret(ast: &[Statement], frame: Option<&mut stack::Frame<Value>>) -> 
     let mut output = String::new();
     let mut defined_idents: HashSet<String> = HashSet::new();
 
-    for statement in ast {
+    for statement in block {
         match statement {
             Statement::Let { name, val, .. } => match interpret_expression(val, frame) {
                 Ok(value) => {
@@ -190,7 +184,6 @@ pub fn interpret(ast: &[Statement], frame: Option<&mut stack::Frame<Value>>) -> 
                     return InterpreterOutput {
                         output,
                         error: Some(error),
-                        defined_idents,
                     }
                 }
             },
@@ -203,14 +196,13 @@ pub fn interpret(ast: &[Statement], frame: Option<&mut stack::Frame<Value>>) -> 
                     return InterpreterOutput {
                         output,
                         error: Some(error),
-                        defined_idents,
                     }
                 }
             },
             Statement::If { cond, inner } => match interpret_expression(cond, frame) {
                 Ok(value) => {
                     if Value::Bool(true) == value {
-                        let inner_output = interpret(inner, Some(frame));
+                        let inner_output = interpret_block(inner, Some(frame));
 
                         output.push_str(&inner_output.output);
 
@@ -218,7 +210,6 @@ pub fn interpret(ast: &[Statement], frame: Option<&mut stack::Frame<Value>>) -> 
                             return InterpreterOutput {
                                 output,
                                 error: inner_output.error,
-                                defined_idents,
                             };
                         }
 
@@ -229,7 +220,6 @@ pub fn interpret(ast: &[Statement], frame: Option<&mut stack::Frame<Value>>) -> 
                     return InterpreterOutput {
                         output,
                         error: Some(error),
-                        defined_idents,
                     }
                 }
             },
@@ -239,6 +229,12 @@ pub fn interpret(ast: &[Statement], frame: Option<&mut stack::Frame<Value>>) -> 
     InterpreterOutput {
         output,
         error: None,
-        defined_idents,
+    }
+}
+
+pub fn interpret(ast: AST) -> InterpreterOutput {
+    match ast.get("main") {
+        Some(function) => interpret_block(&function.inner, None),
+        None => panic!(),
     }
 }

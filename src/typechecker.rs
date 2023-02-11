@@ -2,8 +2,8 @@ use std::fmt;
 
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
-use crate::parser::{Expression, Statement};
-use crate::stack;
+use crate::parser::{Expression, Statement, AST};
+use crate::stack::Frame;
 
 #[derive(PartialEq, Clone)]
 pub enum Type {
@@ -74,7 +74,7 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, Error> {
     }
 }
 
-pub fn expression_type(expression: &Expression, frame: &stack::Frame<Type>) -> Result<Type, Error> {
+pub fn expression_type(expression: &Expression, frame: &Frame<Type>) -> Result<Type, Error> {
     let (start, end) = expression.range();
 
     match &expression {
@@ -180,8 +180,8 @@ pub fn expression_type(expression: &Expression, frame: &stack::Frame<Type>) -> R
     }
 }
 
-pub fn typecheck(statements: &[Statement], frame: Option<&mut stack::Frame<Type>>) -> Vec<Error> {
-    let mut empty_frame = stack::Frame::<Type>::default();
+fn typecheck_block(statements: &[Statement], frame: Option<&mut Frame<Type>>) -> Vec<Error> {
+    let mut empty_frame = Frame::<Type>::default();
     let frame = match frame {
         Some(frame) => frame,
         None => &mut empty_frame,
@@ -233,13 +233,66 @@ pub fn typecheck(statements: &[Statement], frame: Option<&mut stack::Frame<Type>
                         ));
                     }
 
-                    let mut inner_errors = typecheck(inner, Some(frame));
+                    let mut inner_errors = typecheck_block(inner, Some(frame));
                     frame.pop_scope();
                     errors.append(&mut inner_errors);
                 }
                 Err(error) => errors.push(error),
             },
         }
+    }
+
+    errors
+}
+
+pub fn typecheck(ast: &AST) -> Vec<Error> {
+    let mut errors: Vec<Error> = vec![];
+
+    match ast.get("main") {
+        Some(function) => {
+            if let Some((_, ann)) = function.args.first() {
+                errors.push(Error::new(
+                    ErrorType::TypeError,
+                    "main should have no arguments".into(),
+                    ann.range().0 - 2,
+                    function.args.last().unwrap().1.range().1,
+                ));
+            }
+
+            if let Some(ann) = &function.return_type {
+                let (ann_start, ann_end) = ann.range();
+                errors.push(Error::new(
+                    ErrorType::TypeError,
+                    "main should have no return type".into(),
+                    ann_start - 1,
+                    ann_end,
+                ));
+            }
+        }
+
+        None => errors.push(Error::new(
+            ErrorType::TypeError,
+            "no entry point; define function 'main'".into(),
+            0,
+            0,
+        )),
+    }
+
+    for (_, function) in ast.iter() {
+        let mut frame = Frame::<Type>::default();
+        frame.push_scope();
+        for (name, ann) in &function.args {
+            match annotation_type(ann) {
+                Ok(ann) => {
+                    frame.insert(name.clone(), ann);
+                }
+                Err(error) => {
+                    errors.push(error);
+                }
+            }
+        }
+
+        errors.append(&mut typecheck_block(&function.inner, Some(&mut frame)));
     }
 
     errors
