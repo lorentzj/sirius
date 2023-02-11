@@ -10,7 +10,7 @@ pub AST: HashMap<String, Function> = {
 }
 
 pub Fn: Function = {
-    "fn" <name: "identifier"> "(" <arg_list: ("identifier" ":" Expr ",")*> <last_arg: ("identifier" ":" Expr)?> ")" <return_type: (":" Expr)?>  "{" <inner: Stmt*> "}" => {
+    "fn" <name: "identifier"> "(" <arg_list: ("identifier" ":" Expr ",")*> <last_arg: ("identifier" ":" Expr)?> ")" <return_type: (":" Expr)?>  <inner: Block> => {
         let return_type = return_type.map(|r| *r.1);
 
         let mut args: Vec<(String, Expression)> = arg_list.into_iter().map(|(name, _, ann, _)| (name, *ann)).collect();
@@ -92,9 +92,6 @@ pub Block: Vec<Statement> = {
 
 pub Expr: Box<Expression> = {
     #[precedence(level="1")]
-    <t: Term> => t,
-
-    #[precedence(level="2")] #[assoc(side="left")]
     <start: @L> <name: "identifier"> "(" <args: (Expr ",") *> <last_arg: Expr?> ")" <end: @R> => {        
         let mut args: Vec<Expression> = args.into_iter().map(|(arg, _)| *arg).collect();
         if let Some(last_arg) = last_arg {
@@ -107,7 +104,9 @@ pub Expr: Box<Expression> = {
             end
         })
     },
+    <t: Term> => t,
 
+    #[precedence(level="2")] #[assoc(side="left")]
     <start: @L> <lhs: Expr> "." <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
         start,
         lhs,
@@ -141,7 +140,6 @@ pub Expr: Box<Expression> = {
         end
     }),
 
-
     #[precedence(level="5")] #[assoc(side="left")]
     <start: @L> <lhs: Expr> "+" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
         start,
@@ -170,6 +168,21 @@ pub Expr: Box<Expression> = {
         start,
         lhs,
         op: Op::Or,
+        rhs,
+        end
+    }),
+    #[precedence(level="7")] #[assoc(side="left")]
+    <start: @L> <lhs: Expr> ">" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
+        start,
+        lhs,
+        op: Op::Greater,
+        rhs,
+        end
+    }),
+    <start: @L> <lhs: Expr> "<" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
+        start,
+        lhs,
+        op: Op::Less,
         rhs,
         end
     })
@@ -255,6 +268,8 @@ extern {
         "-"          => crate::lexer::Tok::Op(Op::Sub),
         "&"          => crate::lexer::Tok::Op(Op::And),
         "|"          => crate::lexer::Tok::Op(Op::Or),
+        ">"          => crate::lexer::Tok::Op(Op::Greater),
+        "<"          => crate::lexer::Tok::Op(Op::Less),
         ","          => crate::lexer::Tok::Op(Op::Comma),
         "float"      => crate::lexer::Tok::Float(<f64>),
         "identifier" => crate::lexer::Tok::Identifier(<String>),

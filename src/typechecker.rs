@@ -115,14 +115,14 @@ pub fn expression_type(
                     if let Type::Tuple(_) = lhs_type {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            "cannot apply operator to tuple".into(),
+                            "cannot apply arithmetic operator to tuple".into(),
                             start,
                             end,
                         ))
                     } else if let Type::Tuple(_) = rhs_type {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            "cannot apply operator to tuple".into(),
+                            "cannot apply arithmetic operator to tuple".into(),
                             start,
                             end,
                         ))
@@ -130,11 +130,12 @@ pub fn expression_type(
                         Ok(Type::F64)
                     }
                 }
+
                 Op::And | Op::Or => {
                     if let Type::Tuple(_) = lhs_type {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            "cannot apply operator to tuple".into(),
+                            "cannot apply boolean operator to tuple".into(),
                             start,
                             end,
                         ))
@@ -148,7 +149,7 @@ pub fn expression_type(
                     } else if let Type::Tuple(_) = rhs_type {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            "cannot apply operator to tuple".into(),
+                            "cannot apply boolean operator to tuple".into(),
                             start,
                             end,
                         ))
@@ -156,6 +157,40 @@ pub fn expression_type(
                         Err(Error::new(
                             ErrorType::TypeError,
                             "cannot apply boolean operator to float".into(),
+                            start,
+                            end,
+                        ))
+                    } else {
+                        Ok(Type::Bool)
+                    }
+                }
+
+                Op::Greater | Op::Less => {
+                    if let Type::Tuple(_) = lhs_type {
+                        Err(Error::new(
+                            ErrorType::TypeError,
+                            "cannot apply comparison operator to tuple".into(),
+                            start,
+                            end,
+                        ))
+                    } else if Type::Bool == lhs_type {
+                        Err(Error::new(
+                            ErrorType::TypeError,
+                            "cannot apply comparison operator to bool".into(),
+                            start,
+                            end,
+                        ))
+                    } else if let Type::Tuple(_) = rhs_type {
+                        Err(Error::new(
+                            ErrorType::TypeError,
+                            "cannot apply comparison operator to tuple".into(),
+                            start,
+                            end,
+                        ))
+                    } else if Type::Bool == rhs_type {
+                        Err(Error::new(
+                            ErrorType::TypeError,
+                            "cannot apply comparison operator to bool".into(),
                             start,
                             end,
                         ))
@@ -185,7 +220,12 @@ pub fn expression_type(
                 if args.len() != arg_types.len() {
                     Err(Error::new(
                         ErrorType::TypeError,
-                        format!("expected {} arguments; got {}", arg_types.len(), args.len()),
+                        format!(
+                            "expected {} arguments to function '{}'; got {}",
+                            arg_types.len(),
+                            name,
+                            args.len()
+                        ),
                         *start,
                         *end,
                     ))
@@ -193,16 +233,18 @@ pub fn expression_type(
                     for (i, arg) in args.iter().enumerate() {
                         let supplied_arg_type = expression_type(arg, frame, functions)?;
                         if supplied_arg_type != arg_types[i] {
+                            let (arg_start, arg_end) = arg.range();
                             return Err(Error::new(
                                 ErrorType::TypeError,
                                 format!(
-                                    "expected '{:?}' as {} argument; got '{:?}'",
+                                    "expected '{:?}' as {} argument to function '{}'; got '{:?}'",
                                     arg_types[i],
                                     cardinal(i + 1),
+                                    name,
                                     supplied_arg_type
                                 ),
-                                *start,
-                                *end,
+                                arg_start,
+                                arg_end,
                             ));
                         }
                     }
@@ -306,7 +348,7 @@ fn typecheck_block(
                                     errors.push(Error::new(
                                         ErrorType::TypeError,
                                         format!(
-                                            "return type should be '{return_type:?}'; found '{supplied_return_type:?}'"
+                                            "return type of function '{curr_function}' should be '{return_type:?}'; found '{supplied_return_type:?}'"
                                         ),
                                         val_start,
                                         val_end,
@@ -316,7 +358,7 @@ fn typecheck_block(
                                 errors.push(Error::new(
                                     ErrorType::TypeError,
                                     format!(
-                                        "return type should be void; found '{supplied_return_type:?}'"
+                                        "return type of function '{curr_function}' should be void; found '{supplied_return_type:?}'"
                                     ),
                                     val_start,
                                     val_end,
@@ -332,7 +374,10 @@ fn typecheck_block(
                     if return_type.is_some() {
                         errors.push(Error::new(
                             ErrorType::TypeError,
-                            format!("return type should be '{return_type:?}'; found void"),
+                            format!(
+                                "return type of function '{curr_function}' should be '{:?}'; found void",
+                                return_type.as_ref().unwrap()
+                            ),
                             *start,
                             *start + 1,
                         ));
@@ -348,34 +393,25 @@ fn typecheck_block(
 pub fn typecheck(ast: &AST) -> Vec<Error> {
     let mut errors: Vec<Error> = vec![];
 
-    match ast.get("main") {
-        Some(function) => {
-            if let Some((_, ann)) = function.args.first() {
-                errors.push(Error::new(
-                    ErrorType::TypeError,
-                    "main should have no arguments".into(),
-                    ann.range().0 - 2,
-                    function.args.last().unwrap().1.range().1,
-                ));
-            }
-
-            if let Some(ann) = &function.return_type {
-                let (ann_start, ann_end) = ann.range();
-                errors.push(Error::new(
-                    ErrorType::TypeError,
-                    "main should have no return type".into(),
-                    ann_start - 1,
-                    ann_end,
-                ));
-            }
+    if let Some(function) = ast.get("main") {
+        if let Some((_, ann)) = function.args.first() {
+            errors.push(Error::new(
+                ErrorType::TypeError,
+                "main should have no arguments".into(),
+                ann.range().0 - 2,
+                function.args.last().unwrap().1.range().1,
+            ));
         }
 
-        None => errors.push(Error::new(
-            ErrorType::TypeError,
-            "no entry point; define function 'main'".into(),
-            0,
-            0,
-        )),
+        if let Some(ann) = &function.return_type {
+            let (ann_start, ann_end) = ann.range();
+            errors.push(Error::new(
+                ErrorType::TypeError,
+                "main should have void return type".into(),
+                ann_start - 1,
+                ann_end,
+            ));
+        }
     }
 
     let functions: GlobalFunctionTypes = ast

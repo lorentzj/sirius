@@ -23,7 +23,7 @@ pub struct InterpreterOutput {
 
 fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Result<Value, Error> {
     match &op {
-        Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp => {
+        Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp | Op::Greater | Op::Less => {
             let coerced_lhs_float = match lhs {
                 Value::Float(v) => Some(v),
                 Value::Bool(v) => Some(if v { 1. } else { 0. }),
@@ -44,6 +44,9 @@ fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Result<Value, Error> {
                 Op::Mul => Ok(Value::Float(coerced_lhs_float * coerced_rhs_float)),
                 Op::Div => Ok(Value::Float(coerced_lhs_float / coerced_rhs_float)),
                 Op::Exp => Ok(Value::Float(coerced_lhs_float.powf(coerced_rhs_float))),
+
+                Op::Greater => Ok(Value::Bool(coerced_lhs_float > coerced_rhs_float)),
+                Op::Less => Ok(Value::Bool(coerced_lhs_float < coerced_rhs_float)),
 
                 _ => panic!(),
             }
@@ -176,7 +179,7 @@ fn interpret_block(
     frame: Option<&mut Frame<Value>>,
     ast: &AST,
     output: &mut InterpreterOutput,
-) {
+) -> bool {
     let mut empty_frame = Frame::<Value>::default();
     let frame = match frame {
         Some(frame) => frame,
@@ -197,7 +200,7 @@ fn interpret_block(
                 }
                 Err(error) => {
                     output.error = Some(error);
-                    return;
+                    return false;
                 }
             },
             Statement::Print { val, .. } => match interpret_expression(val, frame, ast, output) {
@@ -207,17 +210,21 @@ fn interpret_block(
                 }
                 Err(error) => {
                     output.error = Some(error);
-                    return;
+                    return false;
                 }
             },
             Statement::If { cond, inner, .. } => {
                 match interpret_expression(cond, frame, ast, output) {
                     Ok(value) => {
                         if Value::Bool(true) == value {
-                            interpret_block(inner, Some(frame), ast, output);
+                            let cont = interpret_block(inner, Some(frame), ast, output);
 
                             if output.error.is_some() {
-                                return;
+                                return false;
+                            }
+
+                            if !cont {
+                                return false;
                             }
 
                             frame.pop_scope();
@@ -225,7 +232,7 @@ fn interpret_block(
                     }
                     Err(error) => {
                         output.error = Some(error);
-                        return;
+                        return false;
                     }
                 }
             }
@@ -235,19 +242,22 @@ fn interpret_block(
                     match interpret_expression(val, frame, ast, output) {
                         Ok(value) => {
                             output.value = Some(value);
-                            return;
+                            return false;
                         }
                         Err(error) => {
                             output.error = Some(error);
-                            return;
+                            return false;
                         }
                     }
                 } else {
-                    return;
+                    output.value = None;
+                    return false;
                 }
             }
         }
     }
+
+    true
 }
 
 pub fn interpret(ast: &AST) -> InterpreterOutput {
@@ -262,6 +272,14 @@ pub fn interpret(ast: &AST) -> InterpreterOutput {
             interpret_block(&function.inner, None, ast, &mut output);
             output
         }
-        None => panic!(),
+        None => {
+            output.error = Some(Error::new(
+                ErrorType::RuntimeError,
+                "no entry point; define function 'main'".into(),
+                0,
+                0,
+            ));
+            output
+        }
     }
 }
