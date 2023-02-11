@@ -44,19 +44,7 @@ fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Result<Value, Error> {
                 Op::Add => Ok(Value::Float(coerced_lhs_float + coerced_rhs_float)),
                 Op::Sub => Ok(Value::Float(coerced_lhs_float - coerced_rhs_float)),
                 Op::Mul => Ok(Value::Float(coerced_lhs_float * coerced_rhs_float)),
-                Op::Div => {
-                    if coerced_rhs_float == 0. {
-                        Err(Error::new(
-                            ErrorType::RuntimeError,
-                            "division by zero".into(),
-                            0,
-                            0,
-                        ))
-                    } else {
-                        Ok(Value::Float(coerced_lhs_float / coerced_rhs_float))
-                    }
-                }
-
+                Op::Div => Ok(Value::Float(coerced_lhs_float / coerced_rhs_float)),
                 Op::Exp => Ok(Value::Float(coerced_lhs_float.powf(coerced_rhs_float))),
 
                 _ => panic!(),
@@ -132,8 +120,8 @@ pub fn interpret_expression(
         Expression::Identifier { start, name, end } => match frame.get(&name.clone()) {
             Some(val) => Ok(val.to_owned()),
             None => Err(Error::new(
-                ErrorType::UnboundIdentifierError,
-                format!("identifier '{name}' is not bound"),
+                ErrorType::InternalError,
+                "unbound variable should have been caught by typechecker".into(),
                 *start,
                 *end,
             )),
@@ -180,7 +168,7 @@ pub fn print_value(value: Value) -> String {
 }
 
 pub fn interpret(ast: &[Statement], frame: Option<&mut stack::Frame<Value>>) -> InterpreterOutput {
-    let mut empty_frame = stack::Frame::<Value>::new();
+    let mut empty_frame = stack::Frame::<Value>::default();
     let frame = match frame {
         Some(frame) => frame,
         None => &mut empty_frame,

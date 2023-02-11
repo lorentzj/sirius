@@ -39,6 +39,8 @@ pub enum Keyword {
     If,
     True,
     False,
+    Fn,
+    Return,
 }
 
 impl fmt::Debug for Keyword {
@@ -49,6 +51,8 @@ impl fmt::Debug for Keyword {
             Keyword::If => write!(f, "if"),
             Keyword::True => write!(f, "true"),
             Keyword::False => write!(f, "false"),
+            Keyword::Fn => write!(f, "fn"),
+            Keyword::Return => write!(f, "return"),
         }
     }
 }
@@ -99,6 +103,10 @@ fn parse_substring(s: &str) -> Result<Tok, String> {
         Ok(Tok::Keyword(Keyword::True))
     } else if s == "false" {
         Ok(Tok::Keyword(Keyword::False))
+    } else if s == "fn" {
+        Ok(Tok::Keyword(Keyword::Fn))
+    } else if s == "return" {
+        Ok(Tok::Keyword(Keyword::Return))
     } else {
         match s.chars().next() {
             Some('0'..='9') => {

@@ -3,11 +3,13 @@ use std::collections::HashMap;
 pub struct Frame<T>(Vec<HashMap<String, T>>);
 pub type Stack<T> = Vec<Frame<T>>;
 
-impl<T> Frame<T> {
-    pub fn new() -> Self {
+impl<T> std::default::Default for Frame<T> {
+    fn default() -> Self {
         Frame::<T>(vec![])
     }
+}
 
+impl<T> Frame<T> {
     pub fn get(&self, key: &str) -> Option<&T> {
         for scope in self.0.iter().rev() {
             if let Some(t) = scope.get(key) {

@@ -1,35 +1,68 @@
 use std::collections::HashMap;
 
-use crate::parser::{Statement, Expression};
+use crate::parser::{Function, Statement, Expression};
 use crate::lexer::Op;
 
-grammar(highlight_map: &mut  HashMap<usize, Vec<usize>>);
+grammar(highlight_map: &mut HashMap<usize, Vec<usize>>);
 
 pub AST: Vec<Statement> = {
     Stmt* => <>
 }
 
+pub NewAST: HashMap<String, Function> = {
+    <fns: Fn*> => fns.into_iter().map(|func| (func.name.clone(), func)).collect()
+}
+
+pub Fn: Function = {
+    "fn" <name: "identifier"> "(" <arg_list: ("identifier" ":" Expr ",")*> <last_arg: ("identifier" ":" Expr)?> ")" <return_type: (":" Expr)?>  "{" <inner: Stmt*> "}" => {
+        let return_type = return_type.map(|r| *r.1);
+
+        let mut args = HashMap::<String, Expression>::new();
+        for (name, _, ann, _) in arg_list {
+            args.insert(name, *ann);
+        }
+
+        if let Some((name, _, ann)) = last_arg {
+            args.insert(name, *ann);
+        }
+
+        Function {
+            name,
+            args,
+            return_type,
+            inner
+        }
+    }
+}
+
 pub Stmt: Statement = {
-    "let" <n: "identifier"> <ann: (":" Expr)?> "=" <val: Expr> ";" => {
+    "let" <name: "identifier"> <ann: (":" Expr)?> "=" <val: Expr> ";" => {
         Statement::Let {
-            name: n, 
-            ann: match ann {
-                Some(ann) => match *ann.1 {
-                    Expression::OpenTuple{ start, inner, end } => Some(Box::new(Expression::Tuple{ start, inner, end })),
-                    ann => Some(Box::new(ann))
-                },
-                None => None
-            },
+            name, 
+            ann: ann.map(|ann| Box::new(*ann.1)),
+            val
+        }
+    },
+
+    "let" <name: "identifier"> <ann: (":" Expr)?> "=" <val: OpenTuple> ";" => {
+        Statement::Let {
+            name: name, 
+            ann: ann.map(|ann| Box::new(*ann.1)),
             val: match *val {
                 Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
-                _ => val
+                _ => panic!()
             }
         }
     },
+
     "print" <val: Expr> ";" => {
+        Statement::Print{<>}
+    },
+
+    "print" <val: OpenTuple> ";" => {
         Statement::Print{ val: match *val {
             Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
-            _ => val
+            _ => panic!()
         }}
     },
 
@@ -118,9 +151,10 @@ pub Expr: Box<Expression> = {
         op: Op::Or,
         rhs,
         end
-    }),
+    })
+};
 
-    #[precedence(level="7")] #[assoc(side="left")]
+OpenTuple: Box<Expression> = {
     <start: @L> <lhs: Expr> "," <rhs: Expr> <end: @R> => {
         match *lhs {
              Expression::OpenTuple{mut inner, ..} => {
@@ -136,8 +170,24 @@ pub Expr: Box<Expression> = {
                 end
             })
         }
+    },
+    <start: @L> <lhs: OpenTuple> "," <rhs: Expr> <end: @R> => {
+        match *lhs {
+             Expression::OpenTuple{mut inner, ..} => {
+                inner.push(*rhs);
+                Box::new(Expression::OpenTuple{ start, inner, end })
+             }
+             _ => Box::new(Expression::OpenTuple{
+                start,
+                inner: vec![
+                    *lhs,
+                    *rhs
+                ],
+                end
+            })
+        }
     }
-};
+}
 
 Term: Box<Expression> = {
     <start: @L> <val: "true"> <end: @R> => Box::new(Expression::Bool{start, val: true, end}),
@@ -154,6 +204,14 @@ Term: Box<Expression> = {
             Expression::BinOp{lhs, op, rhs, ..} => Box::new(Expression::BinOp{ start, lhs, op, rhs, end }),
             Expression::OpenTuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
             Expression::Tuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
+        }
+    },
+    <start: @L> "(" <inner: OpenTuple> ")" <end: @R> => {
+        highlight_map.insert(start, vec![end - 1]);
+        highlight_map.insert(end - 1, vec![start]);
+        match *inner {
+            Expression::OpenTuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
+            _ => panic!()
         }
     }
 };
@@ -183,6 +241,8 @@ extern {
         "if"         => crate::lexer::Tok::Keyword(crate::lexer::Keyword::If),
         "true"       => crate::lexer::Tok::Keyword(crate::lexer::Keyword::True),
         "false"      => crate::lexer::Tok::Keyword(crate::lexer::Keyword::False),
+        "fn"         => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Fn),
+        "return"     => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Return),
         "="          => crate::lexer::Tok::Assign,
         ";"          => crate::lexer::Tok::Semicolon,
         ":"          => crate::lexer::Tok::Colon,

@@ -121,11 +121,22 @@ impl Statement {
 
                 for stmt in inner {
                     res.push_str(&stmt.short_fmt());
+                    res.push('\n');
                 }
+
+                res.push('}');
                 res
             }
         }
     }
+}
+
+#[derive(Serialize, Debug)]
+pub struct Function {
+    name: String,
+    args: HashMap<String, Expression>,
+    return_type: Option<Expression>,
+    inner: Vec<Statement>,
 }
 
 #[derive(Serialize, Debug)]
@@ -252,8 +263,26 @@ mod tests {
 
     #[test]
     fn annotation() {
-        let test_str = "let y: f64, 64 = x, 2;";
+        let test_str = "let y: (f64, 64) = x, 2;";
         let tree = parse(test_str);
         assert_eq!(tree.ast[0].short_fmt(), "let y: (f64,64) = (x,2);")
+    }
+
+    #[test]
+    fn function_parse() {
+        let test_str = "
+            fn test_func() {
+
+            }
+        ";
+        let mut highlight_map: std::collections::HashMap<usize, Vec<usize>> = std::collections::HashMap::default();
+
+        let tokens: Vec<_> = crate::lexer::Lexer::new(test_str).collect();
+        let tokens = tokens
+            .iter()
+            .enumerate()
+            .map(|(i, token)| Ok((i, token.data.clone(), i + 1)));
+
+        println!("{:?}", super::grammar::FnParser::new().parse(&mut highlight_map, tokens));
     }
 }

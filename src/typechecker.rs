@@ -181,7 +181,7 @@ pub fn expression_type(expression: &Expression, frame: &stack::Frame<Type>) -> R
 }
 
 pub fn typecheck(statements: &[Statement], frame: Option<&mut stack::Frame<Type>>) -> Vec<Error> {
-    let mut empty_frame = stack::Frame::<Type>::new();
+    let mut empty_frame = stack::Frame::<Type>::default();
     let frame = match frame {
         Some(frame) => frame,
         None => &mut empty_frame,
