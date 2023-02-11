@@ -10,14 +10,8 @@ pub AST: HashMap<String, Function> = {
 }
 
 pub Fn: Function = {
-    "fn" <name: "identifier"> "(" <arg_list: ("identifier" ":" Expr ",")*> <last_arg: ("identifier" ":" Expr)?> ")" <return_type: (":" Expr)?>  <inner: Block> => {
+    "fn" <name: "identifier"> <args: FnSigParams> <return_type: (":" Expr)?>  <inner: Block> => {
         let return_type = return_type.map(|r| *r.1);
-
-        let mut args: Vec<(String, Expression)> = arg_list.into_iter().map(|(name, _, ann, _)| (name, *ann)).collect();
-
-        if let Some((name, _, ann)) = last_arg {
-            args.push((name, *ann));
-        }
 
         Function {
             name,
@@ -25,6 +19,21 @@ pub Fn: Function = {
             return_type,
             inner
         }
+    }
+}
+
+FnSigParams: Vec<(String, Expression)> = {
+    <start: @L> "(" <arg_list: ("identifier" ":" Expr ",")*> <last_arg: ("identifier" ":" Expr)?> ")" <end: @R> => {
+        highlight_map.insert(start, vec![end - 1]);
+        highlight_map.insert(end - 1, vec![start]);
+
+        let mut args: Vec<(String, Expression)> = arg_list.into_iter().map(|(name, _, ann, _)| (name, *ann)).collect();
+
+        if let Some((name, _, ann)) = last_arg {
+            args.push((name, *ann));
+        }
+
+        args
     }
 }
 
@@ -180,11 +189,17 @@ pub Expr: Box<Expression> = {
 };
 
 FnCallParams: Vec<Expression> = {
-    "(" <arg: Expr> ")" => {
+    <start: @L> "(" <arg: Expr> ")" <end: @R> => {
+        highlight_map.insert(start, vec![end - 1]);
+        highlight_map.insert(end - 1, vec![start]);
+
         vec![*arg]
     },
 
-    "(" <args: OpenTuple> ")" => {
+    <start: @L> "(" <args: OpenTuple> ")" <end: @R> => {
+        highlight_map.insert(start, vec![end - 1]);
+        highlight_map.insert(end - 1, vec![start]);
+
         match *args {
             Expression::OpenTuple{inner, ..} => inner,
             _ => panic!()
