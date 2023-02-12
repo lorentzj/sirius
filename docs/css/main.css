@@ -1,6 +1,6 @@
 :root {
     --primary-bg-color: rgb(22, 22, 22);
-    --secondary-bg-color: rgb(68, 51, 64);
+    --secondary-bg-color: rgb(61, 47, 58);
     --button-color: rgb(83, 63, 79);
     --button-hover-color: rgb(112, 86, 107);
     --rounded-corners: 3px;
@@ -51,6 +51,51 @@ button {
 
 button:hover, select:hover {
     background-color: var(--button-hover-color);
+}
+
+
+/*
+   Home
+*/
+
+article {
+    flex: none;
+}
+
+section {
+    background-color: var(--secondary-bg-color);
+    margin: auto;
+    margin-top: 20px;
+    padding: 50px;
+    max-width: 800px;
+    border: 2px solid black;    
+}
+
+p {
+    text-indent: 2em;
+}
+
+span.asp {
+    font-style: italic;
+    color: rgb(252, 220, 132);
+}
+
+a {
+    color: rgb(129, 255, 154);
+}
+
+a:hover {
+    color: rgb(66, 241, 101);
+}
+
+
+h1 {
+    font-size: xx-large;
+    text-align: center;
+}
+
+h2 {
+    font-size: x-large;
 }
 
 /* Header */

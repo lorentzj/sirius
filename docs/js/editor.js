@@ -16,6 +16,7 @@ export function updateCodeLines(editorElem, codeLines, e) {
         }
         else if ((e.inputType === 'insertFromPaste' || e.inputType === 'insertFromDrop') && e.dataTransfer !== null) {
             let pastedText = e.dataTransfer.getData('text/plain');
+            codeLines.delete(startPosition, endPosition);
             codeLines.insert(startPosition, pastedText);
         }
         else {

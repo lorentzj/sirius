@@ -17,6 +17,6 @@ cargo clippy -- -D warnings || { exit 1; }
 echo "╔════════════════════════════════════════════════════════════════╗"
 echo "║                              DEMO                              ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
-wasm-pack build --target web -d docs/demo/js || { exit 1; }
-tsc -p docs/demo || { exit 1; }
-rm docs/demo/js/.gitignore || { exit 1; }
+wasm-pack build --target web -d docs/js || { exit 1; }
+tsc -p docs/ || { exit 1; }
+rm docs/js/.gitignore || { exit 1; }
