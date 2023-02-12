@@ -1,7 +1,7 @@
+use crate::flow;
 use crate::interpreter;
 use crate::parser;
 use crate::typechecker;
-
 use wasm_bindgen::prelude::*;
 
 extern crate console_error_panic_hook;
@@ -15,6 +15,9 @@ pub fn parse(code: String) -> String {
     if parsed.errors.is_empty() {
         let mut typecheck = typechecker::typecheck(&parsed.ast);
         parsed.errors.append(&mut typecheck);
+
+        let mut flowcheck = flow::check_flow(&parsed.ast);
+        parsed.errors.append(&mut flowcheck);
     }
 
     serde_json::to_string(&parsed).unwrap()
@@ -29,6 +32,9 @@ pub fn interpret(code: String) -> String {
     if parsed.errors.is_empty() {
         let mut typecheck = typechecker::typecheck(&parsed.ast);
         parsed.errors.append(&mut typecheck);
+
+        let mut flowcheck = flow::check_flow(&parsed.ast);
+        parsed.errors.append(&mut flowcheck);
     }
 
     let output = if parsed.errors.is_empty() {

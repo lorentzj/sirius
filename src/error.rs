@@ -5,6 +5,7 @@ pub enum ErrorType {
     ParseError,
     TypeError,
     UnboundIdentifierError,
+    FlowError,
     RuntimeError,
     NotImplementedError,
 }
