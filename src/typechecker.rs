@@ -349,7 +349,12 @@ fn typecheck_block(
                 Err(error) => errors.push(error),
             },
 
-            Statement::If { cond, inner, .. } => match expression_type(cond, frame, functions) {
+            Statement::If {
+                cond,
+                true_inner,
+                false_inner,
+                ..
+            } => match expression_type(cond, frame, functions) {
                 Ok(t) => {
                     if t != Type::Bool {
                         let (cond_start, cond_end) = cond.range();
@@ -362,10 +367,17 @@ fn typecheck_block(
                         ));
                     }
 
-                    let mut inner_errors =
-                        typecheck_block(inner, Some(frame), functions, curr_function);
+                    let mut true_inner_errors =
+                        typecheck_block(true_inner, Some(frame), functions, curr_function);
                     frame.pop_scope();
-                    errors.append(&mut inner_errors);
+                    errors.append(&mut true_inner_errors);
+
+                    if let Some(false_inner) = false_inner {
+                        let mut false_inner_errors =
+                            typecheck_block(false_inner, Some(frame), functions, curr_function);
+                        frame.pop_scope();
+                        errors.append(&mut false_inner_errors);
+                    }
                 }
                 Err(error) => errors.push(error),
             },

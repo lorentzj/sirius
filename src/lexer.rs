@@ -43,6 +43,7 @@ pub enum Keyword {
     Print,
     Let,
     If,
+    Else,
     True,
     False,
     Fn,
@@ -55,6 +56,7 @@ impl fmt::Debug for Keyword {
             Keyword::Let => write!(f, "let"),
             Keyword::Print => write!(f, "print"),
             Keyword::If => write!(f, "if"),
+            Keyword::Else => write!(f, "else"),
             Keyword::True => write!(f, "true"),
             Keyword::False => write!(f, "false"),
             Keyword::Fn => write!(f, "fn"),
@@ -105,6 +107,8 @@ fn parse_substring(s: &str) -> Result<Tok, String> {
         Ok(Tok::Keyword(Keyword::Print))
     } else if s == "if" {
         Ok(Tok::Keyword(Keyword::If))
+    } else if s == "else" {
+        Ok(Tok::Keyword(Keyword::Else))
     } else if s == "true" {
         Ok(Tok::Keyword(Keyword::True))
     } else if s == "false" {

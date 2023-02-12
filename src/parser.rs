@@ -131,7 +131,8 @@ pub enum Statement {
     If {
         start: usize,
         cond: Box<Expression>,
-        inner: Vec<Statement>,
+        true_inner: Vec<Statement>,
+        false_inner: Option<Vec<Statement>>,
         end: usize,
     },
 }
@@ -156,16 +157,29 @@ impl Statement {
             Statement::Print { val, .. } => {
                 format!("print {};", val.short_fmt())
             }
-            Statement::If { cond, inner, .. } => {
+            Statement::If {
+                cond,
+                true_inner,
+                false_inner,
+                ..
+            } => {
                 let mut res = String::new();
                 res.push_str(&format!("if {} {{\n", cond.short_fmt()));
 
-                for stmt in inner {
+                for stmt in true_inner {
                     res.push_str(&stmt.short_fmt());
                     res.push('\n');
                 }
 
                 res.push('}');
+                if let Some(false_inner) = false_inner {
+                    res.push_str(" else {{\n".into());
+                    for stmt in false_inner {
+                        res.push_str(&stmt.short_fmt());
+                        res.push('\n');
+                    }
+                    res.push('}');
+                }
                 res
             }
             Statement::Return { val, .. } => {

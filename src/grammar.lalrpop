@@ -75,11 +75,11 @@ pub Stmt: Statement = {
         }, end }
     },
 
-    <start: @L> "if" <cond: Expr> <inner: Block> <end: @R> => {
+    <start: @L> "if" <cond: Expr> <true_inner: Block> <false_inner: ("else" Block)?> <end: @R> => {
         Statement::If{ start, cond: match *cond {
             Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
             _ => cond
-        }, inner, end }
+        }, true_inner, false_inner: false_inner.map(|(_, b)| b), end }
     },
 
     <start: @L> "return" <val: Expr?> ";" <end: @R> => {
@@ -306,6 +306,7 @@ extern {
         "let"        => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Let),
         "print"      => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Print),
         "if"         => crate::lexer::Tok::Keyword(crate::lexer::Keyword::If),
+        "else"       => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Else),
         "true"       => crate::lexer::Tok::Keyword(crate::lexer::Keyword::True),
         "false"      => crate::lexer::Tok::Keyword(crate::lexer::Keyword::False),
         "fn"         => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Fn),

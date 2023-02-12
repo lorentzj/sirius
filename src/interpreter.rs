@@ -198,16 +198,25 @@ fn interpret_block(
                 output.stdout.push_str(&print_value(val));
                 output.stdout.push('\n');
             }
-            Statement::If { cond, inner, .. } => {
+            Statement::If {
+                cond,
+                true_inner,
+                false_inner,
+                ..
+            } => {
                 if Value::Bool(true) == interpret_expression(cond, frame, ast, output) {
-                    let cont = interpret_block(inner, Some(frame), ast, output);
-
+                    let cont = interpret_block(true_inner, Some(frame), ast, output);
                     if !cont {
                         return false;
                     }
-
-                    frame.pop_scope();
+                } else if let Some(false_inner) = false_inner {
+                    let cont = interpret_block(false_inner, Some(frame), ast, output);
+                    if !cont {
+                        return false;
+                    }
                 }
+
+                frame.pop_scope();
             }
 
             Statement::Return { val, .. } => {
