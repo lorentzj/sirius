@@ -9,6 +9,12 @@ use crate::lexer::{Lexer, Op, Tok, Token};
 lalrpop_mod!(#[allow(clippy::all)] pub grammar);
 
 #[derive(Serialize, Debug)]
+pub enum UnaryOp {
+    ArithNeg,
+    BoolNeg,
+}
+
+#[derive(Serialize, Debug)]
 pub enum Expression {
     Float {
         start: usize,
@@ -25,11 +31,17 @@ pub enum Expression {
         name: String,
         end: usize,
     },
-    BinOp {
+    BinaryOp {
         start: usize,
         lhs: Box<Expression>,
         op: Op,
         rhs: Box<Expression>,
+        end: usize,
+    },
+    UnaryOp {
+        start: usize,
+        op: UnaryOp,
+        inner: Box<Expression>,
         end: usize,
     },
     OpenTuple {
@@ -56,7 +68,8 @@ impl Expression {
             Expression::Float { start, end, .. } => (*start, *end),
             Expression::Bool { start, end, .. } => (*start, *end),
             Expression::Identifier { start, end, .. } => (*start, *end),
-            Expression::BinOp { start, end, .. } => (*start, *end),
+            Expression::BinaryOp { start, end, .. } => (*start, *end),
+            Expression::UnaryOp { start, end, .. } => (*start, *end),
             Expression::OpenTuple { start, end, .. } => (*start, *end),
             Expression::Tuple { start, end, .. } => (*start, *end),
             Expression::FnCall { start, end, .. } => (*start, *end),
@@ -75,9 +88,19 @@ impl Expression {
                 }
             }
             Expression::Identifier { name, .. } => format!("{}", name),
-            Expression::BinOp { lhs, op, rhs, .. } => {
+            Expression::BinaryOp { lhs, op, rhs, .. } => {
                 format!("({}{:?}{})", lhs.short_fmt(), op, rhs.short_fmt())
             }
+            Expression::UnaryOp {
+                inner,
+                op: UnaryOp::ArithNeg,
+                ..
+            } => format!("(-{})", inner.short_fmt()),
+            Expression::UnaryOp {
+                inner,
+                op: UnaryOp::BoolNeg,
+                ..
+            } => format!("(!{})", inner.short_fmt()),
             Expression::Tuple { inner, .. } => {
                 let mut result = String::new();
                 result.push_str("(");

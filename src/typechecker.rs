@@ -3,7 +3,7 @@ use std::fmt;
 
 use crate::error::{cardinal, Error, ErrorType};
 use crate::lexer::Op;
-use crate::parser::{Expression, Statement, AST};
+use crate::parser::{Expression, Statement, UnaryOp, AST};
 use crate::stack::Frame;
 
 type GlobalFunctionTypes = HashMap<String, (Vec<Type>, Option<Type>)>;
@@ -117,7 +117,7 @@ pub fn expression_type(
 
         Expression::OpenTuple { .. } => panic!(),
 
-        Expression::BinOp { lhs, rhs, op, .. } => {
+        Expression::BinaryOp { lhs, rhs, op, .. } => {
             let lhs_type = expression_type(lhs, frame, functions)?;
             let rhs_type = expression_type(rhs, frame, functions)?;
 
@@ -226,13 +226,49 @@ pub fn expression_type(
                 }
 
                 Op::Comma => panic!(),
-
+                Op::Not => panic!(),
                 Op::Dot => Err(Error::new(
                     ErrorType::NotImplementedError,
                     "have not implemented dot operator".into(),
                     start,
                     end,
                 )),
+            }
+        }
+
+        Expression::UnaryOp {
+            op: UnaryOp::ArithNeg,
+            inner,
+            ..
+        } => {
+            let inner_type = expression_type(inner, frame, functions)?;
+            if inner_type == Type::F64 {
+                Ok(Type::F64)
+            } else {
+                Err(Error::new(
+                    ErrorType::TypeError,
+                    format!("cannot apply arithmetic negation to '{inner_type:?}'"),
+                    start,
+                    end,
+                ))
+            }
+        }
+
+        Expression::UnaryOp {
+            op: UnaryOp::BoolNeg,
+            inner,
+            ..
+        } => {
+            let inner_type = expression_type(inner, frame, functions)?;
+            if inner_type == Type::Bool {
+                Ok(Type::Bool)
+            } else {
+                Err(Error::new(
+                    ErrorType::TypeError,
+                    format!("cannot apply boolean negation to '{inner_type:?}'"),
+                    start,
+                    end,
+                ))
             }
         }
 

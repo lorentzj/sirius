@@ -13,6 +13,7 @@ pub enum Op {
     Sub,
     And,
     Or,
+    Not,
     Greater,
     Less,
     Equal,
@@ -30,6 +31,7 @@ impl fmt::Debug for Op {
             Op::Sub => write!(f, "-"),
             Op::And => write!(f, "&"),
             Op::Or => write!(f, "|"),
+            Op::Not => write!(f, "!"),
             Op::Greater => write!(f, ">"),
             Op::Less => write!(f, "<"),
             Op::Equal => write!(f, "=="),
@@ -406,6 +408,14 @@ impl<'input> Iterator for Lexer<'input> {
                         '|' => {
                             return Some(Token::new(
                                 Tok::Op(Op::Or),
+                                self.line,
+                                self.col - 1,
+                                self.col,
+                            ))
+                        }
+                        '!' => {
+                            return Some(Token::new(
+                                Tok::Op(Op::Not),
                                 self.line,
                                 self.col - 1,
                                 self.col,

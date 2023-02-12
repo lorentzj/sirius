@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
-use crate::parser::{Expression, Function, Statement, AST};
+use crate::parser::{Expression, Function, Statement, UnaryOp, AST};
 use crate::stack::Frame;
 
 use serde::Serialize;
@@ -23,7 +23,7 @@ pub struct InterpreterOutput {
     pub value: Option<Value>,
 }
 
-fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Value {
+fn execute_bin_op(lhs: Value, rhs: Value, op: &Op) -> Value {
     match &op {
         Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp | Op::Greater | Op::Less => {
             let coerced_lhs_float = match lhs {
@@ -59,7 +59,7 @@ fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Value {
             (Value::Bool(lv), Value::Bool(rv)) => Value::Bool(lv == rv),
             (Value::Tuple(lvs), Value::Tuple(rvs)) => {
                 for (lv, rv) in lvs.iter().zip(rvs.iter()) {
-                    if let Value::Bool(false) = execute_op(lv.clone(), rv.clone(), &Op::Equal) {
+                    if let Value::Bool(false) = execute_bin_op(lv.clone(), rv.clone(), &Op::Equal) {
                         return Value::Bool(false);
                     }
                 }
@@ -89,7 +89,7 @@ fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Value {
         }
 
         Op::Comma => panic!(),
-
+        Op::Not => panic!(),
         Op::Dot => panic!(),
     }
 }
@@ -103,13 +103,31 @@ pub fn interpret_expression(
     match expression {
         Expression::Float { val, .. } => Value::Float(*val),
         Expression::Bool { val, .. } => Value::Bool(*val),
-        Expression::BinOp { lhs, op, rhs, .. } => {
+        Expression::BinaryOp { lhs, op, rhs, .. } => {
             let (lhs, rhs) = (
                 interpret_expression(lhs, frame, ast, output),
                 interpret_expression(rhs, frame, ast, output),
             );
-            execute_op(lhs, rhs, op)
+            execute_bin_op(lhs, rhs, op)
         }
+
+        Expression::UnaryOp {
+            op: UnaryOp::ArithNeg,
+            inner,
+            ..
+        } => match interpret_expression(inner, frame, ast, output) {
+            Value::Float(val) => Value::Float(-val),
+            _ => panic!(),
+        },
+
+        Expression::UnaryOp {
+            op: UnaryOp::BoolNeg,
+            inner,
+            ..
+        } => match interpret_expression(inner, frame, ast, output) {
+            Value::Bool(val) => Value::Bool(!val),
+            _ => panic!(),
+        },
 
         Expression::Identifier { name, .. } => match frame.get(&name.clone()) {
             Some(val) => val.clone(),
