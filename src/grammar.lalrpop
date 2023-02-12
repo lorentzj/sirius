@@ -23,17 +23,20 @@ pub Fn: Function = {
 }
 
 FnSigParams: Vec<(String, Expression)> = {
-    <start: @L> "(" <arg_list: ("identifier" ":" Expr ",")*> <last_arg: ("identifier" ":" Expr)?> ")" <end: @R> => {
+    <start: @L> "(" <arg_list: FnSigParamsInner> ")" <end: @R> => {
         highlight_map.insert(start, vec![end - 1]);
         highlight_map.insert(end - 1, vec![start]);
 
-        let mut args: Vec<(String, Expression)> = arg_list.into_iter().map(|(name, _, ann, _)| (name, *ann)).collect();
+        arg_list
+    }
+}
 
-        if let Some((name, _, ann)) = last_arg {
-            args.push((name, *ann));
-        }
-
-        args
+FnSigParamsInner: Vec<(String, Expression)> = {
+    () => vec![],
+    <name: "identifier"> ":" <ann: Expr> => vec![(name, *ann)],
+    <mut head: FnSigParamsInner> "," <name: "identifier"> ":" <ann: Expr> => {
+        head.push((name, *ann));
+        head
     }
 }
 
@@ -185,6 +188,13 @@ pub Expr: Box<Expression> = {
         op: Op::Less,
         rhs,
         end
+    }),
+    <start: @L> <lhs: Expr> "==" <rhs: Expr> <end: @R>  => Box::new(Expression::BinOp{
+        start,
+        lhs,
+        op: Op::Equal,
+        rhs,
+        end
     })
 };
 
@@ -289,6 +299,7 @@ extern {
         "|"          => crate::lexer::Tok::Op(Op::Or),
         ">"          => crate::lexer::Tok::Op(Op::Greater),
         "<"          => crate::lexer::Tok::Op(Op::Less),
+        "=="         => crate::lexer::Tok::Op(Op::Equal),
         ","          => crate::lexer::Tok::Op(Op::Comma),
         "float"      => crate::lexer::Tok::Float(<f64>),
         "identifier" => crate::lexer::Tok::Identifier(<String>),

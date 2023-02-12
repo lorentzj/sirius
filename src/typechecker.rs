@@ -87,12 +87,23 @@ pub fn expression_type(
     match &expression {
         Expression::Identifier { name, .. } => match frame.get(name) {
             Some(t) => Ok(t.clone()),
-            None => Err(Error::new(
-                ErrorType::UnboundIdentifierError,
-                format!("identifier '{name}' not found in scope"),
-                start,
-                end,
-            )),
+            None => {
+                if functions.get(name).is_some() {
+                    Err(Error::new(
+                        ErrorType::TypeError,
+                        "cannot apply operator to function".into(),
+                        start,
+                        end,
+                    ))
+                } else {
+                    Err(Error::new(
+                        ErrorType::UnboundIdentifierError,
+                        format!("identifier '{name}' not found in scope"),
+                        start,
+                        end,
+                    ))
+                }
+            }
         },
         Expression::Float { .. } => Ok(Type::F64),
         Expression::Bool { .. } => Ok(Type::Bool),
@@ -199,6 +210,19 @@ pub fn expression_type(
                     }
                 }
 
+                Op::Equal => {
+                    if lhs_type == rhs_type {
+                        Ok(Type::Bool)
+                    } else {
+                        Err(Error::new(
+                            ErrorType::TypeError,
+                            format!("cannot check equality between {lhs_type:?} and {rhs_type:?}"),
+                            start,
+                            end,
+                        ))
+                    }
+                }
+
                 Op::Comma => panic!(),
 
                 Op::Dot => Err(Error::new(
@@ -261,6 +285,13 @@ pub fn expression_type(
                         ))
                     }
                 }
+            } else if let Some(t) = frame.get(name) {
+                Err(Error::new(
+                    ErrorType::TypeError,
+                    format!("cannot call '{t:?}' as function"),
+                    *start,
+                    *end,
+                ))
             } else {
                 Err(Error::new(
                     ErrorType::UnboundIdentifierError,

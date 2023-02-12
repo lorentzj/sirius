@@ -15,6 +15,7 @@ pub enum Op {
     Or,
     Greater,
     Less,
+    Equal,
     Comma,
 }
 
@@ -31,6 +32,7 @@ impl fmt::Debug for Op {
             Op::Or => write!(f, "|"),
             Op::Greater => write!(f, ">"),
             Op::Less => write!(f, "<"),
+            Op::Equal => write!(f, "=="),
             Op::Comma => write!(f, ","),
         }
     }
@@ -159,6 +161,7 @@ pub struct Lexer<'input> {
     char_inds: Peekable<CharIndices<'input>>,
     curr_substring_start: Option<usize>,
     curr_substring_all_digits: bool,
+    last_equal: bool,
     line: usize,
     col: usize,
 }
@@ -170,6 +173,7 @@ impl<'input> Lexer<'input> {
             char_inds: input.char_indices().peekable(),
             curr_substring_start: None,
             curr_substring_all_digits: true,
+            last_equal: false,
             line: 0,
             col: 0,
         }
@@ -182,10 +186,23 @@ impl<'input> Iterator for Lexer<'input> {
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(&(i, char)) = self.char_inds.peek() {
             match char {
-                '0'..='9' | 'A'..='Z' | 'a'..='z' | '\u{0370}'..='\u{03FF}' | '_' => {
+                '0'..='9' | 'A'..='Z' | 'a'..='z' | '\u{0370}'..='\u{03FF}' | '_' | '=' => {
                     self.char_inds.next();
 
-                    if self.curr_substring_start.is_none() {
+                    if char == '=' {
+                        if self.last_equal {
+                            self.last_equal = false;
+                            self.col += 1;
+                            return Some(Token::new(
+                                Tok::Op(Op::Equal),
+                                self.line,
+                                self.col - 2,
+                                self.col,
+                            ));
+                        } else {
+                            self.last_equal = true;
+                        }
+                    } else if self.curr_substring_start.is_none() {
                         self.curr_substring_start = Some(i);
                         self.curr_substring_all_digits &= char.is_ascii_digit();
                     }
@@ -223,6 +240,9 @@ impl<'input> Iterator for Lexer<'input> {
                                 ));
                             }
                         }
+                    } else if self.last_equal {
+                        self.last_equal = false;
+                        return Some(Token::new(Tok::Assign, self.line, self.col - 1, self.col));
                     }
 
                     self.char_inds.next();
@@ -367,9 +387,6 @@ impl<'input> Iterator for Lexer<'input> {
                                 self.col - 1,
                                 self.col,
                             ))
-                        }
-                        '=' => {
-                            return Some(Token::new(Tok::Assign, self.line, self.col - 1, self.col))
                         }
 
                         _ => {

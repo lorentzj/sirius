@@ -7,7 +7,7 @@ use crate::stack::Frame;
 
 use serde::Serialize;
 
-#[derive(Debug, PartialEq, Serialize, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Float(f64),
     Bool(bool),
@@ -16,12 +16,14 @@ pub enum Value {
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct InterpreterOutput {
-    pub value: Option<Value>,
     pub stdout: String,
     pub error: Option<Error>,
+
+    #[serde(skip_serializing)]
+    pub value: Option<Value>,
 }
 
-fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Result<Value, Error> {
+fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Value {
     match &op {
         Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp | Op::Greater | Op::Less => {
             let coerced_lhs_float = match lhs {
@@ -39,49 +41,56 @@ fn execute_op(lhs: Value, rhs: Value, op: &Op) -> Result<Value, Error> {
             .unwrap();
 
             match &op {
-                Op::Add => Ok(Value::Float(coerced_lhs_float + coerced_rhs_float)),
-                Op::Sub => Ok(Value::Float(coerced_lhs_float - coerced_rhs_float)),
-                Op::Mul => Ok(Value::Float(coerced_lhs_float * coerced_rhs_float)),
-                Op::Div => Ok(Value::Float(coerced_lhs_float / coerced_rhs_float)),
-                Op::Exp => Ok(Value::Float(coerced_lhs_float.powf(coerced_rhs_float))),
+                Op::Add => Value::Float(coerced_lhs_float + coerced_rhs_float),
+                Op::Sub => Value::Float(coerced_lhs_float - coerced_rhs_float),
+                Op::Mul => Value::Float(coerced_lhs_float * coerced_rhs_float),
+                Op::Div => Value::Float(coerced_lhs_float / coerced_rhs_float),
+                Op::Exp => Value::Float(coerced_lhs_float.powf(coerced_rhs_float)),
 
-                Op::Greater => Ok(Value::Bool(coerced_lhs_float > coerced_rhs_float)),
-                Op::Less => Ok(Value::Bool(coerced_lhs_float < coerced_rhs_float)),
+                Op::Greater => Value::Bool(coerced_lhs_float > coerced_rhs_float),
+                Op::Less => Value::Bool(coerced_lhs_float < coerced_rhs_float),
 
                 _ => panic!(),
             }
         }
 
+        Op::Equal => match (lhs, rhs) {
+            (Value::Float(lv), Value::Float(rv)) => Value::Bool(lv == rv),
+            (Value::Bool(lv), Value::Bool(rv)) => Value::Bool(lv == rv),
+            (Value::Tuple(lvs), Value::Tuple(rvs)) => {
+                for (lv, rv) in lvs.iter().zip(rvs.iter()) {
+                    if let Value::Bool(false) = execute_op(lv.clone(), rv.clone(), &Op::Equal) {
+                        return Value::Bool(false);
+                    }
+                }
+                Value::Bool(true)
+            }
+            _ => panic!(),
+        },
+
         Op::And | Op::Or => {
             let coerced_lhs_bool = match lhs {
-                Value::Float(v) => Some(v == 0.),
                 Value::Bool(v) => Some(v),
                 _ => None,
             }
             .unwrap();
 
             let coerced_rhs_bool = match rhs {
-                Value::Float(v) => Some(v == 0.),
                 Value::Bool(v) => Some(v),
                 _ => None,
             }
             .unwrap();
 
             match &op {
-                Op::And => Ok(Value::Bool(coerced_lhs_bool && coerced_rhs_bool)),
-                Op::Or => Ok(Value::Bool(coerced_lhs_bool || coerced_rhs_bool)),
+                Op::And => Value::Bool(coerced_lhs_bool && coerced_rhs_bool),
+                Op::Or => Value::Bool(coerced_lhs_bool || coerced_rhs_bool),
                 _ => panic!(),
             }
         }
 
         Op::Comma => panic!(),
 
-        Op::Dot => Err(Error::new(
-            ErrorType::NotImplementedError,
-            "have not implemented dot operator".into(),
-            0,
-            0,
-        )),
+        Op::Dot => panic!(),
     }
 }
 
@@ -90,42 +99,29 @@ pub fn interpret_expression(
     frame: &Frame<Value>,
     ast: &HashMap<String, Function>,
     output: &mut InterpreterOutput,
-) -> Result<Value, Error> {
+) -> Value {
     match expression {
-        Expression::Float { val, .. } => Ok(Value::Float(*val)),
-        Expression::Bool { val, .. } => Ok(Value::Bool(*val)),
-        Expression::BinOp {
-            start,
-            lhs,
-            op,
-            rhs,
-            end,
-        } => {
+        Expression::Float { val, .. } => Value::Float(*val),
+        Expression::Bool { val, .. } => Value::Bool(*val),
+        Expression::BinOp { lhs, op, rhs, .. } => {
             let (lhs, rhs) = (
-                interpret_expression(lhs, frame, ast, output)?,
-                interpret_expression(rhs, frame, ast, output)?,
+                interpret_expression(lhs, frame, ast, output),
+                interpret_expression(rhs, frame, ast, output),
             );
-            match execute_op(lhs, rhs, op) {
-                Ok(v) => Ok(v),
-                Err(mut error) => {
-                    error.start = *start;
-                    error.end = *end;
-                    Err(error)
-                }
-            }
+            execute_op(lhs, rhs, op)
         }
 
         Expression::Identifier { name, .. } => match frame.get(&name.clone()) {
-            Some(val) => Ok(val.to_owned()),
+            Some(val) => val.clone(),
             None => panic!(),
         },
 
         Expression::Tuple { inner, .. } => {
             let mut members = vec![];
             for expression in inner {
-                members.push(interpret_expression(expression, frame, ast, output)?);
+                members.push(interpret_expression(expression, frame, ast, output));
             }
-            Ok(Value::Tuple(members))
+            Value::Tuple(members)
         }
 
         Expression::FnCall { name, args, .. } => match ast.get(name) {
@@ -135,13 +131,13 @@ pub fn interpret_expression(
                 for (arg, (arg_name, _)) in args.iter().zip(function.args.iter()) {
                     inner_frame.insert(
                         arg_name.clone(),
-                        interpret_expression(arg, frame, ast, output)?,
+                        interpret_expression(arg, frame, ast, output),
                     );
                 }
 
                 interpret_block(&function.inner, Some(&mut inner_frame), ast, output);
 
-                Ok(output.value.clone().unwrap())
+                output.value.clone().unwrap()
             }
 
             None => panic!(),
@@ -192,67 +188,34 @@ fn interpret_block(
 
     for statement in block {
         match statement {
-            Statement::Let { name, val, .. } => match interpret_expression(val, frame, ast, output)
-            {
-                Ok(value) => {
-                    frame.insert(name.clone(), value);
-                    defined_idents.insert(name.clone());
-                }
-                Err(error) => {
-                    output.error = Some(error);
-                    return false;
-                }
-            },
-            Statement::Print { val, .. } => match interpret_expression(val, frame, ast, output) {
-                Ok(value) => {
-                    output.stdout.push_str(&print_value(value));
-                    output.stdout.push('\n');
-                }
-                Err(error) => {
-                    output.error = Some(error);
-                    return false;
-                }
-            },
+            Statement::Let { name, val, .. } => {
+                let val = interpret_expression(val, frame, ast, output);
+                frame.insert(name.clone(), val);
+                defined_idents.insert(name.clone());
+            }
+            Statement::Print { val, .. } => {
+                let val = interpret_expression(val, frame, ast, output);
+                output.stdout.push_str(&print_value(val));
+                output.stdout.push('\n');
+            }
             Statement::If { cond, inner, .. } => {
-                match interpret_expression(cond, frame, ast, output) {
-                    Ok(value) => {
-                        if Value::Bool(true) == value {
-                            let cont = interpret_block(inner, Some(frame), ast, output);
+                if Value::Bool(true) == interpret_expression(cond, frame, ast, output) {
+                    let cont = interpret_block(inner, Some(frame), ast, output);
 
-                            if output.error.is_some() {
-                                return false;
-                            }
-
-                            if !cont {
-                                return false;
-                            }
-
-                            frame.pop_scope();
-                        }
-                    }
-                    Err(error) => {
-                        output.error = Some(error);
+                    if !cont {
                         return false;
                     }
+
+                    frame.pop_scope();
                 }
             }
 
             Statement::Return { val, .. } => {
-                if let Some(val) = val {
-                    match interpret_expression(val, frame, ast, output) {
-                        Ok(value) => {
-                            output.value = Some(value);
-                            return false;
-                        }
-                        Err(error) => {
-                            output.error = Some(error);
-                            return false;
-                        }
-                    }
-                } else {
-                    output.value = None;
-                    return false;
+                match val {
+                    Some(val) => output.value = Some(interpret_expression(val, frame, ast, output)),
+                    None => (),
                 }
+                return false;
             }
         }
     }
