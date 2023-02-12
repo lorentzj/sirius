@@ -190,28 +190,68 @@ impl<'input> Iterator for Lexer<'input> {
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(&(i, char)) = self.char_inds.peek() {
             match char {
-                '0'..='9' | 'A'..='Z' | 'a'..='z' | '\u{0370}'..='\u{03FF}' | '_' | '=' => {
+                '0'..='9' | 'A'..='Z' | 'a'..='z' | '\u{0370}'..='\u{03FF}' | '_' => {
                     self.char_inds.next();
 
-                    if char == '=' {
-                        if self.last_equal {
-                            self.last_equal = false;
-                            self.col += 1;
-                            return Some(Token::new(
-                                Tok::Op(Op::Equal),
-                                self.line,
-                                self.col - 2,
-                                self.col,
-                            ));
-                        } else {
-                            self.last_equal = true;
-                        }
-                    } else if self.curr_substring_start.is_none() {
+                    if self.curr_substring_start.is_none() {
                         self.curr_substring_start = Some(i);
                         self.curr_substring_all_digits &= char.is_ascii_digit();
                     }
 
                     self.col += 1;
+
+                    if self.last_equal {
+                        self.last_equal = false;
+                        return Some(Token::new(Tok::Assign, self.line, self.col - 1, self.col));
+                    }
+                }
+
+                '=' => {
+                    if let Some(curr_substring_start) = self.curr_substring_start {
+                        if char == '.' && self.curr_substring_all_digits {
+                            self.char_inds.next();
+                            self.col += 1;
+                            continue;
+                        }
+
+                        self.curr_substring_all_digits = true;
+                        self.curr_substring_start = None;
+
+                        match parse_substring(&self.code[curr_substring_start..i]) {
+                            Ok(token_type) => {
+                                return Some(Token::new(
+                                    token_type,
+                                    self.line,
+                                    self.col + curr_substring_start - i,
+                                    self.col,
+                                ))
+                            }
+
+                            Err(msg) => {
+                                return Some(Token::new(
+                                    Tok::Error(msg),
+                                    self.line,
+                                    self.col + curr_substring_start - i,
+                                    self.col,
+                                ));
+                            }
+                        }
+                    }
+
+                    self.char_inds.next();
+
+                    if self.last_equal {
+                        self.last_equal = false;
+                        self.col += 2;
+                        return Some(Token::new(
+                            Tok::Op(Op::Equal),
+                            self.line,
+                            self.col - 2,
+                            self.col,
+                        ));
+                    } else {
+                        self.last_equal = true;
+                    }
                 }
 
                 _ => {
@@ -244,8 +284,11 @@ impl<'input> Iterator for Lexer<'input> {
                                 ));
                             }
                         }
-                    } else if self.last_equal {
+                    }
+
+                    if self.last_equal {
                         self.last_equal = false;
+                        self.col += 1;
                         return Some(Token::new(Tok::Assign, self.line, self.col - 1, self.col));
                     }
 
