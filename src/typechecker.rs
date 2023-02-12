@@ -91,7 +91,7 @@ pub fn expression_type(
                 if functions.get(name).is_some() {
                     Err(Error::new(
                         ErrorType::TypeError,
-                        "cannot apply operator to function".into(),
+                        "cannot use function as value".into(),
                         start,
                         end,
                     ))
@@ -126,14 +126,14 @@ pub fn expression_type(
                     if let Type::Tuple(_) = lhs_type {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            "cannot apply arithmetic operator to tuple".into(),
+                            format!("cannot apply arithmetic operator to '{lhs_type:?}'"),
                             start,
                             end,
                         ))
                     } else if let Type::Tuple(_) = rhs_type {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            "cannot apply arithmetic operator to tuple".into(),
+                            format!("cannot apply arithmetic operator to '{rhs_type:?}'"),
                             start,
                             end,
                         ))
@@ -146,28 +146,28 @@ pub fn expression_type(
                     if let Type::Tuple(_) = lhs_type {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            "cannot apply boolean operator to tuple".into(),
+                            format!("cannot apply boolean operator to '{lhs_type:?}'"),
                             start,
                             end,
                         ))
                     } else if Type::F64 == lhs_type {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            "cannot apply boolean operator to float".into(),
+                            format!("cannot apply boolean operator to '{lhs_type:?}'"),
                             start,
                             end,
                         ))
                     } else if let Type::Tuple(_) = rhs_type {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            "cannot apply boolean operator to tuple".into(),
+                            format!("cannot apply boolean operator to '{rhs_type:?}'"),
                             start,
                             end,
                         ))
                     } else if Type::F64 == rhs_type {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            "cannot apply boolean operator to float".into(),
+                            format!("cannot apply boolean operator to '{rhs_type:?}'"),
                             start,
                             end,
                         ))
@@ -180,28 +180,28 @@ pub fn expression_type(
                     if let Type::Tuple(_) = lhs_type {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            "cannot apply comparison operator to tuple".into(),
+                            format!("cannot apply comparison operator to '{lhs_type:?}'"),
                             start,
                             end,
                         ))
                     } else if Type::Bool == lhs_type {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            "cannot apply comparison operator to bool".into(),
+                            format!("cannot apply comparison operator to '{lhs_type:?}'"),
                             start,
                             end,
                         ))
                     } else if let Type::Tuple(_) = rhs_type {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            "cannot apply comparison operator to tuple".into(),
+                            format!("cannot apply comparison operator to '{rhs_type:?}'"),
                             start,
                             end,
                         ))
                     } else if Type::Bool == rhs_type {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            "cannot apply comparison operator to bool".into(),
+                            format!("cannot apply comparison operator to '{rhs_type:?}'"),
                             start,
                             end,
                         ))
@@ -216,7 +216,9 @@ pub fn expression_type(
                     } else {
                         Err(Error::new(
                             ErrorType::TypeError,
-                            format!("cannot check equality between {lhs_type:?} and {rhs_type:?}"),
+                            format!(
+                                "cannot check equality between '{lhs_type:?}' and '{rhs_type:?}'"
+                            ),
                             start,
                             end,
                         ))
@@ -361,7 +363,7 @@ fn typecheck_block(
 
                         errors.push(Error::new(
                             ErrorType::TypeError,
-                            format!("condition must be bool; found type '{t:?}'"),
+                            format!("condition should be 'bool'; found '{t:?}'"),
                             cond_start,
                             cond_end,
                         ));
