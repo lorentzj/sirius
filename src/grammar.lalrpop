@@ -101,11 +101,11 @@ pub Block: Vec<Statement> = {
         inner
     }
 }
-       
+   
 pub Expr: Box<Expression> = {
     #[precedence(level="1")]
     <t: Term> => t,
-    <start: @L> <name: "identifier"> <args: FnCallParams> <end: @R> => {
+    <start: @L> <caller: Expr> <args: FnCallParams> <end: @R> => {
         Box::new(Expression::FnCall{<>})
     },
 
@@ -280,7 +280,7 @@ Term: Box<Expression> = {
             Expression::Identifier{name, ..} => Box::new(Expression::Identifier{ start, name, end }),
             Expression::BinaryOp{lhs, op, rhs, ..} => Box::new(Expression::BinaryOp{ start, lhs, op, rhs, end }),
             Expression::UnaryOp{op, inner, ..} => Box::new(Expression::UnaryOp{ start, op, inner, end }),
-            Expression::FnCall{name, args, ..} => Box::new(Expression::FnCall{ start, name, args, end }),
+            Expression::FnCall{caller, args, ..} => Box::new(Expression::FnCall{ start, caller, args, end }),
             Expression::OpenTuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
             Expression::Tuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
         }

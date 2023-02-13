@@ -38,7 +38,7 @@ pub fn interpret(code: String) -> String {
     }
 
     let output = if parsed.errors.is_empty() {
-        interpreter::interpret(&parsed.ast)
+        interpreter::interpret(parsed.ast)
     } else {
         interpreter::InterpreterOutput {
             stdout: "".into(),

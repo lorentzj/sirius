@@ -8,13 +8,13 @@ use crate::lexer::{Lexer, Op, Tok, Token};
 
 lalrpop_mod!(#[allow(clippy::all)] pub grammar);
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Clone, Debug)]
 pub enum UnaryOp {
     ArithNeg,
     BoolNeg,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Clone, Debug)]
 pub enum Expression {
     Float {
         start: usize,
@@ -56,7 +56,7 @@ pub enum Expression {
     },
     FnCall {
         start: usize,
-        name: String,
+        caller: Box<Expression>,
         args: Vec<Expression>,
         end: usize,
     },
@@ -114,8 +114,8 @@ impl Expression {
                 result
             }
 
-            Expression::FnCall { name, args, .. } => {
-                let mut result = name.clone();
+            Expression::FnCall { caller, args, .. } => {
+                let mut result = format!("({})", caller.short_fmt());
                 result.push_str("(");
                 for (i, expr) in args.iter().enumerate() {
                     result.push_str(&expr.short_fmt());
@@ -132,7 +132,7 @@ impl Expression {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Clone, Debug)]
 pub enum Statement {
     Let {
         start: usize,
