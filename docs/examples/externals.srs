@@ -1,0 +1,9 @@
+fn main() {
+    let theta = 3/7;
+    if sin(theta)^2 + cos(theta)^2 == 1 {
+        print true;
+    }
+
+    print sin, cos, tan, ln, log10;
+    print pi;
+}

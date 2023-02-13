@@ -2,11 +2,12 @@ use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
 use crate::parser::{Expression, Statement, UnaryOp, AST};
 use crate::stack::Frame;
+use crate::stdlib::{ExternalFunctionPointer, ExternalGlobals};
 use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Value {
     Float(f64),
     Bool(bool),
@@ -15,11 +16,12 @@ pub enum Value {
         arg_names: Vec<String>,
         statements: Vec<Statement>,
     },
+    ExternalFunction(ExternalFunctionPointer),
 }
 
 type Globals = HashMap<String, Value>;
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct InterpreterOutput {
     pub stdout: String,
     pub error: Option<Error>,
@@ -103,6 +105,7 @@ pub fn interpret_expression(
     expression: &Expression,
     frame: &mut Frame<Value>,
     globals: &Globals,
+    externals: &ExternalGlobals,
     output: &mut InterpreterOutput,
 ) -> Value {
     match expression {
@@ -110,8 +113,8 @@ pub fn interpret_expression(
         Expression::Bool { val, .. } => Value::Bool(*val),
         Expression::BinaryOp { lhs, op, rhs, .. } => {
             let (lhs, rhs) = (
-                interpret_expression(lhs, frame, globals, output),
-                interpret_expression(rhs, frame, globals, output),
+                interpret_expression(lhs, frame, globals, externals, output),
+                interpret_expression(rhs, frame, globals, externals, output),
             );
             execute_bin_op(lhs, rhs, op)
         }
@@ -120,7 +123,7 @@ pub fn interpret_expression(
             op: UnaryOp::ArithNeg,
             inner,
             ..
-        } => match interpret_expression(inner, frame, globals, output) {
+        } => match interpret_expression(inner, frame, globals, externals, output) {
             Value::Float(val) => Value::Float(-val),
             _ => panic!(),
         },
@@ -129,7 +132,7 @@ pub fn interpret_expression(
             op: UnaryOp::BoolNeg,
             inner,
             ..
-        } => match interpret_expression(inner, frame, globals, output) {
+        } => match interpret_expression(inner, frame, globals, externals, output) {
             Value::Bool(val) => Value::Bool(!val),
             _ => panic!(),
         },
@@ -138,20 +141,28 @@ pub fn interpret_expression(
             Some(val) => val.clone(),
             None => match globals.get(name) {
                 Some(val) => val.clone(),
-                None => panic!(),
+                None => match externals.constants.get(name) {
+                    Some((_, val)) => val.clone(),
+                    None => match externals.functions.get(name) {
+                        Some((_, function_pointer)) => Value::ExternalFunction(*function_pointer),
+                        None => panic!(),
+                    },
+                },
             },
         },
 
         Expression::Tuple { inner, .. } => {
             let mut members = vec![];
             for expression in inner {
-                members.push(interpret_expression(expression, frame, globals, output));
+                members.push(interpret_expression(
+                    expression, frame, globals, externals, output,
+                ));
             }
             Value::Tuple(members)
         }
 
         Expression::FnCall { caller, args, .. } => {
-            match interpret_expression(caller, frame, globals, output) {
+            match interpret_expression(caller, frame, globals, externals, output) {
                 Value::Function {
                     arg_names,
                     statements,
@@ -161,13 +172,26 @@ pub fn interpret_expression(
                     for (arg, arg_name) in args.iter().zip(arg_names.iter()) {
                         inner_frame.insert(
                             arg_name.clone(),
-                            interpret_expression(arg, frame, globals, output),
+                            interpret_expression(arg, frame, globals, externals, output),
                         );
                     }
 
-                    interpret_block(&statements, Some(&mut inner_frame), globals, output);
+                    interpret_block(
+                        &statements,
+                        Some(&mut inner_frame),
+                        globals,
+                        externals,
+                        output,
+                    );
 
                     output.value.as_ref().unwrap().clone()
+                }
+                Value::ExternalFunction(function_pointer) => {
+                    let arg_values: Vec<Value> = args
+                        .iter()
+                        .map(|arg| interpret_expression(arg, frame, globals, externals, output))
+                        .collect();
+                    function_pointer(&arg_values).unwrap()
                 }
                 _ => panic!(),
             }
@@ -198,6 +222,7 @@ pub fn print_value(value: Value) -> String {
             }
         }
         Value::Function { .. } => "<function>".into(),
+        Value::ExternalFunction { .. } => "<external_function>".into(),
     }
 }
 
@@ -205,6 +230,7 @@ fn interpret_block(
     block: &[Statement],
     frame: Option<&mut Frame<Value>>,
     globals: &Globals,
+    externals: &ExternalGlobals,
     output: &mut InterpreterOutput,
 ) -> bool {
     let mut empty_frame = Frame::<Value>::default();
@@ -220,12 +246,12 @@ fn interpret_block(
     for statement in block {
         match statement {
             Statement::Let { name, val, .. } => {
-                let val = interpret_expression(val, frame, globals, output);
+                let val = interpret_expression(val, frame, globals, externals, output);
                 frame.insert(name.clone(), val);
                 defined_idents.insert(name.clone());
             }
             Statement::Print { val, .. } => {
-                let val = interpret_expression(val, frame, globals, output);
+                let val = interpret_expression(val, frame, globals, externals, output);
                 output.stdout.push_str(&print_value(val));
                 output.stdout.push('\n');
             }
@@ -235,13 +261,16 @@ fn interpret_block(
                 false_inner,
                 ..
             } => {
-                if let Value::Bool(true) = interpret_expression(cond, frame, globals, output) {
-                    let cont = interpret_block(true_inner, Some(frame), globals, output);
+                if let Value::Bool(true) =
+                    interpret_expression(cond, frame, globals, externals, output)
+                {
+                    let cont = interpret_block(true_inner, Some(frame), globals, externals, output);
                     if !cont {
                         return false;
                     }
                 } else if let Some(false_inner) = false_inner {
-                    let cont = interpret_block(false_inner, Some(frame), globals, output);
+                    let cont =
+                        interpret_block(false_inner, Some(frame), globals, externals, output);
                     if !cont {
                         return false;
                     }
@@ -253,7 +282,8 @@ fn interpret_block(
             Statement::Return { val, .. } => {
                 match val {
                     Some(val) => {
-                        output.value = Some(interpret_expression(val, frame, globals, output))
+                        output.value =
+                            Some(interpret_expression(val, frame, globals, externals, output))
                     }
                     None => (),
                 }
@@ -265,7 +295,7 @@ fn interpret_block(
     true
 }
 
-pub fn interpret(ast: AST) -> InterpreterOutput {
+pub fn interpret(ast: AST, externals: &ExternalGlobals) -> InterpreterOutput {
     let mut output = InterpreterOutput {
         stdout: String::new(),
         value: None,
@@ -291,7 +321,7 @@ pub fn interpret(ast: AST) -> InterpreterOutput {
 
     match globals.get("main") {
         Some(Value::Function { statements, .. }) => {
-            interpret_block(statements, None, &globals, &mut output);
+            interpret_block(statements, None, &globals, externals, &mut output);
             output
         }
         _ => {

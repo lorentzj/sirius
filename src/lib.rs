@@ -10,5 +10,6 @@ pub mod interpreter;
 pub mod lexer;
 pub mod parser;
 pub mod stack;
+pub mod stdlib;
 pub mod typechecker;
 pub mod wasm;

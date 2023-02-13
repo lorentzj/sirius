@@ -1,7 +1,9 @@
 use crate::flow;
 use crate::interpreter;
 use crate::parser;
+use crate::stdlib::stdlib;
 use crate::typechecker;
+
 use wasm_bindgen::prelude::*;
 
 extern crate console_error_panic_hook;
@@ -13,7 +15,7 @@ pub fn parse(code: String) -> String {
     let mut parsed = parser::parse(&code);
 
     if parsed.errors.is_empty() {
-        let mut typecheck = typechecker::typecheck(&parsed.ast);
+        let mut typecheck = typechecker::typecheck(&parsed.ast, &stdlib());
         parsed.errors.append(&mut typecheck);
 
         let mut flowcheck = flow::check_flow(&parsed.ast);
@@ -28,9 +30,10 @@ pub fn interpret(code: String) -> String {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
     let mut parsed = parser::parse(&code);
+    let stdlib = stdlib();
 
     if parsed.errors.is_empty() {
-        let mut typecheck = typechecker::typecheck(&parsed.ast);
+        let mut typecheck = typechecker::typecheck(&parsed.ast, &stdlib);
         parsed.errors.append(&mut typecheck);
 
         let mut flowcheck = flow::check_flow(&parsed.ast);
@@ -38,7 +41,7 @@ pub fn interpret(code: String) -> String {
     }
 
     let output = if parsed.errors.is_empty() {
-        interpreter::interpret(parsed.ast)
+        interpreter::interpret(parsed.ast, &stdlib)
     } else {
         interpreter::InterpreterOutput {
             stdout: "".into(),
@@ -106,5 +109,24 @@ mod tests {
 
         let output = super::interpret(code);
         assert_eq!(output, "{\"stdout\":\"true\\n\",\"error\":null}");
+    }
+
+    #[test]
+    fn externals() {
+        let code = "
+        fn main() {
+            let theta = 3/7;
+            if sin(theta)^2 + cos(theta)^2 == 1 {
+                print true;
+            }
+        
+            print sin, cos, tan, ln, log10;
+            print pi;
+        }
+        "
+        .to_string();
+
+        let output = super::interpret(code);
+        assert_eq!(output, "{\"stdout\":\"true\\n(<external_function>, <external_function>, <external_function>, <external_function>, <external_function>)\\n3.141592653589793\\n\",\"error\":null}");
     }
 }

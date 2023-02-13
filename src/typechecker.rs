@@ -5,6 +5,7 @@ use crate::error::{cardinal, Error, ErrorType};
 use crate::lexer::Op;
 use crate::parser::{Expression, Statement, UnaryOp, AST};
 use crate::stack::Frame;
+use crate::stdlib::ExternalGlobals;
 
 type Globals = HashMap<String, Type>;
 
@@ -100,6 +101,7 @@ pub fn expression_type(
     expression: &Expression,
     frame: &Frame<Type>,
     globals: &Globals,
+    externals: &ExternalGlobals,
 ) -> Result<Type, Error> {
     let (start, end) = expression.range();
 
@@ -108,12 +110,18 @@ pub fn expression_type(
             Some(t) => Ok(t.clone()),
             None => match globals.get(name) {
                 Some(t) => Ok(t.clone()),
-                None => Err(Error::new(
-                    ErrorType::UnboundIdentifierError,
-                    format!("identifier '{name}' not found in scope"),
-                    start,
-                    end,
-                )),
+                None => match externals.constants.get(name) {
+                    Some((t, _)) => Ok(t.clone()),
+                    None => match externals.functions.get(name) {
+                        Some((t, _)) => Ok(t.clone()),
+                        None => Err(Error::new(
+                            ErrorType::UnboundIdentifierError,
+                            format!("identifier '{name}' not found in scope"),
+                            start,
+                            end,
+                        )),
+                    },
+                },
             },
         },
         Expression::Float { .. } => Ok(Type::F64),
@@ -121,7 +129,7 @@ pub fn expression_type(
         Expression::Tuple { inner, .. } => {
             let mut members = vec![];
             for expression in inner {
-                members.push(expression_type(expression, frame, globals)?);
+                members.push(expression_type(expression, frame, globals, externals)?);
             }
             Ok(Type::Tuple(members))
         }
@@ -129,8 +137,8 @@ pub fn expression_type(
         Expression::OpenTuple { .. } => panic!(),
 
         Expression::BinaryOp { lhs, rhs, op, .. } => {
-            let lhs_type = expression_type(lhs, frame, globals)?;
-            let rhs_type = expression_type(rhs, frame, globals)?;
+            let lhs_type = expression_type(lhs, frame, globals, externals)?;
+            let rhs_type = expression_type(rhs, frame, globals, externals)?;
 
             match &op {
                 Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp => {
@@ -243,7 +251,7 @@ pub fn expression_type(
             inner,
             ..
         } => {
-            let inner_type = expression_type(inner, frame, globals)?;
+            let inner_type = expression_type(inner, frame, globals, externals)?;
             if inner_type == Type::F64 {
                 Ok(Type::F64)
             } else {
@@ -261,7 +269,7 @@ pub fn expression_type(
             inner,
             ..
         } => {
-            let inner_type = expression_type(inner, frame, globals)?;
+            let inner_type = expression_type(inner, frame, globals, externals)?;
             if inner_type == Type::Bool {
                 Ok(Type::Bool)
             } else {
@@ -275,7 +283,7 @@ pub fn expression_type(
         }
 
         Expression::FnCall { caller, args, .. } => {
-            let caller_type = expression_type(caller, frame, globals)?;
+            let caller_type = expression_type(caller, frame, globals, externals)?;
             match caller_type {
                 Type::Function(arg_types, return_type) => {
                     let function_name = match caller.as_ref() {
@@ -298,7 +306,8 @@ pub fn expression_type(
                         ))
                     } else {
                         for (i, arg) in args.iter().enumerate() {
-                            let supplied_arg_type = expression_type(arg, frame, globals)?;
+                            let supplied_arg_type =
+                                expression_type(arg, frame, globals, externals)?;
                             if supplied_arg_type != arg_types[i] {
                                 let (arg_start, arg_end) = arg.range();
                                 return Err(Error::new(
@@ -343,6 +352,7 @@ fn typecheck_block(
     statements: &[Statement],
     frame: Option<&mut Frame<Type>>,
     globals: &Globals,
+    externals: &ExternalGlobals,
     curr_function: &str,
 ) -> Vec<Error> {
     let mut empty_frame = Frame::default();
@@ -356,30 +366,32 @@ fn typecheck_block(
 
     for statement in statements {
         match statement {
-            Statement::Let { name, ann, val, .. } => match expression_type(val, frame, globals) {
-                Ok(t) => {
-                    if let Some(ann) = ann {
-                        match annotation_type(ann) {
-                            Ok(ann_t) => {
-                                if ann_t != t {
-                                    let (val_start, val_end) = val.range();
+            Statement::Let { name, ann, val, .. } => {
+                match expression_type(val, frame, globals, externals) {
+                    Ok(t) => {
+                        if let Some(ann) = ann {
+                            match annotation_type(ann) {
+                                Ok(ann_t) => {
+                                    if ann_t != t {
+                                        let (val_start, val_end) = val.range();
 
-                                    errors.push(Error::new(
+                                        errors.push(Error::new(
                                         ErrorType::TypeError,
                                         format!("annotation '{ann_t:?}' does not match expression '{t:?}'"),
                                         val_start,
                                         val_end,
                                     ));
+                                    }
                                 }
+                                Err(error) => errors.push(error),
                             }
-                            Err(error) => errors.push(error),
                         }
+                        frame.insert(name.into(), t);
                     }
-                    frame.insert(name.into(), t);
+                    Err(error) => errors.push(error),
                 }
-                Err(error) => errors.push(error),
-            },
-            Statement::Print { val, .. } => match expression_type(val, frame, globals) {
+            }
+            Statement::Print { val, .. } => match expression_type(val, frame, globals, externals) {
                 Ok(_) => (),
                 Err(error) => errors.push(error),
             },
@@ -389,7 +401,7 @@ fn typecheck_block(
                 true_inner,
                 false_inner,
                 ..
-            } => match expression_type(cond, frame, globals) {
+            } => match expression_type(cond, frame, globals, externals) {
                 Ok(t) => {
                     if t != Type::Bool {
                         let (cond_start, cond_end) = cond.range();
@@ -403,13 +415,18 @@ fn typecheck_block(
                     }
 
                     let mut true_inner_errors =
-                        typecheck_block(true_inner, Some(frame), globals, curr_function);
+                        typecheck_block(true_inner, Some(frame), globals, externals, curr_function);
                     frame.pop_scope();
                     errors.append(&mut true_inner_errors);
 
                     if let Some(false_inner) = false_inner {
-                        let mut false_inner_errors =
-                            typecheck_block(false_inner, Some(frame), globals, curr_function);
+                        let mut false_inner_errors = typecheck_block(
+                            false_inner,
+                            Some(frame),
+                            globals,
+                            externals,
+                            curr_function,
+                        );
                         frame.pop_scope();
                         errors.append(&mut false_inner_errors);
                     }
@@ -419,7 +436,7 @@ fn typecheck_block(
             Statement::Return { start, val, .. } => match val {
                 Some(val) => {
                     let (val_start, val_end) = val.range();
-                    match expression_type(val, frame, globals) {
+                    match expression_type(val, frame, globals, externals) {
                         Ok(supplied_return_type) => {
                             if let Some(Type::Function(_, return_type)) = globals.get(curr_function)
                             {
@@ -474,7 +491,7 @@ fn typecheck_block(
     errors
 }
 
-pub fn typecheck(ast: &AST) -> Vec<Error> {
+pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> Vec<Error> {
     let mut errors: Vec<Error> = vec![];
 
     if let Some(function) = ast.get("main") {
@@ -546,6 +563,7 @@ pub fn typecheck(ast: &AST) -> Vec<Error> {
             &function.inner,
             Some(&mut frame),
             &globals,
+            externals,
             function_name,
         ));
     }
