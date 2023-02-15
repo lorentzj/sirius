@@ -53,7 +53,6 @@ button:hover, select:hover {
     background-color: var(--button-hover-color);
 }
 
-
 /*
    Home
 */
@@ -68,11 +67,17 @@ section {
     margin-top: 20px;
     padding: 50px;
     max-width: 800px;
-    border: 2px solid black;    
+    border: 2px solid black;
+    font-size: large;
 }
 
 p {
     text-indent: 2em;
+    line-height: 1.5;
+}
+
+ul, ol {
+    line-height: 1.5;
 }
 
 span.asp {
@@ -96,6 +101,27 @@ h1 {
 
 h2 {
     font-size: x-large;
+}
+
+
+code {
+    background-color: var(--primary-bg-color);        
+}
+
+code.block {
+    display: block;
+}
+
+table {
+    width: 100%;
+}
+
+th {
+    padding-bottom: 0.5em;
+}
+
+tbody tr td:first-child {
+    text-align: center;
 }
 
 /* Header */
@@ -127,7 +153,7 @@ h2 {
     user-select: none;
 }
 
-#editor {
+code, #editor {
     padding: 3px;
     white-space: pre;
     caret-color: black;
@@ -164,6 +190,10 @@ span.token.assign {
 }
 
 span.token.semicolon {
+    color: rgb(154, 88, 27);
+}
+
+span.token.colon {
     color: rgb(154, 88, 27);
 }
 
