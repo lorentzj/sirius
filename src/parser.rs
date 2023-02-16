@@ -16,7 +16,7 @@ pub enum UnaryOp {
 
 #[derive(Serialize, Clone, Debug)]
 pub enum Expression {
-    Float {
+    F64 {
         start: usize,
         val: f64,
         end: usize,
@@ -65,7 +65,7 @@ pub enum Expression {
 impl Expression {
     pub fn range(&self) -> (usize, usize) {
         match self {
-            Expression::Float { start, end, .. } => (*start, *end),
+            Expression::F64 { start, end, .. } => (*start, *end),
             Expression::Bool { start, end, .. } => (*start, *end),
             Expression::Identifier { start, end, .. } => (*start, *end),
             Expression::BinaryOp { start, end, .. } => (*start, *end),
@@ -79,7 +79,7 @@ impl Expression {
     #[cfg(test)]
     fn short_fmt(&self) -> String {
         match self {
-            Expression::Float { val, .. } => format!("{}", val),
+            Expression::F64 { val, .. } => format!("{}", val),
             Expression::Bool { val, .. } => {
                 if *val {
                     "true".into()

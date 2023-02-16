@@ -209,7 +209,7 @@ export function updateEditorWithCode(editorElem: HTMLElement, editorLinesElem: H
 }
 
 function setMouseOverHandler(editorElem: HTMLElement, codeSpan: HTMLElement, tokenId: number, highlightMap: Map<number, number[]>) {
-    let highlightMatches: number[] = [tokenId];
+    let highlightMatches: number[] = [];
     highlightMatches.push(...highlightMap.get(tokenId) || []);
 
     codeSpan.addEventListener('mouseenter', (_) => {

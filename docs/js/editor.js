@@ -195,7 +195,7 @@ export function updateEditorWithCode(editorElem, editorLinesElem, code, parseOut
     editorLinesElem.innerHTML = '1\n' + lines.join('\n');
 }
 function setMouseOverHandler(editorElem, codeSpan, tokenId, highlightMap) {
-    let highlightMatches = [tokenId];
+    let highlightMatches = [];
     highlightMatches.push(...highlightMap.get(tokenId) || []);
     codeSpan.addEventListener('mouseenter', (_) => {
         highlightMatches.forEach(tokenId => {

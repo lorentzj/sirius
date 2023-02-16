@@ -11,16 +11,17 @@
             <section>
                 <h1>✷✶✦ Sirius ✦✶✷</h1>
 
-                <p>Sirius is an array-oriented programming language for expressing algorithms with strong safety guarantees, while being easy to adopt and maintain.</p>
-    
+                <p>Sirius is an array-oriented programming language for expressing algorithms with strong safety guarantees. Its core design principle is ease-of-use: Sirius programs are easy to read, write, and maintain.</p>
+
                 <p>These docs and the language itself are under development. <span class = "asp">Anything written in this style is aspirational and not fully implemented.</span> Sirius in a nutshell:
                     <ul>
                         <li>C-family syntax</li>
+                        <li>Pass-by-value</li>
                         <li>Static type checking</li>
                         <li>Type inference within function boundaries</li>
-                        <li><span class = "asp">Ergonomic static array access checking</span></li>
                         <li><span class = "asp">Array-oriented facilities like broadcasting and fancy indexing</li>
                         <li><span class = "asp">Functional facilities like lambdas and parametric polymorphism</span></li>
+                        <li><span class = "asp">Ergonomic static array access checking</span></li>
                     </ul>
                 </p>
 
@@ -59,7 +60,7 @@
     <em><em>&lt;statements&gt;</em></em>
 <span class = "code token closecurly">}</span></code>
 
-                <p>The <code><span class = "code token keyword">else</span></code> block of <code><span class = "code token keyword">if</span></code> statements may be omitted as usual. All <code><span class = "code token keyword">let</span></code> statements may skip the type annotation.</p>
+                <p>The <code><span class = "code token keyword">else</span></code> block of <code><span class = "code token keyword">if</span></code> statements may be omitted as usual. <code><span class = "code token keyword">let</span></code> statements may omit the type annotation.</p>
 
                 <p>Expressions are constructed from <em>constants</em>, <em>identifiers</em>, and a set of left-associative operations upon them:</p>
 

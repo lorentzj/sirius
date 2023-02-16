@@ -1,99 +1,91 @@
 use std::collections::HashMap;
 
-use super::ExternalFunctionPointer;
 use crate::interpreter::Value;
 use crate::typechecker::Type;
 
 fn sin(v: &[Value]) -> Option<Value> {
-    if let Some(Value::Float(v)) = v.first() {
-        Some(Value::Float(v.sin()))
+    if let Some(Value::F64(v)) = v.first() {
+        Some(Value::F64(v.sin()))
     } else {
         panic!()
     }
 }
 
 fn cos(v: &[Value]) -> Option<Value> {
-    if let Some(Value::Float(v)) = v.first() {
-        Some(Value::Float(v.cos()))
+    if let Some(Value::F64(v)) = v.first() {
+        Some(Value::F64(v.cos()))
     } else {
         panic!()
     }
 }
 
 fn tan(v: &[Value]) -> Option<Value> {
-    if let Some(Value::Float(v)) = v.first() {
-        Some(Value::Float(v.tan()))
+    if let Some(Value::F64(v)) = v.first() {
+        Some(Value::F64(v.tan()))
     } else {
         panic!()
     }
 }
 
 fn log10(v: &[Value]) -> Option<Value> {
-    if let Some(Value::Float(v)) = v.first() {
-        Some(Value::Float(v.log10()))
+    if let Some(Value::F64(v)) = v.first() {
+        Some(Value::F64(v.log10()))
     } else {
         panic!()
     }
 }
 
 fn ln(v: &[Value]) -> Option<Value> {
-    if let Some(Value::Float(v)) = v.first() {
-        Some(Value::Float(v.ln()))
+    if let Some(Value::F64(v)) = v.first() {
+        Some(Value::F64(v.ln()))
     } else {
         panic!()
     }
 }
 
-pub fn math_constants() -> HashMap<String, (Type, Value)> {
-    let mut constants: HashMap<String, (Type, Value)> = HashMap::default();
+pub fn math_mod() -> HashMap<String, (Type, Value)> {
+    let mut vals = HashMap::default();
 
-    constants.insert("pi".into(), (Type::F64, Value::Float(std::f64::consts::PI)));
-
-    constants
-}
-
-pub fn math_functions() -> HashMap<String, (Type, ExternalFunctionPointer)> {
-    let mut functions: HashMap<String, (Type, ExternalFunctionPointer)> = HashMap::default();
-
-    functions.insert(
+    vals.insert("pi".into(), (Type::F64, Value::F64(std::f64::consts::PI)));
+    vals.insert(
         "sin".into(),
         (
-            Type::Function(vec![Type::F64], Some(Box::new(Type::F64))),
-            sin,
+            Type::Function(vec![Type::F64], Box::new(Type::F64)),
+            Value::ExternalFunction(sin),
         ),
     );
 
-    functions.insert(
+    vals.insert(
         "cos".into(),
         (
-            Type::Function(vec![Type::F64], Some(Box::new(Type::F64))),
-            cos,
+            Type::Function(vec![Type::F64], Box::new(Type::F64)),
+            Value::ExternalFunction(cos),
         ),
     );
 
-    functions.insert(
+    vals.insert(
         "tan".into(),
         (
-            Type::Function(vec![Type::F64], Some(Box::new(Type::F64))),
-            tan,
+            Type::Function(vec![Type::F64], Box::new(Type::F64)),
+            Value::ExternalFunction(tan),
         ),
     );
 
-    functions.insert(
+    vals.insert(
         "log10".into(),
         (
-            Type::Function(vec![Type::F64], Some(Box::new(Type::F64))),
-            log10,
+            Type::Function(vec![Type::F64], Box::new(Type::F64)),
+            Value::ExternalFunction(log10),
         ),
     );
 
-    functions.insert(
+    vals.insert(
         "ln".into(),
         (
-            Type::Function(vec![Type::F64], Some(Box::new(Type::F64))),
-            ln,
+            Type::Function(vec![Type::F64], Box::new(Type::F64)),
+            Value::ExternalFunction(ln),
         ),
     );
 
-    functions
+    vals
 }

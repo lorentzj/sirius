@@ -2,14 +2,16 @@ use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
 use crate::parser::{Expression, Statement, UnaryOp, AST};
 use crate::stack::Frame;
-use crate::stdlib::{ExternalFunctionPointer, ExternalGlobals};
+use crate::stdlib::ExternalGlobals;
 use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 
+pub type ExternalFunctionPointer = fn(&[Value]) -> Option<Value>;
+
 #[derive(Clone)]
 pub enum Value {
-    Float(f64),
+    F64(f64),
     Bool(bool),
     Tuple(Vec<Value>),
     Function {
@@ -34,25 +36,25 @@ fn execute_bin_op(lhs: Value, rhs: Value, op: &Op) -> Value {
     match &op {
         Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp | Op::Greater | Op::Less => {
             let coerced_lhs_float = match lhs {
-                Value::Float(v) => Some(v),
+                Value::F64(v) => Some(v),
                 Value::Bool(v) => Some(if v { 1. } else { 0. }),
                 _ => None,
             }
             .unwrap();
 
             let coerced_rhs_float = match rhs {
-                Value::Float(v) => Some(v),
+                Value::F64(v) => Some(v),
                 Value::Bool(v) => Some(if v { 1. } else { 0. }),
                 _ => None,
             }
             .unwrap();
 
             match &op {
-                Op::Add => Value::Float(coerced_lhs_float + coerced_rhs_float),
-                Op::Sub => Value::Float(coerced_lhs_float - coerced_rhs_float),
-                Op::Mul => Value::Float(coerced_lhs_float * coerced_rhs_float),
-                Op::Div => Value::Float(coerced_lhs_float / coerced_rhs_float),
-                Op::Exp => Value::Float(coerced_lhs_float.powf(coerced_rhs_float)),
+                Op::Add => Value::F64(coerced_lhs_float + coerced_rhs_float),
+                Op::Sub => Value::F64(coerced_lhs_float - coerced_rhs_float),
+                Op::Mul => Value::F64(coerced_lhs_float * coerced_rhs_float),
+                Op::Div => Value::F64(coerced_lhs_float / coerced_rhs_float),
+                Op::Exp => Value::F64(coerced_lhs_float.powf(coerced_rhs_float)),
 
                 Op::Greater => Value::Bool(coerced_lhs_float > coerced_rhs_float),
                 Op::Less => Value::Bool(coerced_lhs_float < coerced_rhs_float),
@@ -62,7 +64,7 @@ fn execute_bin_op(lhs: Value, rhs: Value, op: &Op) -> Value {
         }
 
         Op::Equal => match (lhs, rhs) {
-            (Value::Float(lv), Value::Float(rv)) => Value::Bool(lv == rv),
+            (Value::F64(lv), Value::F64(rv)) => Value::Bool(lv == rv),
             (Value::Bool(lv), Value::Bool(rv)) => Value::Bool(lv == rv),
             (Value::Tuple(lvs), Value::Tuple(rvs)) => {
                 for (lv, rv) in lvs.iter().zip(rvs.iter()) {
@@ -109,7 +111,7 @@ pub fn interpret_expression(
     output: &mut InterpreterOutput,
 ) -> Value {
     match expression {
-        Expression::Float { val, .. } => Value::Float(*val),
+        Expression::F64 { val, .. } => Value::F64(*val),
         Expression::Bool { val, .. } => Value::Bool(*val),
         Expression::BinaryOp { lhs, op, rhs, .. } => {
             let (lhs, rhs) = (
@@ -124,7 +126,7 @@ pub fn interpret_expression(
             inner,
             ..
         } => match interpret_expression(inner, frame, globals, externals, output) {
-            Value::Float(val) => Value::Float(-val),
+            Value::F64(val) => Value::F64(-val),
             _ => panic!(),
         },
 
@@ -141,12 +143,9 @@ pub fn interpret_expression(
             Some(val) => val.clone(),
             None => match globals.get(name) {
                 Some(val) => val.clone(),
-                None => match externals.constants.get(name) {
+                None => match externals.get(name) {
                     Some((_, val)) => val.clone(),
-                    None => match externals.functions.get(name) {
-                        Some((_, function_pointer)) => Value::ExternalFunction(*function_pointer),
-                        None => panic!(),
-                    },
+                    None => panic!(),
                 },
             },
         },
@@ -203,7 +202,7 @@ pub fn interpret_expression(
 
 pub fn print_value(value: Value) -> String {
     match value {
-        Value::Float(val) => val.to_string(),
+        Value::F64(val) => val.to_string(),
         Value::Bool(val) => val.to_string(),
         Value::Tuple(v) => {
             if v.is_empty() {

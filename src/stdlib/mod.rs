@@ -6,21 +6,11 @@ use std::collections::HashMap;
 
 use math as std_math;
 
-pub type ExternalFunctionPointer = fn(&[Value]) -> Option<Value>;
-pub struct ExternalGlobals {
-    pub constants: HashMap<String, (Type, Value)>,
-    pub functions: HashMap<String, (Type, ExternalFunctionPointer)>,
-}
+pub type ExternalGlobals = HashMap<String, (Type, Value)>;
 
 pub fn stdlib() -> ExternalGlobals {
-    let mut constants = HashMap::default();
-    constants.extend(std_math::math_constants());
+    let mut vals = HashMap::default();
+    vals.extend(std_math::math_mod());
 
-    let mut functions = HashMap::default();
-    functions.extend(std_math::math_functions());
-
-    ExternalGlobals {
-        constants,
-        functions,
-    }
+    vals
 }

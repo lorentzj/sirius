@@ -11,15 +11,17 @@ type Globals = HashMap<String, Type>;
 
 #[derive(PartialEq, Clone)]
 pub enum Type {
+    Void,
     F64,
     Bool,
     Tuple(Vec<Type>),
-    Function(Vec<Type>, Option<Box<Type>>),
+    Function(Vec<Type>, Box<Type>),
 }
 
 impl fmt::Debug for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Type::Void => write!(f, "void"),
             Type::F64 => write!(f, "f64"),
             Type::Bool => write!(f, "bool"),
             Type::Tuple(v) => {
@@ -50,9 +52,7 @@ impl fmt::Debug for Type {
                 res.pop();
                 res.push_str("): ");
 
-                if let Some(o) = o {
-                    res.push_str(&format!("{o:?}"));
-                }
+                res.push_str(&format!("{o:?}"));
 
                 write!(f, "{res}")
             }
@@ -110,21 +110,18 @@ pub fn expression_type(
             Some(t) => Ok(t.clone()),
             None => match globals.get(name) {
                 Some(t) => Ok(t.clone()),
-                None => match externals.constants.get(name) {
+                None => match externals.get(name) {
                     Some((t, _)) => Ok(t.clone()),
-                    None => match externals.functions.get(name) {
-                        Some((t, _)) => Ok(t.clone()),
-                        None => Err(Error::new(
-                            ErrorType::UnboundIdentifierError,
-                            format!("identifier '{name}' not found in scope"),
-                            start,
-                            end,
-                        )),
-                    },
+                    None => Err(Error::new(
+                        ErrorType::UnboundIdentifierError,
+                        format!("identifier '{name}' not found in scope"),
+                        start,
+                        end,
+                    )),
                 },
             },
         },
-        Expression::Float { .. } => Ok(Type::F64),
+        Expression::F64 { .. } => Ok(Type::F64),
         Expression::Bool { .. } => Ok(Type::Bool),
         Expression::Tuple { inner, .. } => {
             let mut members = vec![];
@@ -325,16 +322,7 @@ pub fn expression_type(
                             }
                         }
 
-                        if let Some(return_type) = return_type {
-                            Ok(*return_type)
-                        } else {
-                            Err(Error::new(
-                                ErrorType::TypeError,
-                                format!("{function_name} has void return type"),
-                                start,
-                                end,
-                            ))
-                        }
+                        Ok(*return_type)
                     }
                 }
                 t => Err(Error::new(
@@ -440,22 +428,11 @@ fn typecheck_block(
                         Ok(supplied_return_type) => {
                             if let Some(Type::Function(_, return_type)) = globals.get(curr_function)
                             {
-                                if let Some(return_type) = return_type {
-                                    if *return_type.as_ref() != supplied_return_type {
-                                        errors.push(Error::new(
-                                            ErrorType::TypeError,
-                                            format!(
-                                                "return type of function '{curr_function}' should be '{return_type:?}'; found '{supplied_return_type:?}'"
-                                            ),
-                                            val_start,
-                                            val_end,
-                                        ));
-                                    }
-                                } else {
+                                if *return_type.as_ref() != supplied_return_type {
                                     errors.push(Error::new(
                                         ErrorType::TypeError,
                                         format!(
-                                            "return type of function '{curr_function}' should be void; found '{supplied_return_type:?}'"
+                                            "return type of function '{curr_function}' should be '{return_type:?}'; found '{supplied_return_type:?}'"
                                         ),
                                         val_start,
                                         val_end,
@@ -472,12 +449,14 @@ fn typecheck_block(
                         continue;
                     };
 
-                    if return_type.is_some() {
+                    if let Type::Void = **return_type {
+                        continue;
+                    } else {
                         errors.push(Error::new(
                             ErrorType::TypeError,
                             format!(
-                                "return type of function '{curr_function}' should be '{:?}'; found void",
-                                return_type.as_ref().unwrap()
+                                "return type of function '{curr_function}' should be '{:?}'; found 'void'",
+                                return_type.as_ref()
                             ),
                             *start,
                             *start + 1,
@@ -532,13 +511,13 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> Vec<Error> {
 
             let return_type = match &function.return_type {
                 Some(return_type) => match annotation_type(return_type) {
-                    Ok(t) => Some(Box::new(t)),
+                    Ok(t) => Box::new(t),
                     Err(error) => {
                         errors.push(error);
-                        None
+                        Box::new(Type::Void)
                     }
                 },
-                None => None,
+                None => Box::new(Type::Void),
             };
 
             Some((name.clone(), Type::Function(arg_types, return_type)))

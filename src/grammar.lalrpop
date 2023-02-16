@@ -24,8 +24,8 @@ pub Fn: Function = {
 
 FnSigParams: Vec<(String, Expression)> = {
     <start: @L> "(" <arg_list: FnSigParamsInner> ")" <end: @R> => {
-        highlight_map.insert(start, vec![end - 1]);
-        highlight_map.insert(end - 1, vec![start]);
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
 
         arg_list
     }
@@ -96,8 +96,8 @@ pub Stmt: Statement = {
 
 pub Block: Vec<Statement> = {
     <start: @L> "{" <inner: Stmt*> "}" <end: @R> => {
-        highlight_map.insert(start, vec![end - 1]);
-        highlight_map.insert(end - 1, vec![start]);
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
         inner
     }
 }
@@ -214,15 +214,15 @@ pub Expr: Box<Expression> = {
 
 FnCallParams: Vec<Expression> = {
     <start: @L> "(" <arg: Expr> ")" <end: @R> => {
-        highlight_map.insert(start, vec![end - 1]);
-        highlight_map.insert(end - 1, vec![start]);
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
 
         vec![*arg]
     },
 
     <start: @L> "(" <args: OpenTuple> ")" <end: @R> => {
-        highlight_map.insert(start, vec![end - 1]);
-        highlight_map.insert(end - 1, vec![start]);
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
 
         match *args {
             Expression::OpenTuple{inner, ..} => inner,
@@ -269,14 +269,14 @@ OpenTuple: Box<Expression> = {
 Term: Box<Expression> = {
     <start: @L> <val: "true"> <end: @R> => Box::new(Expression::Bool{start, val: true, end}),
     <start: @L> <val: "false"> <end: @R> => Box::new(Expression::Bool{start, val: false, end}),
-    <start: @L> <val: "float"> <end: @R> => Box::new(Expression::Float{<>}),
+    <start: @L> <val: "float"> <end: @R> => Box::new(Expression::F64{<>}),
     <start: @L> <name: "identifier"> <end: @R> => Box::new(Expression::Identifier{<>}),
     <start: @L> "(" <inner: Expr> ")" <end: @R> => {
-        highlight_map.insert(start, vec![end - 1]);
-        highlight_map.insert(end - 1, vec![start]);
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
         match *inner {
             Expression::Bool{val, ..} => Box::new(Expression::Bool{ start, val, end }),
-            Expression::Float{val, ..} => Box::new(Expression::Float{ start, val, end }),
+            Expression::F64{val, ..} => Box::new(Expression::F64{ start, val, end }),
             Expression::Identifier{name, ..} => Box::new(Expression::Identifier{ start, name, end }),
             Expression::BinaryOp{lhs, op, rhs, ..} => Box::new(Expression::BinaryOp{ start, lhs, op, rhs, end }),
             Expression::UnaryOp{op, inner, ..} => Box::new(Expression::UnaryOp{ start, op, inner, end }),
@@ -286,8 +286,8 @@ Term: Box<Expression> = {
         }
     },
     <start: @L> "(" <inner: OpenTuple> ")" <end: @R> => {
-        highlight_map.insert(start, vec![end - 1]);
-        highlight_map.insert(end - 1, vec![start]);
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
         match *inner {
             Expression::OpenTuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
             _ => panic!()
