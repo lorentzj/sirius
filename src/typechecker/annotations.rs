@@ -18,8 +18,12 @@ pub fn type_annotations(ast: &TypedAST) -> HashMap<usize, String> {
             TypedExpression::F64 { start, .. } => {
                 annotations.insert(start, format!("{:?}", Type::F64));
             }
-            TypedExpression::I64 { start, .. } => {
-                annotations.insert(start, format!("{:?}", Type::I64));
+            TypedExpression::I64 { start, val, .. } => {
+                if val >= 0 && val <= usize::MAX as i64 {
+                    annotations.insert(start, format!("i64({val})"));
+                } else {
+                    annotations.insert(start, "i64".into());
+                }
             }
             TypedExpression::BinaryOp { lhs, rhs, .. } => {
                 annotations.extend(annotations_from_expression(*lhs));

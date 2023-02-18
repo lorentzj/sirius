@@ -15,14 +15,14 @@ pub fn arith_coerce(
         "arithmetic"
     };
 
-    if lhs != Type::F64 && lhs != Type::I64 && lhs != Type::Bool {
+    if lhs != Type::F64 && !lhs.is_int() && lhs != Type::Bool {
         Err(Error::new(
             ErrorType::TypeError,
             format!("cannot apply {op_type} operator to '{lhs:?}'"),
             start,
             end,
         ))
-    } else if rhs != Type::F64 && rhs != Type::I64 && rhs != Type::Bool {
+    } else if rhs != Type::F64 && !rhs.is_int() && rhs != Type::Bool {
         Err(Error::new(
             ErrorType::TypeError,
             format!("cannot apply {op_type} operator to '{rhs:?}'"),
@@ -38,7 +38,31 @@ pub fn arith_coerce(
         match op {
             Op::Greater | Op::Less => Ok(Type::Bool),
             Op::Exp => Ok(Type::F64),
-            _ => Ok(Type::I64),
+            _ => {
+                if let Type::I64 { nat: Some(lnat) } = lhs {
+                    if let Type::I64 { nat: Some(rnat) } = rhs {
+                        let res = match op {
+                            Op::Add => (lnat as i64) + (rnat as i64),
+                            Op::Sub => (lnat as i64) - (rnat as i64),
+                            Op::Mul => (lnat as i64) * (rnat as i64),
+                            Op::Div => (lnat as i64) / (rnat as i64),
+                            _ => panic!(),
+                        };
+
+                        if res >= 0 && res <= usize::MAX as i64 {
+                            Ok(Type::I64 {
+                                nat: Some(res as usize),
+                            })
+                        } else {
+                            Ok(Type::I64 { nat: None })
+                        }
+                    } else {
+                        Ok(Type::I64 { nat: None })
+                    }
+                } else {
+                    Ok(Type::I64 { nat: None })
+                }
+            }
         }
     }
 }

@@ -19,10 +19,16 @@ pub enum Type {
     Unknown,
     Void,
     F64,
-    I64,
+    I64 { nat: Option<usize> },
     Bool,
     Tuple(Vec<Type>),
     Function(Vec<Type>, Box<Type>),
+}
+
+impl Type {
+    fn is_int(&self) -> bool {
+        matches!(self, Type::I64 { .. })
+    }
 }
 
 impl fmt::Debug for Type {
@@ -31,7 +37,10 @@ impl fmt::Debug for Type {
             Type::Unknown => write!(f, "unknown"),
             Type::Void => write!(f, "void"),
             Type::F64 => write!(f, "f64"),
-            Type::I64 => write!(f, "i64"),
+            Type::I64 { nat } => match nat {
+                Some(nat) => write!(f, "i64(nat={nat})"),
+                None => write!(f, "i64"),
+            },
             Type::Bool => write!(f, "bool"),
             Type::Tuple(v) => {
                 if v.is_empty() {
@@ -128,7 +137,15 @@ impl TypedExpression {
     pub fn get_type(&self) -> Type {
         match self {
             TypedExpression::F64 { .. } => Type::F64,
-            TypedExpression::I64 { .. } => Type::I64,
+            TypedExpression::I64 { val, .. } => {
+                if *val >= 0 && *val <= usize::MAX as i64 {
+                    Type::I64 {
+                        nat: Some(*val as usize),
+                    }
+                } else {
+                    Type::I64 { nat: None }
+                }
+            }
             TypedExpression::Bool { .. } => Type::Bool,
             TypedExpression::Identifier { t, .. } => t.clone(),
             TypedExpression::BinaryOp { t, .. } => t.clone(),
@@ -182,7 +199,7 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, Error> {
             if name.eq("f64") {
                 Ok(Type::F64)
             } else if name.eq("i64") {
-                Ok(Type::I64)
+                Ok(Type::I64 { nat: None })
             } else if name.eq("bool") {
                 Ok(Type::Bool)
             } else if name.eq("void") {
@@ -384,9 +401,9 @@ pub fn expression_type(
                     inner: Box::new(inner_expr),
                     end: *end,
                 })
-            } else if inner_expr.get_type() == Type::I64 {
+            } else if let Type::I64 { .. } = inner_expr.get_type() {
                 Ok(TypedExpression::UnaryOp {
-                    t: Type::I64,
+                    t: Type::I64 { nat: None },
                     start: *start,
                     op: UnaryOp::ArithNeg,
                     inner: Box::new(inner_expr),
@@ -482,13 +499,22 @@ pub fn expression_type(
                             }
                         }
 
-                        Ok(TypedExpression::FnCall {
-                            t: *return_type,
-                            start: *start,
-                            caller: Box::new(caller_expr),
-                            args: typed_args,
-                            end: *end,
-                        })
+                        if *return_type == Type::Void {
+                            Err(Error::new(
+                                ErrorType::TypeError,
+                                format!("return type of {function_name} is 'void'"),
+                                *start,
+                                *end,
+                            ))
+                        } else {
+                            Ok(TypedExpression::FnCall {
+                                t: *return_type,
+                                start: *start,
+                                caller: Box::new(caller_expr),
+                                args: typed_args,
+                                end: *end,
+                            })
+                        }
                     }
                 }
                 t => Err(Error::new(
@@ -536,11 +562,11 @@ fn typecheck_block(
                                     let (val_start, val_end) = val.range();
 
                                     errors.push(Error::new(
-                                            ErrorType::TypeError,
-                                            format!("annotation '{ann_t:?}' does not match expression '{:?}'", typed_expr.get_type()),
-                                            val_start,
-                                            val_end,
-                                        ));
+                                        ErrorType::TypeError,
+                                        format!("annotation '{ann_t:?}' does not match expression '{:?}'", typed_expr.get_type()),
+                                        val_start,
+                                        val_end,
+                                    ));
                                 }
                             }
                             Err(error) => errors.push(error),

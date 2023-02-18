@@ -27,7 +27,7 @@ pub fn equality_check(lhs: &Type, rhs: &Type) -> Result<(), String> {
                 )),
             },
             Type::F64 => {
-                if rhs == &Type::I64 {
+                if let Type::I64 { .. } = rhs {
                     Ok(())
                 } else {
                     Err(format!(
@@ -35,7 +35,7 @@ pub fn equality_check(lhs: &Type, rhs: &Type) -> Result<(), String> {
                     ))
                 }
             }
-            Type::I64 => {
+            Type::I64 { .. } => {
                 if rhs == &Type::F64 {
                     Ok(())
                 } else {
