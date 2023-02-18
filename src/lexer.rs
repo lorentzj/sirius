@@ -17,6 +17,7 @@ pub enum Op {
     Greater,
     Less,
     Equal,
+    NotEqual,
     Comma,
 }
 
@@ -35,6 +36,7 @@ impl fmt::Debug for Op {
             Op::Greater => write!(f, ">"),
             Op::Less => write!(f, "<"),
             Op::Equal => write!(f, "=="),
+            Op::NotEqual => write!(f, "=="),
             Op::Comma => write!(f, ","),
         }
     }

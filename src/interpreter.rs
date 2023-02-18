@@ -78,6 +78,21 @@ fn execute_bin_op(lhs: Value, rhs: Value, op: &Op) -> Value {
             _ => panic!(),
         },
 
+        Op::NotEqual => match (lhs, rhs) {
+            (Value::F64(lv), Value::F64(rv)) => Value::Bool(lv != rv),
+            (Value::Bool(lv), Value::Bool(rv)) => Value::Bool(lv != rv),
+            (Value::Tuple(lvs), Value::Tuple(rvs)) => {
+                for (lv, rv) in lvs.iter().zip(rvs.iter()) {
+                    if let Value::Bool(true) = execute_bin_op(lv.clone(), rv.clone(), &Op::NotEqual)
+                    {
+                        return Value::Bool(true);
+                    }
+                }
+                Value::Bool(false)
+            }
+            _ => panic!(),
+        },
+
         Op::And | Op::Or => {
             let coerced_lhs_bool = match lhs {
                 Value::Bool(v) => Some(v),

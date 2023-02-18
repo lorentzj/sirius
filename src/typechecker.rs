@@ -375,7 +375,7 @@ pub fn expression_type(
                     }
                 },
 
-                Op::Equal => {
+                Op::Equal | Op::NotEqual => {
                     if let Type::Function(_, _) = lhs.get_type() {
                         Err(Error::new(
                             ErrorType::TypeError,

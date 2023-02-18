@@ -42,13 +42,13 @@
                 <p>The Sirius syntax will be familiar to users of Rust, Typescript, and similar. The grammar is LR(1); a more precise specification can be found <a href = "https://github.com/lorentzj/sirius/blob/main/src/grammar.lalrpop">in the reference parser</a>.</p>
 
                 <p>A Sirius source file is a series of <em>functions</em>:</p>
-                <code class = "block"><span class = "code token keyword">fn</span> <span class = "code token identifier">function_name</span><span class = "code token openparen">(</span><span class = "code token identifier">arg</span><span class = "code token colon">:</span> <span class = "code token identifier type">ArgType</span><span class = "code token operator">,</span> ...<span class = "code token closeparen">)</span><span class = "code token colon">:</span> <span class = "code token identifier type">ReturnType</span> <span class = "code token opencurly">{</span>
+                <code class = "block"><span class = "code token keyword">fn</span> <span class = "code token identifier">function_name</span><span class = "code token openparen">(</span><span class = "code token identifier">arg</span><span class = "code token colon">:</span> <em>&lt;arg type annotation&gt;</em><span class = "code token operator">,</span> ...<span class = "code token closeparen">)</span><span class = "code token colon">:</span> <em>&lt;return type annotation&gt;</em> <span class = "code token opencurly">{</span>
     <em><em>&lt;statements&gt;</em></em>
 <span class = "code token closecurly">}</span></code>
 
-                <p>The return type may be omitted, in which case the function will return void. There are four forms of <em>statement</em>:</p>
+                <p>The return type may be omitted, in which case the function will return <code><span class = "code token identifier type">void</span></code>. There are four forms of <em>statement</em>:</p>
 
-                <code class = "block"><span class = "code token keyword">let</span> <span class = "code token identifier">x</span><span class = "code token colon">:</span> <em>&lt;annotation&gt;</em> <span class = "code token assign">=</span> <em>&lt;expression&gt;</em><span class = "code token semicolon">;</span></code>
+                <code class = "block"><span class = "code token keyword">let</span> <span class = "code token identifier">x</span><span class = "code token colon">:</span> <em>&lt;type annotation&gt;</em> <span class = "code token assign">=</span> <em>&lt;expression&gt;</em><span class = "code token semicolon">;</span></code>
                 <br>
                 <code class = "block"><span class = "code token keyword">print</span> <em>&lt;expression&gt;</em><span class = "code token semicolon">;</span></code>
                 <br>
@@ -156,6 +156,12 @@
                             <td>Equal</td>
                             <td>Binary Comparison</td>
                             <td><code><span class = "code token identifier">a</span><span class = "code token operator">==</span><span class = "code token identifier">b</span></code></td>
+                        </tr>
+                        <tr>
+                            <td>7</td>
+                            <td>Not Equal</td>
+                            <td>Binary Comparison</td>
+                            <td><code><span class = "code token identifier">a</span><span class = "code token operator">!=</span><span class = "code token identifier">b</span></code></td>
                         </tr>
                         <tr>
                             <td>8</td>

@@ -66,7 +66,7 @@ section {
     margin: auto;
     margin-top: 20px;
     padding: 50px;
-    max-width: 800px;
+    max-width: 1000px;
     border: 2px solid black;
     font-size: large;
 }
@@ -186,15 +186,15 @@ span.token.keyword {
 }
 
 span.token.assign {
-    color: rgb(154, 88, 27);
+    color: rgb(189, 173, 83);
 }
 
 span.token.semicolon {
-    color: rgb(154, 88, 27);
+    color: rgb(189, 173, 83);
 }
 
 span.token.colon {
-    color: rgb(154, 88, 27);
+    color: rgb(189, 173, 83);
 }
 
 span.token.operator {
