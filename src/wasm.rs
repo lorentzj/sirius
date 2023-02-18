@@ -15,7 +15,7 @@ pub fn parse(code: String) -> String {
     let mut parsed = parser::parse(&code);
 
     if parsed.errors.is_empty() {
-        let mut typecheck = typechecker::typecheck(&parsed.ast, &stdlib());
+        let (_, mut typecheck) = typechecker::typecheck(&parsed.ast, &stdlib());
         parsed.errors.append(&mut typecheck);
 
         let mut flowcheck = flow::check_flow(&parsed.ast);
@@ -33,7 +33,7 @@ pub fn interpret(code: String) -> String {
     let stdlib = stdlib();
 
     if parsed.errors.is_empty() {
-        let mut typecheck = typechecker::typecheck(&parsed.ast, &stdlib);
+        let (_, mut typecheck) = typechecker::typecheck(&parsed.ast, &stdlib);
         parsed.errors.append(&mut typecheck);
 
         let mut flowcheck = flow::check_flow(&parsed.ast);
