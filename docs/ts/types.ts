@@ -25,7 +25,7 @@ export type ParserOutput = {
     errors: Error[],
     typeTokens: Set<number>,
     highlightMap: Map<number, number[]>
-    ast: any
+    annotations: Map<number, string>
 };
 
 export type InterpreterOutput = {

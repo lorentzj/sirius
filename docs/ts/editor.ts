@@ -168,7 +168,7 @@ export function updateEditorWithCode(editorElem: HTMLElement, editorLinesElem: H
         while(token_i < parseOutput.tokens.length && parseOutput.tokens[token_i].line === line) {
             const before_token_code = lineCode.slice(line_i, parseOutput.tokens[token_i].start);
             if(before_token_code.length > 0) {
-                const before_token_code_span = createCodeSpan(null, null, false);
+                const before_token_code_span = createCodeSpan(null, null, false, undefined);
                 before_token_code_span.textContent = before_token_code;
                 before_token_code_span.dataset['charStart'] = line_i.toString();
                 before_token_code_span.dataset['charEnd'] = (line_i + before_token_code.length).toString();
@@ -176,7 +176,13 @@ export function updateEditorWithCode(editorElem: HTMLElement, editorLinesElem: H
             }
 
             const token_code = lineCode.slice(parseOutput.tokens[token_i].start, parseOutput.tokens[token_i].end);
-            const token_code_span = createCodeSpan(parseOutput.tokens[token_i], token_i, parseOutput.typeTokens.has(token_i));
+            const token_code_span = createCodeSpan(
+                parseOutput.tokens[token_i],
+                token_i,
+                parseOutput.typeTokens.has(token_i),
+                parseOutput.annotations.get(token_i)
+            );
+
             setMouseOverHandler(editorElem, token_code_span, token_i, parseOutput.highlightMap);
             token_code_span.textContent = token_code;
             lineElement.appendChild(token_code_span);
@@ -187,7 +193,7 @@ export function updateEditorWithCode(editorElem: HTMLElement, editorLinesElem: H
 
         const after_token_code = lineCode.slice(line_i, undefined);
         if(after_token_code.length > 0) {
-            const after_token_code_span = createCodeSpan(null, null, false);
+            const after_token_code_span = createCodeSpan(null, null, false, undefined);
             after_token_code_span.textContent = after_token_code;
             after_token_code_span.dataset['charStart'] = line_i.toString();
             after_token_code_span.dataset['charEnd'] = (line_i + after_token_code.length).toString();
@@ -249,7 +255,7 @@ export function updateEditorWithErrors(errors: types.Error[], editorElem: HTMLEl
     });
 }
 
-function createCodeSpan(token: types.Token | null, i: number | null, isType: boolean): HTMLElement {
+function createCodeSpan(token: types.Token | null, i: number | null, isType: boolean, annotation: string | undefined): HTMLElement {
     const span = document.createElement('span');
     span.classList.add('code');
     if(i !== null) {
@@ -276,5 +282,10 @@ function createCodeSpan(token: types.Token | null, i: number | null, isType: boo
             span.classList.add('type');
         }
     }
+
+    if(annotation !== undefined) {
+        span.title = annotation;
+    }
+
     return span;
 }

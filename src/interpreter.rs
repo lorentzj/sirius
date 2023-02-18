@@ -1,8 +1,9 @@
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
-use crate::parser::{Expression, Statement, UnaryOp, AST};
+use crate::parser::UnaryOp;
 use crate::stack::Frame;
 use crate::stdlib::ExternalGlobals;
+use crate::typechecker::{TypedAST, TypedExpression, TypedStatement};
 use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
@@ -16,7 +17,7 @@ pub enum Value {
     Tuple(Vec<Value>),
     Function {
         arg_names: Vec<String>,
-        statements: Vec<Statement>,
+        statements: Vec<TypedStatement>,
     },
     ExternalFunction(ExternalFunctionPointer),
 }
@@ -104,16 +105,16 @@ fn execute_bin_op(lhs: Value, rhs: Value, op: &Op) -> Value {
 }
 
 pub fn interpret_expression(
-    expression: &Expression,
+    expression: &TypedExpression,
     frame: &mut Frame<Value>,
     globals: &Globals,
     externals: &ExternalGlobals,
     output: &mut InterpreterOutput,
 ) -> Value {
     match expression {
-        Expression::F64 { val, .. } => Value::F64(*val),
-        Expression::Bool { val, .. } => Value::Bool(*val),
-        Expression::BinaryOp { lhs, op, rhs, .. } => {
+        TypedExpression::F64 { val, .. } => Value::F64(*val),
+        TypedExpression::Bool { val, .. } => Value::Bool(*val),
+        TypedExpression::BinaryOp { lhs, op, rhs, .. } => {
             let (lhs, rhs) = (
                 interpret_expression(lhs, frame, globals, externals, output),
                 interpret_expression(rhs, frame, globals, externals, output),
@@ -121,7 +122,7 @@ pub fn interpret_expression(
             execute_bin_op(lhs, rhs, op)
         }
 
-        Expression::UnaryOp {
+        TypedExpression::UnaryOp {
             op: UnaryOp::ArithNeg,
             inner,
             ..
@@ -130,7 +131,7 @@ pub fn interpret_expression(
             _ => panic!(),
         },
 
-        Expression::UnaryOp {
+        TypedExpression::UnaryOp {
             op: UnaryOp::BoolNeg,
             inner,
             ..
@@ -139,7 +140,7 @@ pub fn interpret_expression(
             _ => panic!(),
         },
 
-        Expression::Identifier { name, .. } => match frame.get(name) {
+        TypedExpression::Identifier { name, .. } => match frame.get(name) {
             Some(val) => val.clone(),
             None => match globals.get(name) {
                 Some(val) => val.clone(),
@@ -150,7 +151,7 @@ pub fn interpret_expression(
             },
         },
 
-        Expression::Tuple { inner, .. } => {
+        TypedExpression::Tuple { inner, .. } => {
             let mut members = vec![];
             for expression in inner {
                 members.push(interpret_expression(
@@ -160,7 +161,7 @@ pub fn interpret_expression(
             Value::Tuple(members)
         }
 
-        Expression::FnCall { caller, args, .. } => {
+        TypedExpression::FnCall { caller, args, .. } => {
             match interpret_expression(caller, frame, globals, externals, output) {
                 Value::Function {
                     arg_names,
@@ -195,8 +196,6 @@ pub fn interpret_expression(
                 _ => panic!(),
             }
         }
-
-        Expression::OpenTuple { .. } => panic!(),
     }
 }
 
@@ -226,7 +225,7 @@ pub fn print_value(value: Value) -> String {
 }
 
 fn interpret_block(
-    block: &[Statement],
+    block: &[TypedStatement],
     frame: Option<&mut Frame<Value>>,
     globals: &Globals,
     externals: &ExternalGlobals,
@@ -244,17 +243,17 @@ fn interpret_block(
 
     for statement in block {
         match statement {
-            Statement::Let { name, val, .. } => {
+            TypedStatement::Let { name, val, .. } => {
                 let val = interpret_expression(val, frame, globals, externals, output);
                 frame.insert(name.clone(), val);
                 defined_idents.insert(name.clone());
             }
-            Statement::Print { val, .. } => {
+            TypedStatement::Print { val, .. } => {
                 let val = interpret_expression(val, frame, globals, externals, output);
                 output.stdout.push_str(&print_value(val));
                 output.stdout.push('\n');
             }
-            Statement::If {
+            TypedStatement::If {
                 cond,
                 true_inner,
                 false_inner,
@@ -278,7 +277,7 @@ fn interpret_block(
                 frame.pop_scope();
             }
 
-            Statement::Return { val, .. } => {
+            TypedStatement::Return { val, .. } => {
                 match val {
                     Some(val) => {
                         output.value =
@@ -294,7 +293,7 @@ fn interpret_block(
     true
 }
 
-pub fn interpret(ast: AST, externals: &ExternalGlobals) -> InterpreterOutput {
+pub fn interpret(ast: TypedAST, externals: &ExternalGlobals) -> InterpreterOutput {
     let mut output = InterpreterOutput {
         stdout: String::new(),
         value: None,

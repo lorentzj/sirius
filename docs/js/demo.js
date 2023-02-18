@@ -44,11 +44,16 @@ document.body.onload = () => {
             const updateEditor = () => {
                 const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n')));
                 parsed.typeTokens = new Set(parsed.typeTokens);
-                let map = new Map();
+                let hl_map = new Map();
                 Object.keys(parsed.highlightMap).forEach(key => {
-                    map.set(Number.parseInt(key), parsed.highlightMap[key]);
+                    hl_map.set(Number.parseInt(key), parsed.highlightMap[key]);
                 });
-                parsed.highlightMap = map;
+                parsed.highlightMap = hl_map;
+                let ann_map = new Map();
+                Object.keys(parsed.annotations).forEach(key => {
+                    ann_map.set(Number.parseInt(key), parsed.annotations[key]);
+                });
+                parsed.annotations = ann_map;
                 editor.updateEditorWithCode(editorElem, editorLinesElem, codeLines.code, parsed);
                 editor.updateEditorWithErrors(parsed.errors, editorElem);
                 editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem);

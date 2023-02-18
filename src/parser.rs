@@ -232,6 +232,7 @@ pub struct ParserOutput {
     pub errors: Vec<Error>,
     pub type_tokens: Vec<usize>,
     pub highlight_map: HashMap<usize, Vec<usize>>,
+    pub annotations: HashMap<usize, String>,
     pub ast: AST,
 }
 
@@ -277,6 +278,7 @@ pub fn parse(code: &str) -> ParserOutput {
                 type_tokens,
                 highlight_map,
                 ast,
+                annotations: HashMap::default(),
             };
         }
 
@@ -327,6 +329,7 @@ pub fn parse(code: &str) -> ParserOutput {
         type_tokens: vec![],
         highlight_map: HashMap::default(),
         ast: HashMap::default(),
+        annotations: HashMap::default(),
     }
 }
 

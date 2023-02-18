@@ -15,8 +15,11 @@ pub fn parse(code: String) -> String {
     let mut parsed = parser::parse(&code);
 
     if parsed.errors.is_empty() {
-        let (_, mut typecheck) = typechecker::typecheck(&parsed.ast, &stdlib());
+        let (typed_ast, mut typecheck) = typechecker::typecheck(&parsed.ast, &stdlib());
         parsed.errors.append(&mut typecheck);
+        parsed
+            .annotations
+            .extend(typechecker::type_annotations(&typed_ast));
 
         let mut flowcheck = flow::check_flow(&parsed.ast);
         parsed.errors.append(&mut flowcheck);
@@ -33,24 +36,34 @@ pub fn interpret(code: String) -> String {
     let stdlib = stdlib();
 
     if parsed.errors.is_empty() {
-        let (_, mut typecheck) = typechecker::typecheck(&parsed.ast, &stdlib);
+        let (typed_ast, mut typecheck) = typechecker::typecheck(&parsed.ast, &stdlib);
         parsed.errors.append(&mut typecheck);
+        parsed
+            .annotations
+            .extend(typechecker::type_annotations(&typed_ast));
 
         let mut flowcheck = flow::check_flow(&parsed.ast);
         parsed.errors.append(&mut flowcheck);
-    }
 
-    let output = if parsed.errors.is_empty() {
-        interpreter::interpret(parsed.ast, &stdlib)
+        let output = if parsed.errors.is_empty() {
+            interpreter::interpret(typed_ast, &stdlib)
+        } else {
+            interpreter::InterpreterOutput {
+                stdout: "".into(),
+                value: None,
+                error: None,
+            }
+        };
+
+        serde_json::to_string(&output).unwrap()
     } else {
-        interpreter::InterpreterOutput {
+        let output = interpreter::InterpreterOutput {
             stdout: "".into(),
             value: None,
             error: None,
-        }
-    };
-
-    serde_json::to_string(&output).unwrap()
+        };
+        serde_json::to_string(&output).unwrap()
+    }
 }
 
 #[cfg(test)]
