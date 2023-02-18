@@ -76,7 +76,7 @@ mod tests {
         }
         
         fn main() {
-            print hyp(3, 4);
+            print hyp(3., 4.);
         }
         "
         .to_string();
@@ -88,7 +88,7 @@ mod tests {
     #[test]
     fn factorial() {
         let code = "
-        fn factorial(x: f64): f64 {
+        fn factorial(x: i64): i64 {
             if x < 1 {
                 return 1;
             } else {
@@ -111,7 +111,7 @@ mod tests {
         let code = "
         fn main() {
             let a = (1, 2, (true, 4));
-            let b = (5^0, 4 - 2, (false | true, 16^0.5));
+            let b = (-2 + 3, 4 - 2, (false || true, 16/4));
             
             if a == b {
                 print true;
@@ -128,7 +128,7 @@ mod tests {
     fn externals() {
         let code = "
         fn main() {
-            let theta = 3/7;
+            let theta = 0.37;
             if sin(theta)^2 + cos(theta)^2 == 1 {
                 print true;
             }

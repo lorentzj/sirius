@@ -1,6 +1,6 @@
 fn main() {
     let a = (1, 2, (true, 4));
-    let b = (5^0, 4 - 2, (false | true, 16^0.5));
+    let b = (-2 + 3, 4 - 2, (false || true, 16/4));
     
     if a == b {
         print true;

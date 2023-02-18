@@ -1,5 +1,5 @@
 fn main() {
-    let theta = 3/7;
+    let theta = 0.37;
     if sin(theta)^2 + cos(theta)^2 == 1 {
         print true;
     }

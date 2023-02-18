@@ -8,11 +8,18 @@ use crate::parser::{Expression, Statement, UnaryOp, AST};
 use crate::stack::Frame;
 use crate::stdlib::ExternalGlobals;
 
+mod annotations;
+mod equality;
+mod number_coersion;
+
+pub use annotations::type_annotations;
+
 #[derive(PartialEq, Serialize, Clone)]
 pub enum Type {
     Unknown,
     Void,
     F64,
+    I64,
     Bool,
     Tuple(Vec<Type>),
     Function(Vec<Type>, Box<Type>),
@@ -24,6 +31,7 @@ impl fmt::Debug for Type {
             Type::Unknown => write!(f, "unknown"),
             Type::Void => write!(f, "void"),
             Type::F64 => write!(f, "f64"),
+            Type::I64 => write!(f, "i64"),
             Type::Bool => write!(f, "bool"),
             Type::Tuple(v) => {
                 if v.is_empty() {
@@ -68,6 +76,11 @@ pub enum TypedExpression {
     F64 {
         start: usize,
         val: f64,
+        end: usize,
+    },
+    I64 {
+        start: usize,
+        val: i64,
         end: usize,
     },
     Bool {
@@ -115,6 +128,7 @@ impl TypedExpression {
     pub fn get_type(&self) -> Type {
         match self {
             TypedExpression::F64 { .. } => Type::F64,
+            TypedExpression::I64 { .. } => Type::I64,
             TypedExpression::Bool { .. } => Type::Bool,
             TypedExpression::Identifier { t, .. } => t.clone(),
             TypedExpression::BinaryOp { t, .. } => t.clone(),
@@ -167,12 +181,16 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, Error> {
         Expression::Identifier { start, name, end } => {
             if name.eq("f64") {
                 Ok(Type::F64)
+            } else if name.eq("i64") {
+                Ok(Type::I64)
             } else if name.eq("bool") {
                 Ok(Type::Bool)
+            } else if name.eq("void") {
+                Ok(Type::Void)
             } else {
                 Err(Error::new(
                     ErrorType::TypeError,
-                    "only 'f64' and 'bool' are valid primitives".to_string(),
+                    "only 'f64', 'i64', 'void', and 'bool' are valid primitives".to_string(),
                     *start,
                     *end,
                 ))
@@ -241,6 +259,11 @@ pub fn expression_type(
             val: *val,
             end: *end,
         }),
+        Expression::I64 { start, val, end } => Ok(TypedExpression::I64 {
+            start: *start,
+            val: *val,
+            end: *end,
+        }),
         Expression::Bool { start, val, end } => Ok(TypedExpression::Bool {
             start: *start,
             val: *val,
@@ -275,42 +298,22 @@ pub fn expression_type(
             let rhs = expression_type(rhs, frame, globals, externals)?;
 
             match &op {
-                Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp => {
-                    match (lhs.get_type(), rhs.get_type()) {
-                        (Type::F64 | Type::Bool, Type::F64 | Type::Bool) => {
-                            Ok(TypedExpression::BinaryOp {
-                                t: Type::F64,
-                                start: *start,
-                                lhs: Box::new(lhs),
-                                op: op.clone(),
-                                rhs: Box::new(rhs),
-                                end: *end,
-                            })
-                        }
-                        _ => {
-                            if let Type::Bool | Type::F64 = lhs.get_type() {
-                                Err(Error::new(
-                                    ErrorType::TypeError,
-                                    format!(
-                                        "cannot apply arithmetic operator to '{:?}'",
-                                        rhs.get_type()
-                                    ),
-                                    *start,
-                                    *end,
-                                ))
-                            } else {
-                                Err(Error::new(
-                                    ErrorType::TypeError,
-                                    format!(
-                                        "cannot apply arithmetic operator to '{:?}'",
-                                        lhs.get_type()
-                                    ),
-                                    *start,
-                                    *end,
-                                ))
-                            }
-                        }
-                    }
+                Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp | Op::Greater | Op::Less => {
+                    let t = number_coersion::arith_coerce(
+                        *start,
+                        lhs.get_type(),
+                        op,
+                        rhs.get_type(),
+                        *end,
+                    )?;
+                    Ok(TypedExpression::BinaryOp {
+                        t,
+                        start: *start,
+                        lhs: Box::new(lhs),
+                        op: op.clone(),
+                        rhs: Box::new(rhs),
+                        end: *end,
+                    })
                 }
 
                 Op::And | Op::Or => match (lhs.get_type(), rhs.get_type()) {
@@ -341,75 +344,17 @@ pub fn expression_type(
                     }
                 },
 
-                Op::Greater | Op::Less => match (lhs.get_type(), rhs.get_type()) {
-                    (Type::F64, Type::F64) => Ok(TypedExpression::BinaryOp {
-                        t: Type::Bool,
-                        start: *start,
-                        lhs: Box::new(lhs),
-                        op: op.clone(),
-                        rhs: Box::new(rhs),
-                        end: *end,
-                    }),
-                    _ => {
-                        if Type::F64 == lhs.get_type() {
-                            Err(Error::new(
-                                ErrorType::TypeError,
-                                format!(
-                                    "cannot apply comparison operator to '{:?}'",
-                                    rhs.get_type()
-                                ),
-                                *start,
-                                *end,
-                            ))
-                        } else {
-                            Err(Error::new(
-                                ErrorType::TypeError,
-                                format!(
-                                    "cannot apply comparison operator to '{:?}'",
-                                    lhs.get_type()
-                                ),
-                                *start,
-                                *end,
-                            ))
-                        }
-                    }
-                },
-
                 Op::Equal | Op::NotEqual => {
-                    if let Type::Function(_, _) = lhs.get_type() {
-                        Err(Error::new(
-                            ErrorType::TypeError,
-                            "cannot check equality between functions".into(),
-                            *start,
-                            *end,
-                        ))
-                    } else if let Type::Function(_, _) = rhs.get_type() {
-                        Err(Error::new(
-                            ErrorType::TypeError,
-                            "cannot check equality between functions".into(),
-                            *start,
-                            *end,
-                        ))
-                    } else if lhs.get_type() == rhs.get_type() {
-                        Ok(TypedExpression::BinaryOp {
+                    match equality::equality_check(&lhs.get_type(), &rhs.get_type()) {
+                        Ok(()) => Ok(TypedExpression::BinaryOp {
                             t: Type::Bool,
                             start: *start,
                             lhs: Box::new(lhs),
                             op: op.clone(),
                             rhs: Box::new(rhs),
                             end: *end,
-                        })
-                    } else {
-                        Err(Error::new(
-                            ErrorType::TypeError,
-                            format!(
-                                "cannot check equality between '{:?}' and '{:?}'",
-                                lhs.get_type(),
-                                rhs.get_type()
-                            ),
-                            *start,
-                            *end,
-                        ))
+                        }),
+                        Err(msg) => Err(Error::new(ErrorType::TypeError, msg, *start, *end)),
                     }
                 }
 
@@ -434,6 +379,14 @@ pub fn expression_type(
             if inner_expr.get_type() == Type::F64 {
                 Ok(TypedExpression::UnaryOp {
                     t: Type::F64,
+                    start: *start,
+                    op: UnaryOp::ArithNeg,
+                    inner: Box::new(inner_expr),
+                    end: *end,
+                })
+            } else if inner_expr.get_type() == Type::I64 {
+                Ok(TypedExpression::UnaryOp {
+                    t: Type::I64,
                     start: *start,
                     op: UnaryOp::ArithNeg,
                     inner: Box::new(inner_expr),
@@ -759,12 +712,15 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
 
         if let Some(ann) = &function.return_type {
             let (ann_start, ann_end) = ann.range();
-            errors.push(Error::new(
-                ErrorType::TypeError,
-                "main should have 'void' return type".into(),
-                ann_start - 1,
-                ann_end,
-            ));
+            let ann_type = annotation_type(ann);
+            if Ok(Type::Void) != ann_type {
+                errors.push(Error::new(
+                    ErrorType::TypeError,
+                    "main should have 'void' return type".into(),
+                    ann_start - 1,
+                    ann_end,
+                ));
+            }
         }
     }
 
@@ -839,84 +795,4 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
     }
 
     (typed_ast, errors)
-}
-
-pub fn type_annotations(ast: &TypedAST) -> HashMap<usize, String> {
-    let mut annotations = HashMap::default();
-
-    fn annotations_from_expression(expr: TypedExpression) -> HashMap<usize, String> {
-        let mut annotations = HashMap::default();
-
-        match expr {
-            TypedExpression::Identifier { t, start, .. } => {
-                annotations.insert(start, format!("{t:?}"));
-            }
-            TypedExpression::Bool { start, .. } => {
-                annotations.insert(start, format!("{:?}", Type::Bool));
-            }
-            TypedExpression::F64 { start, .. } => {
-                annotations.insert(start, format!("{:?}", Type::F64));
-            }
-            TypedExpression::BinaryOp { lhs, rhs, .. } => {
-                annotations.extend(annotations_from_expression(*lhs));
-                annotations.extend(annotations_from_expression(*rhs));
-            }
-            TypedExpression::UnaryOp { inner, .. } => {
-                annotations.extend(annotations_from_expression(*inner));
-            }
-            TypedExpression::FnCall { caller, args, .. } => {
-                annotations.extend(annotations_from_expression(*caller));
-                for arg in args {
-                    annotations.extend(annotations_from_expression(arg));
-                }
-            }
-            TypedExpression::Tuple { inner, .. } => {
-                for v in inner {
-                    annotations.extend(annotations_from_expression(v));
-                }
-            }
-        };
-
-        annotations
-    }
-
-    fn annotations_from_block(block: Vec<TypedStatement>) -> HashMap<usize, String> {
-        let mut annotations = HashMap::default();
-
-        for statement in block {
-            match statement {
-                TypedStatement::Let { val, .. } => {
-                    annotations.extend(annotations_from_expression(val))
-                }
-                TypedStatement::Print { val, .. } => {
-                    annotations.extend(annotations_from_expression(val))
-                }
-                TypedStatement::Return { val, .. } => {
-                    if let Some(val) = val {
-                        annotations.extend(annotations_from_expression(val));
-                    }
-                }
-                TypedStatement::If {
-                    cond,
-                    true_inner,
-                    false_inner,
-                    ..
-                } => {
-                    annotations.extend(annotations_from_expression(cond));
-                    annotations.extend(annotations_from_block(true_inner));
-                    if let Some(false_inner) = false_inner {
-                        annotations.extend(annotations_from_block(false_inner));
-                    }
-                }
-            }
-        }
-
-        annotations
-    }
-
-    for function in ast.values() {
-        annotations.extend(annotations_from_block(function.inner.clone()))
-    }
-
-    annotations
 }

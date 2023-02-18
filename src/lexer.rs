@@ -30,13 +30,13 @@ impl fmt::Debug for Op {
             Op::Div => write!(f, "/"),
             Op::Add => write!(f, "+"),
             Op::Sub => write!(f, "-"),
-            Op::And => write!(f, "&"),
-            Op::Or => write!(f, "|"),
+            Op::And => write!(f, "&&"),
+            Op::Or => write!(f, "||"),
             Op::Not => write!(f, "!"),
             Op::Greater => write!(f, ">"),
             Op::Less => write!(f, "<"),
             Op::Equal => write!(f, "=="),
-            Op::NotEqual => write!(f, "=="),
+            Op::NotEqual => write!(f, "!="),
             Op::Comma => write!(f, ","),
         }
     }
@@ -77,6 +77,7 @@ pub enum Tok {
     CloseCurly,
     Op(Op),
     Float(f64),
+    Int(i64),
     Identifier(String),
     Keyword(Keyword),
     Assign,
@@ -94,6 +95,7 @@ impl fmt::Debug for Tok {
             Tok::CloseCurly => write!(f, "}}"),
             Tok::Op(op) => write!(f, "{op:?}"),
             Tok::Float(v) => write!(f, "{v}"),
+            Tok::Int(v) => write!(f, "{v}"),
             Tok::Identifier(n) => write!(f, "{n}"),
             Tok::Keyword(k) => write!(f, "{k:?}"),
             Tok::Assign => write!(f, "="),
@@ -124,16 +126,24 @@ fn parse_substring(s: &str) -> Result<Tok, String> {
     } else {
         match s.chars().next() {
             Some('0'..='9') => {
-                let parsed_number = String::from_iter(s.chars()).parse::<f64>();
-                match parsed_number {
-                    Ok(n) => {
-                        if n.is_infinite() {
-                            Err("number overflowed f64".into())
-                        } else {
-                            Ok(Tok::Float(n))
+                if s.contains('.') {
+                    let parsed_number = String::from_iter(s.chars()).parse::<f64>();
+                    match parsed_number {
+                        Ok(n) => {
+                            if n.is_infinite() {
+                                Err("number overflowed f64".into())
+                            } else {
+                                Ok(Tok::Float(n))
+                            }
                         }
+                        Err(msg) => Err(msg.to_string()),
                     }
-                    Err(msg) => Err(msg.to_string()),
+                } else {
+                    let parsed_number = String::from_iter(s.chars()).parse::<i64>();
+                    match parsed_number {
+                        Ok(n) => Ok(Tok::Int(n)),
+                        Err(msg) => Err(msg.to_string()),
+                    }
                 }
             }
             _ => match s {
@@ -206,7 +216,13 @@ impl<'input> Iterator for Lexer<'input> {
 
                     if self.last_equal {
                         self.last_equal = false;
-                        return Some(Token::new(Tok::Assign, self.line, self.col - 1, self.col));
+                        self.col += 1;
+                        return Some(Token::new(
+                            Tok::Assign,
+                            self.line,
+                            self.col - 2,
+                            self.col - 1,
+                        ));
                     }
                 }
 
@@ -497,7 +513,7 @@ mod tests {
 
     #[test]
     fn one_line() {
-        let test_str = "(abcdef + g * 12)^2/hij";
+        let test_str = "(abcdef + g * 12)^2.0/hij";
         let tokens: Vec<Token> = Lexer::new(test_str).collect();
 
         let expected_tokens = vec![
@@ -506,12 +522,12 @@ mod tests {
             Token::new(Tok::Op(Op::Add), 0, 8, 9),
             Token::new(Tok::Identifier("g".into()), 0, 10, 11),
             Token::new(Tok::Op(Op::Mul), 0, 12, 13),
-            Token::new(Tok::Float(12.0), 0, 14, 16),
+            Token::new(Tok::Int(12), 0, 14, 16),
             Token::new(Tok::CloseParen, 0, 16, 17),
             Token::new(Tok::Op(Op::Exp), 0, 17, 18),
-            Token::new(Tok::Float(2.0), 0, 18, 19),
-            Token::new(Tok::Op(Op::Div), 0, 19, 20),
-            Token::new(Tok::Identifier("hij".into()), 0, 20, 23),
+            Token::new(Tok::Float(2.0), 0, 18, 21),
+            Token::new(Tok::Op(Op::Div), 0, 21, 22),
+            Token::new(Tok::Identifier("hij".into()), 0, 22, 25),
         ];
 
         assert_eq!(tokens, expected_tokens);
@@ -540,12 +556,12 @@ mod tests {
 
     #[test]
     fn bad_literals() {
-        let test_str = "1e9999 1xyz";
+        let test_str = "1.e9999 1.xyz";
         let tokens: Vec<Token> = Lexer::new(test_str).collect();
 
         let expected_tokens = vec![
-            Token::new(Tok::Error("number overflowed f64".into()), 0, 0, 6),
-            Token::new(Tok::Error("invalid float literal".into()), 0, 7, 11),
+            Token::new(Tok::Error("number overflowed f64".into()), 0, 0, 7),
+            Token::new(Tok::Error("invalid float literal".into()), 0, 8, 13),
         ];
 
         assert_eq!(tokens, expected_tokens);

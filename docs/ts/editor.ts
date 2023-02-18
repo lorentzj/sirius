@@ -268,7 +268,9 @@ function createCodeSpan(token: types.Token | null, i: number | null, isType: boo
         if((token.data as {Op: string}).Op !== undefined) {
             span.classList.add('operator');
         } else if((token.data as {Float: number}).Float !== undefined) {
-            span.classList.add('float');
+            span.classList.add('const');
+        } else if((token.data as {Int: number}).Int !== undefined) { 
+            span.classList.add('const');            
         } else if((token.data as {Identifier: string}).Identifier !== undefined) {
             span.classList.add('identifier');
         } else if((token.data as {Keyword: string}).Keyword !== undefined) {

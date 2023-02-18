@@ -21,6 +21,11 @@ pub enum Expression {
         val: f64,
         end: usize,
     },
+    I64 {
+        start: usize,
+        val: i64,
+        end: usize,
+    },
     Bool {
         start: usize,
         val: bool,
@@ -66,6 +71,7 @@ impl Expression {
     pub fn range(&self) -> (usize, usize) {
         match self {
             Expression::F64 { start, end, .. } => (*start, *end),
+            Expression::I64 { start, end, .. } => (*start, *end),
             Expression::Bool { start, end, .. } => (*start, *end),
             Expression::Identifier { start, end, .. } => (*start, *end),
             Expression::BinaryOp { start, end, .. } => (*start, *end),
@@ -80,6 +86,7 @@ impl Expression {
     fn short_fmt(&self) -> String {
         match self {
             Expression::F64 { val, .. } => format!("{}", val),
+            Expression::I64 { val, .. } => format!("{}", val),
             Expression::Bool { val, .. } => {
                 if *val {
                     "true".into()
@@ -346,11 +353,11 @@ mod tests {
 
     #[test]
     fn op_precedence() {
-        let test_str = "fn main() { print (a^2/3 + 4/0.1*b*c^2 - 3 & 4/2)^(d, 0.5^e - 3); }";
+        let test_str = "fn main() { print (a^2/3 + 4/0.1*b*c^2 - 3 && 4/2)^(d, 0.5^e - 3); }";
         let tree = parse(test_str);
         assert_eq!(
             tree.ast["main"].inner[0].short_fmt(),
-            "print ((((((a^2)/3)+(((4/0.1)*b)*(c^2)))-3)&(4/2))^(d,((0.5^e)-3)));"
+            "print ((((((a^2)/3)+(((4/0.1)*b)*(c^2)))-3)&&(4/2))^(d,((0.5^e)-3)));"
         );
     }
 

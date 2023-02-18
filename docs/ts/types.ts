@@ -9,6 +9,7 @@ export type Tok =
     string |
     {Op: string} |
     {Float: number} |
+    {Int: number} |
     {Identifier: string} |
     {Keyword: string} |
     {Error: string};

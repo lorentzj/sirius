@@ -173,7 +173,7 @@ span.token.highlight {
     background-color: rgb(81, 81, 80);
 }
 
-span.token.float {
+span.token.const {
     color: rgb(137, 197, 253);
 }
 

@@ -8,11 +8,13 @@ use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 
+mod number_coersion;
 pub type ExternalFunctionPointer = fn(&[Value]) -> Option<Value>;
 
 #[derive(Clone)]
 pub enum Value {
     F64(f64),
+    I64(i64),
     Bool(bool),
     Tuple(Vec<Value>),
     Function {
@@ -36,36 +38,14 @@ pub struct InterpreterOutput {
 fn execute_bin_op(lhs: Value, rhs: Value, op: &Op) -> Value {
     match &op {
         Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp | Op::Greater | Op::Less => {
-            let coerced_lhs_float = match lhs {
-                Value::F64(v) => Some(v),
-                Value::Bool(v) => Some(if v { 1. } else { 0. }),
-                _ => None,
-            }
-            .unwrap();
-
-            let coerced_rhs_float = match rhs {
-                Value::F64(v) => Some(v),
-                Value::Bool(v) => Some(if v { 1. } else { 0. }),
-                _ => None,
-            }
-            .unwrap();
-
-            match &op {
-                Op::Add => Value::F64(coerced_lhs_float + coerced_rhs_float),
-                Op::Sub => Value::F64(coerced_lhs_float - coerced_rhs_float),
-                Op::Mul => Value::F64(coerced_lhs_float * coerced_rhs_float),
-                Op::Div => Value::F64(coerced_lhs_float / coerced_rhs_float),
-                Op::Exp => Value::F64(coerced_lhs_float.powf(coerced_rhs_float)),
-
-                Op::Greater => Value::Bool(coerced_lhs_float > coerced_rhs_float),
-                Op::Less => Value::Bool(coerced_lhs_float < coerced_rhs_float),
-
-                _ => panic!(),
-            }
+            number_coersion::arith_coerce(lhs, op, rhs)
         }
 
         Op::Equal => match (lhs, rhs) {
             (Value::F64(lv), Value::F64(rv)) => Value::Bool(lv == rv),
+            (Value::F64(lv), Value::I64(rv)) => Value::Bool(lv == rv as f64),
+            (Value::I64(lv), Value::F64(rv)) => Value::Bool(lv as f64 == rv),
+            (Value::I64(lv), Value::I64(rv)) => Value::Bool(lv == rv),
             (Value::Bool(lv), Value::Bool(rv)) => Value::Bool(lv == rv),
             (Value::Tuple(lvs), Value::Tuple(rvs)) => {
                 for (lv, rv) in lvs.iter().zip(rvs.iter()) {
@@ -80,6 +60,8 @@ fn execute_bin_op(lhs: Value, rhs: Value, op: &Op) -> Value {
 
         Op::NotEqual => match (lhs, rhs) {
             (Value::F64(lv), Value::F64(rv)) => Value::Bool(lv != rv),
+            (Value::F64(lv), Value::I64(rv)) => Value::Bool(lv != rv as f64),
+            (Value::I64(lv), Value::F64(rv)) => Value::Bool(lv as f64 != rv),
             (Value::Bool(lv), Value::Bool(rv)) => Value::Bool(lv != rv),
             (Value::Tuple(lvs), Value::Tuple(rvs)) => {
                 for (lv, rv) in lvs.iter().zip(rvs.iter()) {
@@ -128,6 +110,7 @@ pub fn interpret_expression(
 ) -> Value {
     match expression {
         TypedExpression::F64 { val, .. } => Value::F64(*val),
+        TypedExpression::I64 { val, .. } => Value::I64(*val),
         TypedExpression::Bool { val, .. } => Value::Bool(*val),
         TypedExpression::BinaryOp { lhs, op, rhs, .. } => {
             let (lhs, rhs) = (
@@ -143,6 +126,7 @@ pub fn interpret_expression(
             ..
         } => match interpret_expression(inner, frame, globals, externals, output) {
             Value::F64(val) => Value::F64(-val),
+            Value::I64(val) => Value::I64(-val),
             _ => panic!(),
         },
 
@@ -217,6 +201,7 @@ pub fn interpret_expression(
 pub fn print_value(value: Value) -> String {
     match value {
         Value::F64(val) => val.to_string(),
+        Value::I64(val) => val.to_string(),
         Value::Bool(val) => val.to_string(),
         Value::Tuple(v) => {
             if v.is_empty() {
