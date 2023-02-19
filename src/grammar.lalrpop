@@ -127,6 +127,14 @@ pub Expr: Box<Expression> = {
         end
     }),
 
+    #[precedence(level="3")] #[assoc(side="left")]
+    <start: @L> <inner: Expr> "'" <end: @R>  => Box::new(Expression::UnaryOp{
+        start,
+        inner,
+        op: UnaryOp::Tick,
+        end
+    }),
+
     #[precedence(level="4")] #[assoc(side="left")]
     <start: @L> "!" <inner: Expr> <end: @R>  => Box::new(Expression::UnaryOp{
         start,
@@ -215,6 +223,13 @@ pub Expr: Box<Expression> = {
         start,
         lhs,
         op: Op::Or,
+        rhs,
+        end
+    }),
+    <start: @L> <lhs: Expr> "->" <rhs: Expr> <end: @R>  => Box::new(Expression::BinaryOp{
+        start,
+        lhs,
+        op: Op::Apply,
         rhs,
         end
     }),
@@ -323,6 +338,7 @@ extern {
         "}"          => crate::lexer::Tok::CloseCurly,
         "."          => crate::lexer::Tok::Op(Op::Dot),
         "^"          => crate::lexer::Tok::Op(Op::Exp),
+        "'"          => crate::lexer::Tok::Op(Op::Tick),
         "*"          => crate::lexer::Tok::Op(Op::Mul),
         "/"          => crate::lexer::Tok::Op(Op::Div),
         "+"          => crate::lexer::Tok::Op(Op::Add),
@@ -333,9 +349,10 @@ extern {
         ">"          => crate::lexer::Tok::Op(Op::Greater),
         "<"          => crate::lexer::Tok::Op(Op::Less),
         "=="         => crate::lexer::Tok::Op(Op::Equal),
+        "->"         => crate::lexer::Tok::Op(Op::Apply),
         ","          => crate::lexer::Tok::Op(Op::Comma),
         "float"      => crate::lexer::Tok::Float(<f64>),
-        "int"      => crate::lexer::Tok::Int(<i64>),
+        "int"        => crate::lexer::Tok::Int(<i64>),
         "identifier" => crate::lexer::Tok::Identifier(<String>),
         "let"        => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Let),
         "print"      => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Print),

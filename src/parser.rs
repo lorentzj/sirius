@@ -4,7 +4,7 @@ use lalrpop_util::ParseError;
 use serde::Serialize;
 
 use crate::error::{Error, ErrorType};
-use crate::lexer::{Lexer, Op, Tok, Token};
+use crate::lexer::{tokenize, Op, Tok, Token};
 
 lalrpop_mod!(#[allow(clippy::all)] pub grammar);
 
@@ -12,6 +12,7 @@ lalrpop_mod!(#[allow(clippy::all)] pub grammar);
 pub enum UnaryOp {
     ArithNeg,
     BoolNeg,
+    Tick,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -108,6 +109,11 @@ impl Expression {
                 op: UnaryOp::BoolNeg,
                 ..
             } => format!("(!{})", inner.short_fmt()),
+            Expression::UnaryOp {
+                inner,
+                op: UnaryOp::Tick,
+                ..
+            } => format!("({}')", inner.short_fmt()),
             Expression::Tuple { inner, .. } => {
                 let mut result = String::new();
                 result.push_str("(");
@@ -244,7 +250,7 @@ pub struct ParserOutput {
 }
 
 pub fn parse(code: &str) -> ParserOutput {
-    let tokens: Vec<_> = Lexer::new(code).collect();
+    let tokens: Vec<_> = tokenize(code);
     let mut errors: Vec<Error> = vec![];
     let mut type_tokens: Vec<usize> = vec![];
     let mut highlight_map: HashMap<usize, Vec<usize>> = HashMap::default();

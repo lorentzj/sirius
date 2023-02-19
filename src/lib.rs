@@ -1,5 +1,6 @@
 #![feature(let_chains)]
 #![feature(hash_drain_filter)]
+#![feature(box_patterns)]
 
 #[macro_use]
 extern crate lalrpop_util;

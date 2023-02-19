@@ -69,7 +69,7 @@ pub fn interpret(code: String) -> String {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn pythagoraas() {
+    fn pythagoras() {
         let code = "
         fn hyp(a: f64, b: f64): f64 {
             return (a^2 + b^2)^0.5;
@@ -79,7 +79,7 @@ mod tests {
             print hyp(3., 4.);
         }
         "
-        .to_string();
+        .into();
 
         let output = super::interpret(code);
         assert_eq!(output, "{\"stdout\":\"5\\n\",\"error\":null}");
@@ -100,7 +100,7 @@ mod tests {
             print factorial(5);
         }
         "
-        .to_string();
+        .into();
 
         let output = super::interpret(code);
         assert_eq!(output, "{\"stdout\":\"120\\n\",\"error\":null}");
@@ -110,15 +110,15 @@ mod tests {
     fn tuple_eq() {
         let code = "
         fn main() {
-            let a = (1, 2, (true, 4));
-            let b = (-2 + 3, 4 - 2, (false || true, 16/4));
+            let a = (1, 2, (true, 4.));
+            let b = (-2 + 3, 4 - 2, (false || true, 16.0/4));
             
             if a == b {
                 print true;
             }
         }
         "
-        .to_string();
+        .into();
 
         let output = super::interpret(code);
         assert_eq!(output, "{\"stdout\":\"true\\n\",\"error\":null}");
@@ -137,7 +137,7 @@ mod tests {
             print pi;
         }
         "
-        .to_string();
+        .into();
 
         let output = super::interpret(code);
         assert_eq!(output, "{\"stdout\":\"true\\n(<external_function>, <external_function>, <external_function>, <external_function>, <external_function>)\\n3.141592653589793\\n\",\"error\":null}");

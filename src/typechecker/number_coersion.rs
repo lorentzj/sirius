@@ -15,7 +15,14 @@ pub fn arith_coerce(
         "arithmetic"
     };
 
-    if lhs != Type::F64 && !lhs.is_int() && lhs != Type::Bool {
+    if op_type.eq("comparison") && (lhs == Type::Bool || rhs == Type::Bool) {
+        Err(Error::new(
+            ErrorType::TypeError,
+            format!("cannot apply comparison operator to '{:?}'", Type::Bool),
+            start,
+            end,
+        ))
+    } else if lhs != Type::F64 && !lhs.is_int() && lhs != Type::Bool {
         Err(Error::new(
             ErrorType::TypeError,
             format!("cannot apply {op_type} operator to '{lhs:?}'"),

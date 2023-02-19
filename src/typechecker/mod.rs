@@ -29,6 +29,32 @@ impl Type {
     fn is_int(&self) -> bool {
         matches!(self, Type::I64 { .. })
     }
+
+    fn is_subtype(&self, other: &Self) -> bool {
+        if self == other {
+            true
+        } else {
+            match self {
+                Type::Tuple(vs) => match other {
+                    Type::Tuple(ovs) => {
+                        if vs.len() != ovs.len() {
+                            false
+                        } else {
+                            for (v, ov) in vs.iter().zip(ovs) {
+                                if !v.is_subtype(ov) {
+                                    return false;
+                                }
+                            }
+                            true
+                        }
+                    }
+                    _ => false,
+                },
+                Type::I64 { .. } => matches!(other, Type::I64 { nat: None }),
+                _ => false,
+            }
+        }
+    }
 }
 
 impl fmt::Debug for Type {
@@ -59,16 +85,23 @@ impl fmt::Debug for Type {
                 }
             }
             Type::Function(i, o) => {
-                let mut res = "fn(".to_string();
-                for t in i {
-                    res.push_str(&format!("{t:?}"));
-                    res.push(',');
-                    res.push(' ');
-                }
+                let mut res = "".to_string();
+                if i.len() == 1 {
+                    res.push_str(&format!("{:?}->", i[0]));
+                } else {
+                    res.push('(');
+                    for t in i {
+                        res.push_str(&format!("{t:?}"));
+                        res.push(',');
+                        res.push(' ');
+                    }
 
-                res.pop();
-                res.pop();
-                res.push_str("): ");
+                    if !i.is_empty() {
+                        res.pop();
+                        res.pop();
+                    }
+                    res.push_str(")->");
+                }
 
                 res.push_str(&format!("{o:?}"));
 
@@ -207,7 +240,7 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, Error> {
             } else {
                 Err(Error::new(
                     ErrorType::TypeError,
-                    "only 'f64', 'i64', 'void', and 'bool' are valid primitives".to_string(),
+                    "only 'f64', 'i64', 'void', and 'bool' are valid type primitives".to_string(),
                     *start,
                     *end,
                 ))
@@ -220,6 +253,32 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, Error> {
                 members.push(annotation_type(expression)?);
             }
             Ok(Type::Tuple(members))
+        }
+
+        Expression::BinaryOp {
+            lhs: box Expression::Tuple { inner, .. },
+            op: Op::Apply,
+            rhs,
+            ..
+        } => {
+            let mut args = vec![];
+            for expression in inner {
+                args.push(annotation_type(expression)?);
+            }
+            let return_type = annotation_type(rhs)?;
+
+            Ok(Type::Function(args, Box::new(return_type)))
+        }
+
+        Expression::BinaryOp {
+            lhs,
+            op: Op::Apply,
+            rhs,
+            ..
+        } => {
+            let args = vec![annotation_type(lhs)?];
+            let return_type = annotation_type(rhs)?;
+            Ok(Type::Function(args, Box::new(return_type)))
         }
 
         _ => {
@@ -376,7 +435,14 @@ pub fn expression_type(
                 }
 
                 Op::Comma => panic!(),
+                Op::Tick => panic!(),
                 Op::Not => panic!(),
+                Op::Apply => Err(Error::new(
+                    ErrorType::ParseError,
+                    "cannot use application in expression".into(),
+                    *start,
+                    *end,
+                )),
                 Op::Dot => Err(Error::new(
                     ErrorType::NotImplementedError,
                     "have not implemented dot operator".into(),
@@ -450,6 +516,18 @@ pub fn expression_type(
             }
         }
 
+        Expression::UnaryOp {
+            start,
+            op: UnaryOp::Tick,
+            end,
+            ..
+        } => Err(Error::new(
+            ErrorType::NotImplementedError,
+            "have not implemented dot operator".into(),
+            *start,
+            *end,
+        )),
+
         Expression::FnCall {
             start,
             caller,
@@ -482,7 +560,12 @@ pub fn expression_type(
                     } else {
                         for (i, arg) in args.iter().enumerate() {
                             typed_args.push(expression_type(arg, frame, globals, externals)?);
-                            if typed_args.last().unwrap().get_type() != arg_types[i] {
+                            if !typed_args
+                                .last()
+                                .unwrap()
+                                .get_type()
+                                .is_subtype(&arg_types[i])
+                            {
                                 let (arg_start, arg_end) = arg.range();
                                 return Err(Error::new(
                                     ErrorType::TypeError,
@@ -558,7 +641,7 @@ fn typecheck_block(
                     if let Some(ann) = ann {
                         match annotation_type(ann) {
                             Ok(ann_t) => {
-                                if ann_t != typed_expr.get_type() {
+                                if !typed_expr.get_type().is_subtype(&ann_t) {
                                     let (val_start, val_end) = val.range();
 
                                     errors.push(Error::new(
@@ -670,7 +753,7 @@ fn typecheck_block(
                         Ok(return_expr) => {
                             if let Some(Type::Function(_, return_type)) = globals.get(curr_function)
                             {
-                                if *return_type.as_ref() != return_expr.get_type() {
+                                if !return_expr.get_type().is_subtype(return_type.as_ref()) {
                                     errors.push(Error::new(
                                         ErrorType::TypeError,
                                         format!(
@@ -799,6 +882,14 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
             }
         }
 
+        let return_type = match &function.return_type {
+            Some(ann) => match annotation_type(ann) {
+                Ok(ann) => ann,
+                Err(_) => Type::Unknown,
+            },
+            None => Type::Void,
+        };
+
         let (statements, mut block_errors) = typecheck_block(
             &function.inner,
             Some(&mut frame),
@@ -814,7 +905,7 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
             TypedFunction {
                 name: function_name.clone(),
                 args: typed_args,
-                return_type: globals[function_name].clone(),
+                return_type,
                 inner: statements,
             },
         );

@@ -1,7 +1,0 @@
-fn hyp(a: f64, b: f64): f64 {
-    return (a^2 + b^2)^0.5;
-}
-
-fn main() {
-    print hyp(3., 4.);
-}

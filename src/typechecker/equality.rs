@@ -7,6 +7,8 @@ pub fn equality_check(lhs: &Type, rhs: &Type) -> Result<(), String> {
         Err("cannot check function equality".into())
     } else if lhs == rhs {
         return Ok(());
+    } else if lhs.is_int() && rhs.is_int() {
+        Ok(())
     } else {
         match lhs {
             Type::Tuple(lhsv) => match rhs {

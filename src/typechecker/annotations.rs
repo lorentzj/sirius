@@ -20,7 +20,7 @@ pub fn type_annotations(ast: &TypedAST) -> HashMap<usize, String> {
             }
             TypedExpression::I64 { start, val, .. } => {
                 if val >= 0 && val <= usize::MAX as i64 {
-                    annotations.insert(start, format!("i64({val})"));
+                    annotations.insert(start, format!("i64(nat={val})"));
                 } else {
                     annotations.insert(start, "i64".into());
                 }

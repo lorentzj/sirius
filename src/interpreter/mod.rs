@@ -96,7 +96,9 @@ fn execute_bin_op(lhs: Value, rhs: Value, op: &Op) -> Value {
         }
 
         Op::Comma => panic!(),
+        Op::Tick => panic!(),
         Op::Not => panic!(),
+        Op::Apply => panic!(),
         Op::Dot => panic!(),
     }
 }
@@ -138,6 +140,10 @@ pub fn interpret_expression(
             Value::Bool(val) => Value::Bool(!val),
             _ => panic!(),
         },
+
+        TypedExpression::UnaryOp {
+            op: UnaryOp::Tick, ..
+        } => panic!(),
 
         TypedExpression::Identifier { name, .. } => match frame.get(name) {
             Some(val) => val.clone(),
