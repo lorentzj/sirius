@@ -245,6 +245,8 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                     col += 1;
                 }
 
+                let mut should_pop = false;
+
                 let new_token = match char {
                     ' ' | '\t' | '\n' => continue,
                     ';' => Token::new(Tok::Semicolon, line, col - 1, col),
@@ -269,11 +271,12 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                     '>' => {
                         if let Some(Token {
                             data: Tok::Op(Op::Sub),
+                            start,
                             ..
                         }) = tokens.last()
                         {
-                            tokens.pop();
-                            Token::new(Tok::Op(Op::Apply), line, col - 2, col)
+                            should_pop = true;
+                            Token::new(Tok::Op(Op::Apply), line, *start, col)
                         } else {
                             Token::new(Tok::Op(Op::Greater), line, col - 1, col)
                         }
@@ -281,11 +284,13 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                     '<' => Token::new(Tok::Op(Op::Less), line, col - 1, col),
                     '=' => {
                         if let Some(Token {
-                            data: Tok::Assign, ..
+                            data: Tok::Assign,
+                            start,
+                            ..
                         }) = tokens.last()
                         {
-                            tokens.pop();
-                            Token::new(Tok::Op(Op::Equal), line, col - 2, col)
+                            should_pop = true;
+                            Token::new(Tok::Op(Op::Equal), line, *start, col)
                         } else {
                             Token::new(Tok::Assign, line, col - 1, col)
                         }
@@ -298,6 +303,10 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                         col,
                     ),
                 };
+
+                if should_pop {
+                    tokens.pop();
+                }
 
                 tokens.push(new_token);
             }
