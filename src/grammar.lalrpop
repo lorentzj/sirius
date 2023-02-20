@@ -329,6 +329,9 @@ Term: Box<Expression> = {
     <start: @L> <val: "float"> <end: @R> => Box::new(Expression::F64{<>}),
     <start: @L> <val: "int"> <end: @R> => Box::new(Expression::I64{<>}),
     <start: @L> <name: "identifier"> <end: @R> => Box::new(Expression::Identifier{<>}),
+    <start: @L> "(" ")" <end: @R> => {
+        Box::new(Expression::Tuple{ start, inner: vec![], end })
+    },
     <start: @L> "(" <inner: Expr> ")" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);

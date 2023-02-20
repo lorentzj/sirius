@@ -31,8 +31,16 @@
             <section id = "#contents">
                 <h2>Contents</h2>
                 <ol>
-                    <li><a href = "#syntax">Syntax</a></li>
-                    <li><a href = "#type_system">Type System</a></li>
+                    <li><a href = "#syntax">Syntax</a>
+                        <ol>
+                            <li><a href = "#operator_table">Operator Table</a>
+                        </ol>
+                    </li>
+                    <li><a href = "#type_system">Type System</a>
+                        <ol>
+                            <li><a href = "#type_coercion">Type Coercion</a>
+                        </ol>
+                    </li>
                     <li><a href = "#standard_lib">Standard Library</a></li>
                 </ol>
             </section>
@@ -46,7 +54,7 @@
     <em><em>&lt;statements&gt;</em></em>
 <span class = "code token closecurly">}</span></code>
 
-                <p>The return type may be omitted, in which case the function will return <code><span class = "code token identifier type">void</span></code>. There are four forms of <em>statement</em>:</p>
+                <p>The return type may be omitted, in which case the function will return <code><span class = "code token identifier type">void</span></code>. There are five forms of <em>statement</em>:</p>
 
                 <code class = "block"><span class = "code token keyword">let</span> <span class = "code token identifier">x</span><span class = "code token colon">:</span> <em>&lt;type annotation&gt;</em> <span class = "code token assign">=</span> <em>&lt;expression&gt;</em><span class = "code token semicolon">;</span></code>
                 <br>
@@ -54,16 +62,19 @@
                 <br>
                 <code class = "block"><span class = "code token keyword">return</span> <em>&lt;expression&gt;</em><span class = "code token semicolon">;</span></code>
                 <br>
+                <code class = "block"><span class = "code token keyword">for</span> <span class = "code token identifier">i</span> <span class = "code token keyword">from</span> <em>&lt;expression&gt;</em> <span class = "code token keyword">to</span> <em>&lt;expression&gt;</em> <span class = "code token opencurly">{</span>
+    <em><em>&lt;statements&gt;</em></em>
+<span class = "code token closecurly">}</span></code>
+                <br>
                 <code class = "block"><span class = "code token keyword">if</span> <em>&lt;expression&gt;</em> <span class = "code token opencurly">{</span>
     <em><em>&lt;statements&gt;</em></em>
 <span class = "code token closecurly">}</span> <span class = "code token keyword">else</span> <span class = "code token closecurly">{</span>
     <em><em>&lt;statements&gt;</em></em>
 <span class = "code token closecurly">}</span></code>
-
                 <p>The <code><span class = "code token keyword">else</span></code> block of <code><span class = "code token keyword">if</span></code> statements may be omitted as usual. <code><span class = "code token keyword">let</span></code> statements may omit the type annotation.</p>
 
                 <p>Expressions are constructed from <em>constants</em>, <em>identifiers</em>, and a set of left-associative operations upon them:</p>
-
+                <h3 id = "operator_table">Operator Table</h3>
                 <table>
                     <thead>
                         <tr>
@@ -84,6 +95,12 @@
                             <td>Application</td>
                             <td>N-ary</td>
                             <td><code><span class = "code token identifier">a</span><span class = "code token openparen">(</span><span class = "code token identifier">b</span><span class = "code token operator">,</span><span class = "code token identifier">c</span><span class = "code token closeparen">)</span></code></td>
+                        </tr>
+                        <tr>
+                            <td>1</td>
+                            <td>Access</td>
+                            <td>Binary</td>
+                            <td><code><span class = "code token identifier">a</span><span class = "code token opensqbracket">[</span><span class = "code token identifier">b</span><span class = "code token closesqbracket">]</span></code></td>
                         </tr>
                         <tr>
                             <td>2</td>
@@ -164,7 +181,7 @@
                             <td><code><span class = "code token identifier">a</span><span class = "code token operator">||</span><span class = "code token identifier">b</span></code></td>
                         </tr>
                         <tr>
-                            <td>8</td>
+                            <td>Inf</td>
                             <td>Tuple</td>
                             <td>Binary*</td>
                             <td><code><span class = "code token identifier">a</span><span class = "code token operator">,</span><span class = "code token identifier">b</span></code></td>
@@ -173,16 +190,68 @@
                 </table>
 
                 <p>The tuple operation <code><span class = "code token operator">,</span></code> is a special case; the tuple is not constructed until enclosed in parentheses unless it is the top level of the expression in order to distinguish e.g. <code><span class = "code token openparen">(</span><span class = "code token identifier">a</span><span class = "code token operator">,</span> <span class = "code token identifier">b</span><span class = "code token operator">,</span> <span class = "code token identifier">c</span><span class = "code token closeparen">)</span></code> from <code><span class = "code token openparen">(</span><span class = "code token openparen">(</span><span class = "code token identifier">a</span><span class = "code token operator">,</span> <span class = "code token identifier">b</span><span class = "code token closeparen">)</span><span class = "code token operator">,</span> <span class = "code token identifier">c</span><span class = "code token closeparen">)</span></code>. This behavior is consistent with tuple construction in other languages.</p>
+
+                <p>Identifiers are strings of ascii letters, greek letters, digits, and underscores, beginning with something besides a digit: <code>[A-Za-z_\u{0370}-\u{03FF}][0-9A-Za-z_\u{0370}-\u{03FF}]*</code>. Constants may be numbers, which must begin with a digit and will be parsed as floats if they contain a decimal point, and otherwise will be parsed as integers. Constants may also be the boolean values <code><span class = "code token keyword">true</span></code> and <code><span class = "code token keyword">false</span></code>.</p>
+
+                <p>Type annotations are constructed from the primitive types using the tuple operator <code><span class = "code token operator type">,</span></code> and the function operator <code><span class = "code token operator type">-></span></code>. The function operator is binary left-associative and denotes function inputs and outputs, e.g. <code><span class = "code token identifier type">f64</span><span class = "code token operator type">-></span><span class = "code token identifier type">bool</span></code> or <code><span class = "code token openparen type">(</span><span class = "code token identifier type">f64</span><span class = "code token operator type">,</span> <span class = "code token identifier type">f64</span><span class = "code token closeparen type">)</span><span class = "code token operator type">-></span><span class = "code token identifier type">i64</span></code>.</p>
             </section>
 
             <section id = "type_system">
                 <h2>Type System</h2>
+                <p>There are four primitive types in Sirius: <code><span class = "code token identifier type">f64</span></code> (a 64-bit IEEE 754 floating point number), <code><span class = "code token identifier type">i64</span></code> (a 64-bit signed integer), <code><span class = "code token identifier type">bool</span></code> (a boolean type), and <code><span class = "code token identifier type">void</span></code> (the uninhabited type). <code><span class = "code token identifier type">i64</span></code>s may have a natural number value known at compile time, denoted e.g. <code><span class = "code token identifier type">i64(nat=0)</span></code>.</p>
 
+                <p>The <code><span class = "code token keyword">if</span></code> and <code><span class = "code token keyword">for</span></code> statements require their expressions to be <code><span class = "code token identifier type">bool</span></code>s and <code><span class = "code token identifier type">i64</span></code>s respectively.</p>
+
+                <h3 id = "type_coercion">Type Coercion</h3>
+
+                <p>The binary arithmetic operations <code><span class = "code token operator">*</span></code>, <code><span class = "code token operator">/</span></code>, <code><span class = "code token operator">+</span></code>, and <code><span class = "code token operator">-</span></code>, will accept any combination of <code><span class = "code token identifier type">f64</span></code>, <code><span class = "code token identifier type">i64</span></code>, and <code><span class = "code token identifier type">bool</span></code>. If any operand is <code><span class = "code token identifier type">f64</span></code>, the result will also be <code><span class = "code token identifier type">f64</span></code>. Otherwise, the operation will evaluate to an <code><span class = "code token identifier type">i64</span></code>. <code><span class = "code token identifier type">bool</span></code> arithmetic is evaluated with <code><span class = "code token keyword">true</span></code> equal to <code><span class = "code token const">1</span></code> and <code><span class = "code token keyword">false</span></code> equal to <code><span class = "code token const">0</span></code>.</p>
+
+                <p>The exponent operator <code><span class = "code token operator">^</span></code> will accept <code><span class = "code token identifier type">i64</span></code>s and <code><span class = "code token identifier type">bool</span></code>s as above, but will always evaluate to an <code><span class = "code token identifier type">f64</span></code>. The equality and inequality operators, <code><span class = "code token operator">==</span></code> and <code><span class = "code token operator">!=</span></code>, will coerce <code><span class = "code token identifier type">i64</span></code>s into <code><span class = "code token identifier type">f64</span></code>s.</p>
             </section>
 
             <section id = "standard_lib">
                 <h2>Standard Library</h2>
-
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class = "code token identifier">pi</span></td>
+                            <td><code><span class = "code token identifier type">f64</span></code></td>
+                            <td>The constant π (pi)</td>
+                        </tr>
+                        <tr>
+                            <td><span class = "code token identifier">sin</span></td>
+                            <td><code><span class = "code token identifier type">f64<span class = "code token operator type">-></span><code class = "code token identifier type">f64</code></td>
+                            <td>Trigonometric sine</td>
+                        </tr>
+                        <tr>
+                            <td><span class = "code token identifier">cos</span></td>
+                            <td><code><span class = "code token identifier type">f64<span class = "code token operator type">-></span><code class = "code token identifier type">f64</code></td>
+                            <td>Trigonometric cosine</td>
+                        </tr>
+                        <tr>
+                            <td><span class = "code token identifier">tan</span></td>
+                            <td><code><span class = "code token identifier type">f64<span class = "code token operator type">-></span><code class = "code token identifier type">f64</code></td>
+                            <td>Trigonometric tangent</td>
+                        </tr>
+                        <tr>
+                            <td><span class = "code token identifier">ln</span></td>
+                            <td><code><span class = "code token identifier type">f64<span class = "code token operator type">-></span><code class = "code token identifier type">f64</code></td>
+                            <td>Natural log</td>
+                        </tr>
+                        <tr>
+                            <td><span class = "code token identifier">log10</span></td>
+                            <td><code><span class = "code token identifier type">f64<span class = "code token operator type">-></span><code class = "code token identifier type">f64</code></td>
+                            <td>Log base 10</td>
+                        </tr>
+                    </tbody>
+                </table>
             </section>
         </article>
     </body>
