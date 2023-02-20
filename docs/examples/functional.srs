@@ -4,8 +4,8 @@ fn map{A, B, #N}(v: A[N], f: A->B): B[N] {
     }
 }
 
-fn filter{T, #N, #M}(v: T[N], f: T->bool): T[M] {
-    for i from 0 to N {
+fn filter{T, #M, #N}(v: T[M], f: T->bool): T[N] {
+    for i from 0 to M {
         if f(v[i]) {
             yield v[i];
         }

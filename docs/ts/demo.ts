@@ -68,7 +68,7 @@ document.body.onload = () => {
                     ann_map.set(Number.parseInt(key), (parsed.annotations as unknown as {[k: string]: string})[key]);
                 });
                 parsed.annotations = ann_map;
-
+                
                 editor.updateEditorWithCode(editorElem, editorLinesElem, codeLines.code, parsed);  
                 editor.updateEditorWithErrors(parsed.errors, editorElem);
                 editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem);

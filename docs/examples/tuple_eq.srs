@@ -5,4 +5,8 @@ fn main() {
     if a == b {
         print true;
     }
+
+    if a[2][1] == b[0] + 3 {
+        print true;
+    }
 }

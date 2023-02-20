@@ -10,7 +10,7 @@ pub AST: HashMap<String, Function> = {
 }
 
 pub Fn: Function = {
-    "fn" <name: "identifier"> <args: FnSigParams> <return_type: (":" Expr)?>  <inner: Block> => {
+    "fn" <name: "identifier"> <args: FnSigParams> <return_type: ("->" Expr)?>  <inner: Block> => {
         let return_type = return_type.map(|r| *r.1);
 
         Function {
@@ -107,6 +107,10 @@ pub Expr: Box<Expression> = {
     <t: Term> => t,
     <start: @L> <caller: Expr> <args: FnCallParams> <end: @R> => {
         Box::new(Expression::FnCall{<>})
+    },
+
+    <start: @L> <lhs: Expr> <rhs: Array> <end: @R> => {
+        Box::new(Expression::Accessor{<>})
     },
 
     #[precedence(level="2")] #[assoc(side="left")]
@@ -235,6 +239,25 @@ pub Expr: Box<Expression> = {
     }),
 };
 
+Array: Box<Expression> = {
+    <start: @L> "[" <inner: Expr> "]" <end: @R> => {
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
+
+        inner
+    },
+
+    <start: @L> "[" <inner: OpenTuple> "]" <end: @R> => {
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
+
+        match *inner {
+            Expression::OpenTuple{inner, ..} => Box::new(Expression::Tuple { start, inner, end }),
+            _ => panic!()
+        }
+    },
+}
+
 FnCallParams: Vec<Expression> = {
     <start: @L> "(" ")" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
@@ -314,6 +337,7 @@ Term: Box<Expression> = {
             Expression::UnaryOp{op, inner, ..} => Box::new(Expression::UnaryOp{ start, op, inner, end }),
             Expression::FnCall{caller, args, ..} => Box::new(Expression::FnCall{ start, caller, args, end }),
             Expression::OpenTuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
+            Expression::Accessor{lhs, rhs, ..} => Box::new(Expression::Accessor{ start, lhs, rhs, end }),
             Expression::Tuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
         }
     },
@@ -336,6 +360,8 @@ extern {
         ")"          => crate::lexer::Tok::CloseParen,
         "{"          => crate::lexer::Tok::OpenCurly,
         "}"          => crate::lexer::Tok::CloseCurly,
+        "["          => crate::lexer::Tok::OpenSqBracket,
+        "]"          => crate::lexer::Tok::CloseSqBracket,
         "."          => crate::lexer::Tok::Op(Op::Dot),
         "^"          => crate::lexer::Tok::Op(Op::Exp),
         "'"          => crate::lexer::Tok::Op(Op::Tick),

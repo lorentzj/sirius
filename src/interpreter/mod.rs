@@ -145,6 +145,20 @@ pub fn interpret_expression(
             op: UnaryOp::Tick, ..
         } => panic!(),
 
+        TypedExpression::Accessor { lhs, rhs, .. } => {
+            let (lhs, rhs) = (
+                interpret_expression(lhs, frame, globals, externals, output),
+                interpret_expression(rhs, frame, globals, externals, output),
+            );
+            match lhs {
+                Value::Tuple(v) => match rhs {
+                    Value::I64(i) => v[i as usize].clone(),
+                    _ => panic!(),
+                },
+                _ => panic!(),
+            }
+        }
+
         TypedExpression::Identifier { name, .. } => match frame.get(name) {
             Some(val) => val.clone(),
             None => match globals.get(name) {

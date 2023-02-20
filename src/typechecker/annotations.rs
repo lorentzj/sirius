@@ -32,6 +32,10 @@ pub fn type_annotations(ast: &TypedAST) -> HashMap<usize, String> {
             TypedExpression::UnaryOp { inner, .. } => {
                 annotations.extend(annotations_from_expression(*inner));
             }
+            TypedExpression::Accessor { lhs, rhs, .. } => {
+                annotations.extend(annotations_from_expression(*lhs));
+                annotations.extend(annotations_from_expression(*rhs));
+            }
             TypedExpression::FnCall { caller, args, .. } => {
                 annotations.extend(annotations_from_expression(*caller));
                 for arg in args {

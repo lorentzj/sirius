@@ -157,6 +157,13 @@ pub enum TypedExpression {
         inner: Vec<TypedExpression>,
         end: usize,
     },
+    Accessor {
+        t: Type,
+        start: usize,
+        lhs: Box<TypedExpression>,
+        rhs: Box<TypedExpression>,
+        end: usize,
+    },
     FnCall {
         t: Type,
         start: usize,
@@ -171,7 +178,8 @@ impl TypedExpression {
         match self {
             TypedExpression::F64 { .. } => Type::F64,
             TypedExpression::I64 { val, .. } => {
-                if *val >= 0 && *val <= usize::MAX as i64 {
+                // handle either i64 > usize (64 bit platform) or i64 < usize (32 bit platform)
+                if *val >= 0 && (*val <= usize::MAX as i64 || usize::BITS >= 64) {
                     Type::I64 {
                         nat: Some(*val as usize),
                     }
@@ -184,6 +192,7 @@ impl TypedExpression {
             TypedExpression::BinaryOp { t, .. } => t.clone(),
             TypedExpression::UnaryOp { t, .. } => t.clone(),
             TypedExpression::Tuple { t, .. } => t.clone(),
+            TypedExpression::Accessor { t, .. } => t.clone(),
             TypedExpression::FnCall { t, .. } => t.clone(),
         }
     }
@@ -523,10 +532,58 @@ pub fn expression_type(
             ..
         } => Err(Error::new(
             ErrorType::NotImplementedError,
-            "have not implemented dot operator".into(),
+            "have not implemented tick operator".into(),
             *start,
             *end,
         )),
+
+        Expression::Accessor {
+            start,
+            lhs,
+            rhs,
+            end,
+        } => {
+            let lhs = expression_type(lhs, frame, globals, externals)?;
+            let rhs = expression_type(rhs, frame, globals, externals)?;
+
+            match lhs.get_type() {
+                Type::Tuple(lhs_inner) => match rhs.get_type() {
+                    Type::I64 { nat: Some(nat) } => {
+                        if nat > lhs_inner.len() - 1 {
+                            Err(Error::new(
+                                ErrorType::TypeError,
+                                format!(
+                                    "index {nat} is out of bounds of {}-tuple",
+                                    lhs_inner.len()
+                                ),
+                                *start,
+                                *end,
+                            ))
+                        } else {
+                            Ok(TypedExpression::Accessor {
+                                t: lhs_inner[nat].clone(),
+                                start: *start,
+                                lhs: Box::new(lhs),
+                                rhs: Box::new(rhs),
+                                end: *end,
+                            })
+                        }
+                    }
+                    rhs => Err(Error::new(
+                        ErrorType::TypeError,
+                        format!("cannot access index with '{rhs:?}'"),
+                        *start,
+                        *end,
+                    )),
+                },
+                lhs => Err(Error::new(
+                    ErrorType::TypeError,
+                    format!("cannot access index of '{lhs:?}'"),
+                    *start,
+                    *end,
+                )),
+            }
+        }
 
         Expression::FnCall {
             start,

@@ -60,6 +60,12 @@ pub enum Expression {
         inner: Vec<Expression>,
         end: usize,
     },
+    Accessor {
+        start: usize,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+        end: usize,
+    },
     FnCall {
         start: usize,
         caller: Box<Expression>,
@@ -79,6 +85,7 @@ impl Expression {
             Expression::UnaryOp { start, end, .. } => (*start, *end),
             Expression::OpenTuple { start, end, .. } => (*start, *end),
             Expression::Tuple { start, end, .. } => (*start, *end),
+            Expression::Accessor { start, end, .. } => (*start, *end),
             Expression::FnCall { start, end, .. } => (*start, *end),
         }
     }
@@ -138,6 +145,10 @@ impl Expression {
                 }
                 result.push_str(")");
                 result
+            }
+
+            Expression::Accessor { lhs, rhs, .. } => {
+                format!("({}[{}])", lhs.short_fmt(), rhs.short_fmt())
             }
 
             Expression::OpenTuple { .. } => panic!(),
