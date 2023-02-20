@@ -80,6 +80,13 @@ pub fn type_annotations(ast: &TypedAST) -> HashMap<usize, String> {
                         annotations.extend(annotations_from_block(false_inner));
                     }
                 }
+                TypedStatement::For {
+                    from, to, inner, ..
+                } => {
+                    annotations.extend(annotations_from_expression(from));
+                    annotations.extend(annotations_from_expression(to));
+                    annotations.extend(annotations_from_block(inner));
+                }
             }
         }
 

@@ -82,6 +82,10 @@ pub Stmt: Statement = {
         }, true_inner, false_inner: false_inner.map(|(_, b)| b), end }
     },
 
+    <start: @L> "for" <iterator: "identifier"> "from" <from: Expr> "to" <to: Expr> <inner: Block> <end: @R> => {
+        Statement::For{<>}
+    },
+
     <start: @L> "return" <val: Expr?> ";" <end: @R> => {
         Statement::Return{<>}
     },
@@ -387,6 +391,9 @@ extern {
         "true"       => crate::lexer::Tok::Keyword(crate::lexer::Keyword::True),
         "false"      => crate::lexer::Tok::Keyword(crate::lexer::Keyword::False),
         "fn"         => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Fn),
+        "for"        => crate::lexer::Tok::Keyword(crate::lexer::Keyword::For),
+        "from"       => crate::lexer::Tok::Keyword(crate::lexer::Keyword::From),
+        "to"         => crate::lexer::Tok::Keyword(crate::lexer::Keyword::To),
         "return"     => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Return),
         "="          => crate::lexer::Tok::Assign,
         ";"          => crate::lexer::Tok::Semicolon,

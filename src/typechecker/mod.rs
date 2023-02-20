@@ -223,6 +223,14 @@ pub enum TypedStatement {
         false_inner: Option<Vec<TypedStatement>>,
         end: usize,
     },
+    For {
+        start: usize,
+        iterator: String,
+        from: TypedExpression,
+        to: TypedExpression,
+        inner: Vec<TypedStatement>,
+        end: usize,
+    },
 }
 
 #[derive(Serialize, Debug)]
@@ -798,6 +806,83 @@ fn typecheck_block(
                         cond: typed_cond,
                         true_inner: true_inner_statements,
                         false_inner: None,
+                        end: *end,
+                    });
+                }
+            }
+
+            Statement::For {
+                start,
+                iterator,
+                from,
+                to,
+                inner,
+                end,
+            } => {
+                let typed_from = match expression_type(from, frame, globals, externals) {
+                    Ok(typed_from_expr) => {
+                        if !typed_from_expr.get_type().is_int() {
+                            let (from_start, from_end) = from.range();
+
+                            errors.push(Error::new(
+                                ErrorType::TypeError,
+                                format!(
+                                    "from value should be 'i64'; found '{:?}'",
+                                    typed_from_expr.get_type()
+                                ),
+                                from_start,
+                                from_end,
+                            ));
+                        }
+                        Some(typed_from_expr)
+                    }
+                    Err(err) => {
+                        errors.push(err);
+                        None
+                    }
+                };
+
+                let typed_to = match expression_type(to, frame, globals, externals) {
+                    Ok(typed_to_expr) => {
+                        if !typed_to_expr.get_type().is_int() {
+                            let (to_start, to_end) = to.range();
+
+                            errors.push(Error::new(
+                                ErrorType::TypeError,
+                                format!(
+                                    "to value should be 'i64'; found '{:?}'",
+                                    typed_to_expr.get_type()
+                                ),
+                                to_start,
+                                to_end,
+                            ));
+                        }
+                        Some(typed_to_expr)
+                    }
+                    Err(err) => {
+                        errors.push(err);
+                        None
+                    }
+                };
+
+                frame.push_scope();
+                frame.insert(iterator.clone(), Type::I64 { nat: None });
+
+                let (inner_statements, mut inner_errors) =
+                    typecheck_block(inner, Some(frame), globals, externals, curr_function);
+
+                frame.pop_scope();
+                frame.pop_scope();
+
+                errors.append(&mut inner_errors);
+
+                if let (Some(typed_from), Some(typed_to)) = (typed_from, typed_to) {
+                    typed_statements.push(TypedStatement::For {
+                        start: *start,
+                        iterator: iterator.clone(),
+                        from: typed_from,
+                        to: typed_to,
+                        inner: inner_statements,
                         end: *end,
                     });
                 }

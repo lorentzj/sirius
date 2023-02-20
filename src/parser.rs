@@ -182,12 +182,21 @@ pub enum Statement {
         false_inner: Option<Vec<Statement>>,
         end: usize,
     },
+    For {
+        start: usize,
+        iterator: String,
+        from: Box<Expression>,
+        to: Box<Expression>,
+        inner: Vec<Statement>,
+        end: usize,
+    },
 }
 
 impl Statement {
     fn _range(&self) -> (usize, usize) {
         match self {
             Statement::If { start, end, .. } => (*start, *end),
+            Statement::For { start, end, .. } => (*start, *end),
             Statement::Let { start, end, .. } => (*start, *end),
             Statement::Print { start, end, .. } => (*start, *end),
             Statement::Return { start, end, .. } => (*start, *end),
@@ -227,6 +236,29 @@ impl Statement {
                     }
                     res.push('}');
                 }
+                res
+            }
+            Statement::For {
+                iterator,
+                from,
+                to,
+                inner,
+                ..
+            } => {
+                let mut res = String::new();
+                res.push_str(&format!(
+                    "for {} from {} to {} {{\n",
+                    iterator,
+                    from.short_fmt(),
+                    to.short_fmt()
+                ));
+
+                for stmt in inner {
+                    res.push_str(&stmt.short_fmt());
+                    res.push('\n');
+                }
+
+                res.push('}');
                 res
             }
             Statement::Return { val, .. } => {

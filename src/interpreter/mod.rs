@@ -297,6 +297,37 @@ fn interpret_block(
                 frame.pop_scope();
             }
 
+            TypedStatement::For {
+                iterator,
+                from,
+                to,
+                inner,
+                ..
+            } => {
+                let mut i_val = match interpret_expression(from, frame, globals, externals, output)
+                {
+                    Value::I64(v) => v,
+                    _ => panic!(),
+                };
+
+                let target = match interpret_expression(to, frame, globals, externals, output) {
+                    Value::I64(v) => v,
+                    _ => panic!(),
+                };
+
+                frame.push_scope();
+                frame.insert(iterator.clone(), Value::I64(i_val));
+
+                while i_val < target {
+                    let cont = interpret_block(inner, Some(frame), globals, externals, output);
+                    if !cont {
+                        return false;
+                    }
+
+                    i_val += 1;
+                    frame.insert(iterator.clone(), Value::I64(i_val));
+                }
+            }
             TypedStatement::Return { val, .. } => {
                 match val {
                     Some(val) => {
