@@ -17,6 +17,7 @@ pub enum Value {
     I64(i64),
     Bool(bool),
     Tuple(Vec<Value>),
+    Array(usize, Vec<Value>),
     Function {
         arg_names: Vec<String>,
         statements: Vec<TypedStatement>,
@@ -179,7 +180,6 @@ pub fn interpret_expression(
             }
             Value::Tuple(members)
         }
-
         TypedExpression::FnCall { caller, args, .. } => {
             match interpret_expression(caller, frame, globals, externals, output) {
                 Value::Function {
@@ -236,6 +236,22 @@ pub fn print_value(value: Value) -> String {
                 out.pop();
                 out.pop();
                 out.push(')');
+                out
+            }
+        }
+        Value::Array(_, v) => {
+            if v.is_empty() {
+                "[]".into()
+            } else {
+                let mut out = "[".to_string();
+                for val in v {
+                    out.push_str(&print_value(val));
+                    out.push(',');
+                    out.push(' ');
+                }
+                out.pop();
+                out.pop();
+                out.push(']');
                 out
             }
         }

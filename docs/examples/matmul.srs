@@ -1,4 +1,4 @@
-fn dot{#N}(a: f64[N], b: f64[N]) -> f64 {
+fn dot{#N}(a: f64[N], b: f64[N]): f64 {
     let v = 0.;
     for n from 0 to N {
         v := v + a[n]*b[n];
@@ -7,7 +7,7 @@ fn dot{#N}(a: f64[N], b: f64[N]) -> f64 {
     return v;
 }
  
-fn matmul{#I, #J, #K}(a: f64[I, J], b: f64[J, K]) -> f64[I, K] {
+fn matmul{#I, #J, #K}(a: f64[I, J], b: f64[J, K]): f64[I, K] {
     for i from 0 to I {
         for k from 0 to K {
             yield dot(a[i], b'[k]);

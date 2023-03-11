@@ -10,7 +10,7 @@ pub AST: HashMap<String, Function> = {
 }
 
 pub Fn: Function = {
-    "fn" <name: "identifier"> <args: FnSigParams> <return_type: ("->" Expr)?>  <inner: Block> => {
+    "fn" <name: "identifier"> <args: FnSigParams> <return_type: (":" Expr)?>  <inner: Block> => {
         let return_type = return_type.map(|r| *r.1);
 
         Function {

@@ -71,7 +71,7 @@ mod tests {
     #[test]
     fn pythagoras() {
         let code = "
-        fn hyp(a: f64, b: f64) -> f64 {
+        fn hyp(a: f64, b: f64): f64 {
             return (a^2 + b^2)^0.5;
         }
         
@@ -88,7 +88,7 @@ mod tests {
     #[test]
     fn factorial() {
         let code = "
-        fn factorial(x: i64) -> i64 {
+        fn factorial(x: i64): i64 {
             if x < 1 {
                 return 1;
             } else {

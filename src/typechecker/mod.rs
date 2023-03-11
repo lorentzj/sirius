@@ -10,7 +10,9 @@ use crate::stdlib::ExternalGlobals;
 
 mod annotations;
 mod equality;
+mod ind;
 mod number_coersion;
+mod types;
 
 pub use annotations::type_annotations;
 

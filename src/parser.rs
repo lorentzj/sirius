@@ -133,7 +133,6 @@ impl Expression {
                 result.push_str(")");
                 result
             }
-
             Expression::FnCall { caller, args, .. } => {
                 let mut result = format!("({})", caller.short_fmt());
                 result.push_str("(");

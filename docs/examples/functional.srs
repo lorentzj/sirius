@@ -1,10 +1,10 @@
-fn map{A, B, #N}(v: A[N], f: A->B) -> B[N] {
+fn map{A, B, #N}(v: A[N], f: A->B): B[N] {
     for i from 0 to N {
         yield f(v[i]);
     }
 }
 
-fn filter{T, #M, #N}(v: T[M], f: T->bool) -> T[N] {
+fn filter{T, #M, #N}(v: T[M], f: T->bool): T[N] {
     for i from 0 to M {
         if f(v[i]) {
             yield v[i];
@@ -12,7 +12,7 @@ fn filter{T, #M, #N}(v: T[M], f: T->bool) -> T[N] {
     }
 }
 
-fn fold{T, #N}(init: T, v: T[N], f: (T, T)->T) -> T {
+fn fold{T, #N}(init: T, v: T[N], f: (T, T)->T): T {
     let r = init;
     for i from 0 to N {
         r = f(r, v[i]);
@@ -21,7 +21,7 @@ fn fold{T, #N}(init: T, v: T[N], f: (T, T)->T) -> T {
     return r;
 }
 
-fn concat{T, #N, #M}(a: T[N], b: T[M]) -> T[N + M] {
+fn concat{T, #N, #M}(a: T[N], b: T[M]): T[N + M] {
     for i from 0 to N {
         yield a[i];
     }
