@@ -148,12 +148,13 @@ impl ops::Add<Ind> for Ind {
     fn add(self, rhs: Ind) -> Self {
         let mut new_terms: Vec<Term> = vec![];
 
-        for (rhs_sign, rhs_coef, rhs_term) in rhs.terms {
+        for (lhs_sign, lhs_coef, lhs_term) in &self.terms {
             let mut found_term = false;
 
-            for (lhs_sign, lhs_coef, lhs_term) in &self.terms {
-                if lhs_term == &rhs_term {
-                    let (new_sign, new_val) = add_signed(*lhs_sign, *lhs_coef, rhs_sign, rhs_coef);
+            for (rhs_sign, rhs_coef, rhs_term) in &rhs.terms {
+                if lhs_term == rhs_term {
+                    let (new_sign, new_val) =
+                        add_signed(*lhs_sign, *lhs_coef, *rhs_sign, *rhs_coef);
                     new_terms.push((new_sign, new_val, lhs_term.clone()));
                     found_term = true;
                     break;
@@ -161,22 +162,22 @@ impl ops::Add<Ind> for Ind {
             }
 
             if !found_term {
-                new_terms.push((rhs_sign, rhs_coef, rhs_term.clone()));
+                new_terms.push((*lhs_sign, *lhs_coef, lhs_term.clone()));
             }
         }
 
-        for (lhs_sign, lhs_coef, lhs_term) in &self.terms {
+        for (rhs_sign, rhs_coef, rhs_term) in &rhs.terms {
             let mut found_term = false;
 
             for (_, _, new_term) in &new_terms {
-                if lhs_term == new_term {
+                if rhs_term == new_term {
                     found_term = true;
                     break;
                 }
             }
 
             if !found_term {
-                new_terms.push((*lhs_sign, *lhs_coef, lhs_term.clone()));
+                new_terms.push((*rhs_sign, *rhs_coef, rhs_term.clone()));
             }
         }
 
@@ -243,9 +244,9 @@ mod tests {
 
     #[test]
     fn ind_arith() {
-        let a = Ind::constant(2).unwrap();
+        let a = Ind::var("a") * Ind::var("a") * Ind::constant(3).unwrap();
         let b = Ind::var("a") * Ind::constant(4).unwrap();
-        let c = Ind::var("a") * Ind::var("a") * Ind::constant(3).unwrap();
+        let c = Ind::constant(2).unwrap();
 
         assert_eq!("3a^2 + 4a + 2", format!("{:?}", a + b + c));
 
@@ -258,7 +259,7 @@ mod tests {
         let g = Ind::constant(5).unwrap() * Ind::var("a");
         let h = Ind::constant(3).unwrap() * Ind::var("b");
 
-        assert_eq!("3b - 5a + 2a^2", format!("{:?}", f - g + h));
+        assert_eq!("2a^2 - 5a + 3b", format!("{:?}", f - g + h));
     }
 
     #[test]

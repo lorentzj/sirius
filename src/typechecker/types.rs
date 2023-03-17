@@ -1,4 +1,5 @@
 use serde::Serialize;
+//use std::collections::HashMap;
 use std::{cmp::Ordering, fmt};
 
 use super::ind::Ind;
@@ -14,12 +15,12 @@ enum Type {
     Tuple(Vec<Type>),
     Function(Vec<Type>, Box<Type>),
     TypeVar(String),
-    ForAll(u8),
+    ForAll(usize),
 }
 
 #[allow(dead_code)]
 impl Type {
-    fn forall_count(&self) -> u8 {
+    fn forall_count(&self) -> usize {
         match self {
             Type::Unknown => 0,
             Type::Void => 0,
@@ -51,7 +52,7 @@ impl Type {
         }
     }
 
-    fn substitute(&self, var: u8, a: &Type) -> Type {
+    fn substitute(&self, var: usize, a: &Type) -> Type {
         match self {
             Type::Tuple(v) => Type::Tuple(v.iter().map(|x| x.substitute(var, a)).collect()),
             Type::Function(i, o) => Type::Function(
@@ -67,47 +68,101 @@ impl Type {
         }
     }
 
-    // fn unify(&self, a: &Type) -> Option<Type> {
+    // fn unify(&mut self, a: &mut Type, l_sub: &mut HashMap<u8, Type>, r_sub: &mut HashMap<u8, Type>) -> bool {
     //     match a {
-    //         Type::Unknown => Some(Type::Unknown),
+    //         Type::Unknown => {
+    //             *self = Type::Unknown;
+    //             true
+    //         },
+    //         Type::ForAll(i) => {
+    //             r_sub.insert(*i, self.clone());
+    //             true
+    //         }
     //         _ => match self {
-    //             Type::Unknown => Some(Type::Unknown),
+    //             Type::Unknown => true,
     //             Type::Void => if matches!(a, Type::Void) {
-    //                 Some(Type::Void)
+    //                 true
     //             } else {
-    //                 None
+    //                 false
+    //             },
+    //             Type::Bool => if matches!(a, Type::Bool) {
+    //                 true
+    //             } else {
+    //                 false
     //             },
     //             Type::F64 => if matches!(a, Type::F64) {
-    //                 Some(Type::F64)
+    //                 true
+    //             } else {
+    //                 false
+    //             },
+    //             Type::TypeVar(l_name) => if let Type::TypeVar(r_name) = a {
+    //                 if l_name == r_name {
+    //                     Some(Type::TypeVar(l_name.into()))
+    //                 } else {
+    //                     None
+    //                 }
     //             } else {
     //                 None
     //             },
-    //             Type::I64 { nat: l_nat } => {
-    //                 if let Type::I64 { nat: r_nat } = a {
+    //             Type::I64(l_nat) => {
+    //                 if let Type::I64(r_nat) = a {
     //                     if let Some(r_nat) = r_nat {
     //                         if let Some(l_nat) = l_nat {
     //                             if *l_nat == *r_nat {
-    //                                 Some(Type::I64 { nat: Some(*l_nat) })
+    //                                 Some(Type::I64 (Some(l_nat.clone())))
     //                             } else {
-    //                                 None
+    //                                 Some(Type::I64(None))
     //                             }
     //                         } else {
-    //                             Some(Type::I64 { nat: Some(*r_nat) })
+    //                             Some(Type::I64(Some(r_nat.clone())))
     //                         }
     //                     } else {
     //                         if let Some(l_nat) = l_nat {
-    //                             Some(Type::I64 { nat: Some(*l_nat) })
+    //                             Some(Type::I64(Some(l_nat.clone())))
     //                         } else {
-    //                             Some(Type::I64 { nat: None })
+    //                             Some(Type::I64(None))
     //                         }
     //                     }
     //                 } else {
     //                     None
     //                 }
-    //             }
+    //             },
+    //             Type::ForAll(i) => {
+    //                 l_sub.insert(*i, a.clone());
+    //                 Some(a.clone())
+    //             },
+    //             Type::Tuple(l_types) => {
+    //                 if let Type::Tuple(r_types) = a {
+    //                     if l_types.len() != r_types.len() {
+    //                         None
+    //                     } else {
+    //                         for (l_type, r_type) in l_types.iter_mut().zip(r_types) {
+
+    //                         }
+    //                     }
+    //                 } else {
+    //                     None
+    //                 }
+    //             },
+    //             Type::Function(_, _) => todo!(),
     //         }
     //     }
     // }
+}
+
+fn usize_name(mut x: usize) -> String {
+    let mut res = String::new();
+
+    loop {
+        res.insert(0, ((x % 26 + 97) as u8) as char);
+        x /= 26;
+        if x == 0 {
+            break;
+        }
+        x -= 1;
+    }
+
+    res
 }
 
 impl fmt::Debug for Type {
@@ -116,7 +171,7 @@ impl fmt::Debug for Type {
         if forall > 0 && !matches!(self, Type::ForAll(_)) {
             write!(f, "forall ")?;
             for i in 0..forall {
-                write!(f, "{}", (i + 97) as char)?;
+                write!(f, "{}", usize_name(i))?;
                 if i < forall - 1 {
                     write!(f, ", ")?;
                 }
@@ -174,15 +229,29 @@ impl fmt::Debug for Type {
                 write!(f, "{res}")
             }
             Type::TypeVar(var) => write!(f, "{var}"),
-            Type::ForAll(i) => write!(f, "{}", (*i + 97) as char),
+            Type::ForAll(i) => write!(f, "{}", usize_name(*i)),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::usize_name;
     use super::Ind;
     use super::Type;
+
+    #[test]
+    fn usize_name_test() {
+        assert_eq!(usize_name(0), "a");
+        assert_eq!(usize_name(1), "b");
+        assert_eq!(usize_name(25), "z");
+        assert_eq!(usize_name(26), "aa");
+        assert_eq!(usize_name(27), "ab");
+        assert_eq!(usize_name(28), "ac");
+        assert_eq!(usize_name(701), "zz");
+        assert_eq!(usize_name(702), "aaa");
+        assert_eq!(usize_name(703), "aab");
+    }
 
     #[test]
     fn print_types() {
