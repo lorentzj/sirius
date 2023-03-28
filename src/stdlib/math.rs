@@ -50,7 +50,7 @@ pub fn math_mod() -> HashMap<String, (Type, Value)> {
     vals.insert(
         "sin".into(),
         (
-            Type::Function(vec![Type::F64], Box::new(Type::F64)),
+            Type::Function(vec![], vec![Type::F64], Box::new(Type::F64)),
             Value::ExternalFunction(sin),
         ),
     );
@@ -58,7 +58,7 @@ pub fn math_mod() -> HashMap<String, (Type, Value)> {
     vals.insert(
         "cos".into(),
         (
-            Type::Function(vec![Type::F64], Box::new(Type::F64)),
+            Type::Function(vec![], vec![Type::F64], Box::new(Type::F64)),
             Value::ExternalFunction(cos),
         ),
     );
@@ -66,7 +66,7 @@ pub fn math_mod() -> HashMap<String, (Type, Value)> {
     vals.insert(
         "tan".into(),
         (
-            Type::Function(vec![Type::F64], Box::new(Type::F64)),
+            Type::Function(vec![], vec![Type::F64], Box::new(Type::F64)),
             Value::ExternalFunction(tan),
         ),
     );
@@ -74,7 +74,7 @@ pub fn math_mod() -> HashMap<String, (Type, Value)> {
     vals.insert(
         "log10".into(),
         (
-            Type::Function(vec![Type::F64], Box::new(Type::F64)),
+            Type::Function(vec![], vec![Type::F64], Box::new(Type::F64)),
             Value::ExternalFunction(log10),
         ),
     );
@@ -82,7 +82,7 @@ pub fn math_mod() -> HashMap<String, (Type, Value)> {
     vals.insert(
         "ln".into(),
         (
-            Type::Function(vec![Type::F64], Box::new(Type::F64)),
+            Type::Function(vec![], vec![Type::F64], Box::new(Type::F64)),
             Value::ExternalFunction(ln),
         ),
     );

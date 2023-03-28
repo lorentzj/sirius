@@ -1,8 +1,7 @@
 use serde::Serialize;
 use std::collections::HashMap;
-use std::fmt;
 
-use crate::error::{cardinal, Error, ErrorType};
+use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
 use crate::parser::{Expression, Statement, UnaryOp, AST};
 use crate::stack::Frame;
@@ -14,106 +13,13 @@ mod ind;
 mod number_coersion;
 mod types;
 
+use ind::Ind;
+pub use types::{Substitutions, Type};
+
 pub use annotations::type_annotations;
 
-#[derive(PartialEq, Serialize, Clone)]
-pub enum Type {
-    Unknown,
-    Void,
-    F64,
-    I64 { nat: Option<usize> },
-    Bool,
-    Tuple(Vec<Type>),
-    Function(Vec<Type>, Box<Type>),
-}
-
-impl Type {
-    fn is_int(&self) -> bool {
-        matches!(self, Type::I64 { .. })
-    }
-
-    fn is_subtype(&self, other: &Self) -> bool {
-        if self == other {
-            true
-        } else {
-            match self {
-                Type::Tuple(vs) => match other {
-                    Type::Tuple(ovs) => {
-                        if vs.len() != ovs.len() {
-                            false
-                        } else {
-                            for (v, ov) in vs.iter().zip(ovs) {
-                                if !v.is_subtype(ov) {
-                                    return false;
-                                }
-                            }
-                            true
-                        }
-                    }
-                    _ => false,
-                },
-                Type::I64 { .. } => matches!(other, Type::I64 { nat: None }),
-                _ => false,
-            }
-        }
-    }
-}
-
-impl fmt::Debug for Type {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Type::Unknown => write!(f, "unknown"),
-            Type::Void => write!(f, "void"),
-            Type::F64 => write!(f, "f64"),
-            Type::I64 { nat } => match nat {
-                Some(nat) => write!(f, "i64(nat={nat})"),
-                None => write!(f, "i64"),
-            },
-            Type::Bool => write!(f, "bool"),
-            Type::Tuple(v) => {
-                if v.is_empty() {
-                    write!(f, "())")
-                } else {
-                    let mut res = "(".to_string();
-                    for t in v {
-                        res.push_str(&format!("{t:?}"));
-                        res.push(',');
-                        res.push(' ');
-                    }
-                    res.pop();
-                    res.pop();
-                    res.push(')');
-                    write!(f, "{res}")
-                }
-            }
-            Type::Function(i, o) => {
-                let mut res = "".to_string();
-                if i.len() == 1 {
-                    res.push_str(&format!("{:?}->", i[0]));
-                } else {
-                    res.push('(');
-                    for t in i {
-                        res.push_str(&format!("{t:?}"));
-                        res.push(',');
-                        res.push(' ');
-                    }
-
-                    if !i.is_empty() {
-                        res.pop();
-                        res.pop();
-                    }
-                    res.push_str(")->");
-                }
-
-                res.push_str(&format!("{o:?}"));
-
-                write!(f, "{res}")
-            }
-        }
-    }
-}
-
-type Globals = HashMap<String, Type>;
+use self::equality::equality_check;
+use self::number_coersion::{arith_coerce, is_arith};
 
 #[derive(Serialize, Clone, Debug)]
 pub enum TypedExpression {
@@ -123,6 +29,7 @@ pub enum TypedExpression {
         end: usize,
     },
     I64 {
+        ind: Option<Ind>,
         start: usize,
         val: i64,
         end: usize,
@@ -179,16 +86,7 @@ impl TypedExpression {
     pub fn get_type(&self) -> Type {
         match self {
             TypedExpression::F64 { .. } => Type::F64,
-            TypedExpression::I64 { val, .. } => {
-                // handle either i64 > usize (64 bit platform) or i64 < usize (32 bit platform)
-                if *val >= 0 && (*val <= usize::MAX as i64 || usize::BITS >= 64) {
-                    Type::I64 {
-                        nat: Some(*val as usize),
-                    }
-                } else {
-                    Type::I64 { nat: None }
-                }
-            }
+            TypedExpression::I64 { ind, .. } => Type::I64(ind.clone()),
             TypedExpression::Bool { .. } => Type::Bool,
             TypedExpression::Identifier { t, .. } => t.clone(),
             TypedExpression::BinaryOp { t, .. } => t.clone(),
@@ -198,12 +96,41 @@ impl TypedExpression {
             TypedExpression::FnCall { t, .. } => t.clone(),
         }
     }
+
+    pub fn start(&self) -> usize {
+        match self {
+            TypedExpression::F64 { start, .. } => *start,
+            TypedExpression::I64 { start, .. } => *start,
+            TypedExpression::Bool { start, .. } => *start,
+            TypedExpression::Identifier { start, .. } => *start,
+            TypedExpression::BinaryOp { start, .. } => *start,
+            TypedExpression::UnaryOp { start, .. } => *start,
+            TypedExpression::Tuple { start, .. } => *start,
+            TypedExpression::Accessor { start, .. } => *start,
+            TypedExpression::FnCall { start, .. } => *start,
+        }
+    }
+
+    pub fn end(&self) -> usize {
+        match self {
+            TypedExpression::F64 { end, .. } => *end,
+            TypedExpression::I64 { end, .. } => *end,
+            TypedExpression::Bool { end, .. } => *end,
+            TypedExpression::Identifier { end, .. } => *end,
+            TypedExpression::BinaryOp { end, .. } => *end,
+            TypedExpression::UnaryOp { end, .. } => *end,
+            TypedExpression::Tuple { end, .. } => *end,
+            TypedExpression::Accessor { end, .. } => *end,
+            TypedExpression::FnCall { end, .. } => *end,
+        }
+    }
 }
 
 #[derive(Serialize, Clone, Debug)]
 pub enum TypedStatement {
     Let {
         start: usize,
+        ann: Option<Type>,
         name: String,
         val: TypedExpression,
         end: usize,
@@ -238,6 +165,7 @@ pub enum TypedStatement {
 #[derive(Serialize, Debug)]
 pub struct TypedFunction {
     pub name: String,
+    pub type_args: Vec<String>,
     pub args: Vec<(String, Type)>,
     pub return_type: Type,
     pub inner: Vec<TypedStatement>,
@@ -245,21 +173,23 @@ pub struct TypedFunction {
 
 pub type TypedAST = HashMap<String, TypedFunction>;
 
-pub fn annotation_type(annotation: &Expression) -> Result<Type, Error> {
+pub fn annotation_type(annotation: &Expression, type_vars: &[String]) -> Result<Type, Error> {
     match &annotation {
         Expression::Identifier { start, name, end } => {
             if name.eq("f64") {
                 Ok(Type::F64)
             } else if name.eq("i64") {
-                Ok(Type::I64 { nat: None })
+                Ok(Type::I64(None))
             } else if name.eq("bool") {
                 Ok(Type::Bool)
             } else if name.eq("void") {
                 Ok(Type::Void)
+            } else if type_vars.contains(name) {
+                Ok(Type::TypeVar(name.into()))
             } else {
                 Err(Error::new(
                     ErrorType::TypeError,
-                    "only 'f64', 'i64', 'void', and 'bool' are valid type primitives".to_string(),
+                    format!("could not find '{name}' in type context"),
                     *start,
                     *end,
                 ))
@@ -269,7 +199,7 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, Error> {
         Expression::Tuple { inner, .. } => {
             let mut members = vec![];
             for expression in inner {
-                members.push(annotation_type(expression)?);
+                members.push(annotation_type(expression, type_vars)?);
             }
             Ok(Type::Tuple(members))
         }
@@ -282,11 +212,11 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, Error> {
         } => {
             let mut args = vec![];
             for expression in inner {
-                args.push(annotation_type(expression)?);
+                args.push(annotation_type(expression, type_vars)?);
             }
-            let return_type = annotation_type(rhs)?;
+            let return_type = annotation_type(rhs, type_vars)?;
 
-            Ok(Type::Function(args, Box::new(return_type)))
+            Ok(Type::Function(vec![], args, Box::new(return_type)))
         }
 
         Expression::BinaryOp {
@@ -295,9 +225,9 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, Error> {
             rhs,
             ..
         } => {
-            let args = vec![annotation_type(lhs)?];
-            let return_type = annotation_type(rhs)?;
-            Ok(Type::Function(args, Box::new(return_type)))
+            let args = vec![annotation_type(lhs, type_vars)?];
+            let return_type = annotation_type(rhs, type_vars)?;
+            Ok(Type::Function(vec![], args, Box::new(return_type)))
         }
 
         _ => {
@@ -312,748 +242,1159 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, Error> {
     }
 }
 
-pub fn expression_type(
+fn initialize_typed_expression(
     expression: &Expression,
-    frame: &Frame<Type>,
-    globals: &Globals,
-    externals: &ExternalGlobals,
-) -> Result<TypedExpression, Error> {
-    match &expression {
-        Expression::Identifier { start, name, end } => match frame.get(name) {
-            Some(t) => Ok(TypedExpression::Identifier {
-                t: t.clone(),
-                start: *start,
-                name: name.into(),
-                end: *end,
-            }),
-            None => match globals.get(name) {
-                Some(t) => Ok(TypedExpression::Identifier {
-                    t: t.clone(),
-                    start: *start,
-                    name: name.into(),
-                    end: *end,
-                }),
-                None => match externals.get(name) {
-                    Some((t, _)) => Ok(TypedExpression::Identifier {
-                        t: t.clone(),
-                        start: *start,
-                        name: name.into(),
-                        end: *end,
-                    }),
-                    None => Err(Error::new(
-                        ErrorType::UnboundIdentifierError,
-                        format!("identifier '{name}' not found in scope"),
-                        *start,
-                        *end,
-                    )),
-                },
-            },
+    curr_forall_var: &mut usize,
+    context: &Frame<Type>,
+    errors: &mut Vec<Error>,
+) -> TypedExpression {
+    match expression {
+        Expression::Bool { start, val, end } => TypedExpression::Bool {
+            start: *start,
+            val: *val,
+            end: *end,
         },
-        Expression::F64 { start, val, end } => Ok(TypedExpression::F64 {
+        Expression::F64 { start, val, end } => TypedExpression::F64 {
             start: *start,
             val: *val,
             end: *end,
-        }),
-        Expression::I64 { start, val, end } => Ok(TypedExpression::I64 {
+        },
+        Expression::I64 { start, val, end } => TypedExpression::I64 {
+            ind: Ind::constant(*val),
             start: *start,
             val: *val,
             end: *end,
-        }),
-        Expression::Bool { start, val, end } => Ok(TypedExpression::Bool {
-            start: *start,
-            val: *val,
-            end: *end,
-        }),
-        Expression::Tuple { start, inner, end } => {
-            let mut members = vec![];
-            let mut member_types = vec![];
-            for expression in inner {
-                members.push(expression_type(expression, frame, globals, externals)?);
-                member_types.push(members.last().unwrap().get_type());
-            }
-
-            Ok(TypedExpression::Tuple {
+        },
+        Expression::UnaryOp {
+            start,
+            op,
+            inner,
+            end,
+        } => {
+            *curr_forall_var += 1;
+            TypedExpression::UnaryOp {
+                t: Type::ForAll(*curr_forall_var - 1),
                 start: *start,
-                inner: members,
-                t: Type::Tuple(member_types),
+                op: op.clone(),
+                inner: Box::new(initialize_typed_expression(
+                    inner,
+                    curr_forall_var,
+                    context,
+                    errors,
+                )),
                 end: *end,
-            })
+            }
         }
-
-        Expression::OpenTuple { .. } => panic!(),
-
         Expression::BinaryOp {
             start,
             lhs,
-            rhs,
             op,
+            rhs,
             end,
         } => {
-            let lhs = expression_type(lhs, frame, globals, externals)?;
-            let rhs = expression_type(rhs, frame, globals, externals)?;
-
-            match &op {
-                Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp | Op::Greater | Op::Less => {
-                    let t = number_coersion::arith_coerce(
-                        *start,
-                        lhs.get_type(),
-                        op,
-                        rhs.get_type(),
-                        *end,
-                    )?;
-                    Ok(TypedExpression::BinaryOp {
-                        t,
-                        start: *start,
-                        lhs: Box::new(lhs),
-                        op: op.clone(),
-                        rhs: Box::new(rhs),
-                        end: *end,
-                    })
-                }
-
-                Op::And | Op::Or => match (lhs.get_type(), rhs.get_type()) {
-                    (Type::Bool, Type::Bool) => Ok(TypedExpression::BinaryOp {
-                        t: Type::Bool,
-                        start: *start,
-                        lhs: Box::new(lhs),
-                        op: op.clone(),
-                        rhs: Box::new(rhs),
-                        end: *end,
-                    }),
-                    _ => {
-                        if Type::Bool == lhs.get_type() {
-                            Err(Error::new(
-                                ErrorType::TypeError,
-                                format!("cannot apply boolean operator to '{:?}'", rhs.get_type()),
-                                *start,
-                                *end,
-                            ))
-                        } else {
-                            Err(Error::new(
-                                ErrorType::TypeError,
-                                format!("cannot apply boolean operator to '{:?}'", lhs.get_type()),
-                                *start,
-                                *end,
-                            ))
-                        }
-                    }
-                },
-
-                Op::Equal | Op::NotEqual => {
-                    match equality::equality_check(&lhs.get_type(), &rhs.get_type()) {
-                        Ok(()) => Ok(TypedExpression::BinaryOp {
-                            t: Type::Bool,
-                            start: *start,
-                            lhs: Box::new(lhs),
-                            op: op.clone(),
-                            rhs: Box::new(rhs),
-                            end: *end,
-                        }),
-                        Err(msg) => Err(Error::new(ErrorType::TypeError, msg, *start, *end)),
-                    }
-                }
-
-                Op::Comma => panic!(),
-                Op::Tick => panic!(),
-                Op::Not => panic!(),
-                Op::Apply => Err(Error::new(
-                    ErrorType::ParseError,
-                    "cannot use application in expression".into(),
-                    *start,
-                    *end,
+            *curr_forall_var += 1;
+            TypedExpression::BinaryOp {
+                t: Type::ForAll(*curr_forall_var - 1),
+                start: *start,
+                lhs: Box::new(initialize_typed_expression(
+                    lhs,
+                    curr_forall_var,
+                    context,
+                    errors,
                 )),
-                Op::Dot => Err(Error::new(
-                    ErrorType::NotImplementedError,
-                    "have not implemented dot operator".into(),
-                    *start,
-                    *end,
+                op: op.clone(),
+                rhs: Box::new(initialize_typed_expression(
+                    rhs,
+                    curr_forall_var,
+                    context,
+                    errors,
                 )),
+                end: *end,
             }
         }
-
-        Expression::UnaryOp {
-            start,
-            op: UnaryOp::ArithNeg,
-            inner,
-            end,
-        } => {
-            let inner_expr = expression_type(inner, frame, globals, externals)?;
-            if inner_expr.get_type() == Type::F64 {
-                Ok(TypedExpression::UnaryOp {
-                    t: Type::F64,
-                    start: *start,
-                    op: UnaryOp::ArithNeg,
-                    inner: Box::new(inner_expr),
-                    end: *end,
-                })
-            } else if let Type::I64 { .. } = inner_expr.get_type() {
-                Ok(TypedExpression::UnaryOp {
-                    t: Type::I64 { nat: None },
-                    start: *start,
-                    op: UnaryOp::ArithNeg,
-                    inner: Box::new(inner_expr),
-                    end: *end,
-                })
-            } else {
-                Err(Error::new(
-                    ErrorType::TypeError,
-                    format!(
-                        "cannot apply arithmetic negation to '{:?}'",
-                        inner_expr.get_type()
-                    ),
-                    *start,
-                    *end,
-                ))
-            }
-        }
-
-        Expression::UnaryOp {
-            start,
-            op: UnaryOp::BoolNeg,
-            inner,
-            end,
-        } => {
-            let inner_expr = expression_type(inner, frame, globals, externals)?;
-            if inner_expr.get_type() == Type::Bool {
-                Ok(TypedExpression::UnaryOp {
-                    t: Type::Bool,
-                    start: *start,
-                    op: UnaryOp::BoolNeg,
-                    inner: Box::new(inner_expr),
-                    end: *end,
-                })
-            } else {
-                Err(Error::new(
-                    ErrorType::TypeError,
-                    format!(
-                        "cannot apply boolean negation to '{:?}'",
-                        inner_expr.get_type()
-                    ),
-                    *start,
-                    *end,
-                ))
-            }
-        }
-
-        Expression::UnaryOp {
-            start,
-            op: UnaryOp::Tick,
-            end,
-            ..
-        } => Err(Error::new(
-            ErrorType::NotImplementedError,
-            "have not implemented tick operator".into(),
-            *start,
-            *end,
-        )),
-
         Expression::Accessor {
             start,
             lhs,
             rhs,
             end,
         } => {
-            let lhs = expression_type(lhs, frame, globals, externals)?;
-            let rhs = expression_type(rhs, frame, globals, externals)?;
-
-            match lhs.get_type() {
-                Type::Tuple(lhs_inner) => match rhs.get_type() {
-                    Type::I64 { nat: Some(nat) } => {
-                        if nat > lhs_inner.len() - 1 {
-                            Err(Error::new(
-                                ErrorType::TypeError,
-                                format!(
-                                    "index {nat} is out of bounds of {}-tuple",
-                                    lhs_inner.len()
-                                ),
-                                *start,
-                                *end,
-                            ))
-                        } else {
-                            Ok(TypedExpression::Accessor {
-                                t: lhs_inner[nat].clone(),
-                                start: *start,
-                                lhs: Box::new(lhs),
-                                rhs: Box::new(rhs),
-                                end: *end,
-                            })
-                        }
-                    }
-                    rhs => Err(Error::new(
-                        ErrorType::TypeError,
-                        format!("cannot access index with '{rhs:?}'"),
-                        *start,
-                        *end,
-                    )),
-                },
-                lhs => Err(Error::new(
-                    ErrorType::TypeError,
-                    format!("cannot access index of '{lhs:?}'"),
-                    *start,
-                    *end,
+            *curr_forall_var += 1;
+            TypedExpression::Accessor {
+                t: Type::ForAll(*curr_forall_var - 1),
+                start: *start,
+                lhs: Box::new(initialize_typed_expression(
+                    lhs,
+                    curr_forall_var,
+                    context,
+                    errors,
                 )),
+                rhs: Box::new(initialize_typed_expression(
+                    rhs,
+                    curr_forall_var,
+                    context,
+                    errors,
+                )),
+                end: *end,
             }
         }
-
+        Expression::Tuple { start, inner, end } => {
+            *curr_forall_var += 1;
+            TypedExpression::Tuple {
+                t: Type::ForAll(*curr_forall_var - 1),
+                start: *start,
+                inner: inner
+                    .iter()
+                    .map(|e| initialize_typed_expression(e, curr_forall_var, context, errors))
+                    .collect(),
+                end: *end,
+            }
+        }
         Expression::FnCall {
             start,
             caller,
             args,
             end,
         } => {
-            let caller_expr = expression_type(caller, frame, globals, externals)?;
-            match caller_expr.get_type() {
-                Type::Function(arg_types, return_type) => {
-                    let function_name = match caller.as_ref() {
-                        Expression::Identifier { name, .. } => format!("function '{name}'"),
-                        _ => "anonymous function".into(),
-                    };
+            *curr_forall_var += 1;
+            TypedExpression::FnCall {
+                t: Type::ForAll(*curr_forall_var - 1),
+                start: *start,
+                caller: Box::new(initialize_typed_expression(
+                    caller,
+                    curr_forall_var,
+                    context,
+                    errors,
+                )),
+                args: args
+                    .iter()
+                    .map(|e| initialize_typed_expression(e, curr_forall_var, context, errors))
+                    .collect(),
+                end: *end,
+            }
+        }
+        Expression::Identifier { start, name, end } => match context.get(name) {
+            Some(t) => TypedExpression::Identifier {
+                t: match t {
+                    Type::Function(type_vars, _, _) => {
+                        *curr_forall_var += type_vars.len();
+                        t.instantiate_fn(type_vars, *curr_forall_var - type_vars.len())
+                    }
+                    _ => t.clone(),
+                },
+                start: *start,
+                name: name.clone(),
+                end: *end,
+            },
+            None => {
+                errors.push(Error::new(
+                    ErrorType::UnboundIdentifierError,
+                    format!("identifier '{name}' not found in scope"),
+                    *start,
+                    *end,
+                ));
+                TypedExpression::Identifier {
+                    t: Type::Unknown,
+                    start: *start,
+                    name: name.clone(),
+                    end: *end,
+                }
+            }
+        },
+        Expression::OpenTuple { .. } => panic!(),
+    }
+}
 
-                    let mut typed_args = vec![];
+fn initialize_typed_statement(
+    statement: &Statement,
+    curr_forall_var: &mut usize,
+    context: &mut Frame<Type>,
+    errors: &mut Vec<Error>,
+    type_vars: &[String],
+) -> TypedStatement {
+    match statement {
+        Statement::Print { start, val, end } => TypedStatement::Print {
+            start: *start,
+            val: initialize_typed_expression(val, curr_forall_var, context, errors),
+            end: *end,
+        },
+        Statement::Let {
+            start,
+            name,
+            ann,
+            val,
+            end,
+        } => {
+            let val = initialize_typed_expression(val, curr_forall_var, context, errors);
 
-                    if args.len() != arg_types.len() {
-                        Err(Error::new(
-                            ErrorType::TypeError,
-                            format!(
-                                "expected {} argument{} to {}; got {}",
-                                arg_types.len(),
-                                if arg_types.len() == 1 { "" } else { "s" },
-                                function_name,
-                                args.len()
-                            ),
-                            *start,
-                            *end,
-                        ))
-                    } else {
-                        for (i, arg) in args.iter().enumerate() {
-                            typed_args.push(expression_type(arg, frame, globals, externals)?);
-                            if !typed_args
-                                .last()
-                                .unwrap()
-                                .get_type()
-                                .is_subtype(&arg_types[i])
-                            {
-                                let (arg_start, arg_end) = arg.range();
-                                return Err(Error::new(
+            context.insert(name.clone(), val.get_type());
+
+            let ann = match ann {
+                Some(ann) => match annotation_type(ann, type_vars) {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        errors.push(e);
+                        Some(Type::Unknown)
+                    }
+                },
+                None => None,
+            };
+
+            TypedStatement::Let {
+                start: *start,
+                ann,
+                name: name.clone(),
+                val,
+                end: *end,
+            }
+        }
+        Statement::If {
+            start,
+            cond,
+            true_inner,
+            false_inner,
+            end,
+        } => TypedStatement::If {
+            start: *start,
+            cond: initialize_typed_expression(cond, curr_forall_var, context, errors),
+            true_inner: true_inner
+                .iter()
+                .map(|s| initialize_typed_statement(s, curr_forall_var, context, errors, type_vars))
+                .collect(),
+            false_inner: false_inner.as_ref().map(|i| {
+                i.iter()
+                    .map(|s| {
+                        initialize_typed_statement(s, curr_forall_var, context, errors, type_vars)
+                    })
+                    .collect()
+            }),
+            end: *end,
+        },
+        Statement::For {
+            start,
+            iterator,
+            from,
+            to,
+            inner,
+            end,
+        } => TypedStatement::For {
+            start: *start,
+            iterator: iterator.clone(),
+            from: initialize_typed_expression(from, curr_forall_var, context, errors),
+            to: initialize_typed_expression(to, curr_forall_var, context, errors),
+            inner: inner
+                .iter()
+                .map(|s| initialize_typed_statement(s, curr_forall_var, context, errors, type_vars))
+                .collect(),
+            end: *end,
+        },
+        Statement::Return { start, val, end } => TypedStatement::Return {
+            start: *start,
+            val: val
+                .as_ref()
+                .map(|v| initialize_typed_expression(v, curr_forall_var, context, errors)),
+            end: *end,
+        },
+    }
+}
+
+fn unify_expression(
+    expression: &TypedExpression,
+    context: &Frame<Type>,
+    curr_forall_var: &mut usize,
+) -> Result<Substitutions, Error> {
+    match expression {
+        TypedExpression::Bool { .. } => Ok(Substitutions::new()),
+        TypedExpression::F64 { .. } => Ok(Substitutions::new()),
+        TypedExpression::I64 { .. } => Ok(Substitutions::new()),
+        TypedExpression::Accessor {
+            t,
+            start,
+            lhs,
+            rhs,
+            end,
+        } => {
+            let lhs_subs = unify_expression(lhs, context, curr_forall_var)?;
+            let rhs_subs = unify_expression(rhs, context, curr_forall_var)?;
+
+            match lhs.get_type() {
+                Type::Tuple(lhs_members) => match rhs.get_type() {
+                    Type::I64(Some(ind)) => match ind.constant_val() {
+                        Some((sign, val)) => {
+                            if val >= lhs_members.len() || sign {
+                                Err(Error::new(
                                     ErrorType::TypeError,
-                                    format!(
-                                        "expected '{:?}' as {} argument to {}; got '{:?}'",
-                                        arg_types[i],
-                                        cardinal(i + 1),
-                                        function_name,
-                                        typed_args.last().unwrap().get_type()
-                                    ),
-                                    arg_start,
-                                    arg_end,
-                                ));
+                                    format!("index out of bounds of {}-tuple", lhs_members.len()),
+                                    *start,
+                                    *end,
+                                ))
+                            } else {
+                                let mut subs = lhs_subs;
+                                subs.extend(rhs.start(), rhs_subs, rhs.end())?;
+                                match t.unify(&lhs_members[val]) {
+                                    Some(s) => {
+                                        subs.extend(lhs.start(), s, lhs.end())?;
+                                        Ok(subs)
+                                    }
+                                    None => Err(Error::new(
+                                        ErrorType::TypeError,
+                                        format!(
+                                            "cannot unify types '{:?}' and '{:?}'",
+                                            t, &lhs_members[val]
+                                        ),
+                                        *start,
+                                        *end,
+                                    )),
+                                }
                             }
                         }
-
-                        if *return_type == Type::Void {
-                            Err(Error::new(
-                                ErrorType::TypeError,
-                                format!("return type of {function_name} is 'void'"),
-                                *start,
-                                *end,
-                            ))
-                        } else {
-                            Ok(TypedExpression::FnCall {
-                                t: *return_type,
-                                start: *start,
-                                caller: Box::new(caller_expr),
-                                args: typed_args,
-                                end: *end,
-                            })
-                        }
-                    }
-                }
+                        None => Err(Error::new(
+                            ErrorType::TypeError,
+                            "tuple index must be statically known".into(),
+                            *start,
+                            *end,
+                        )),
+                    },
+                    Type::I64(None) => Err(Error::new(
+                        ErrorType::TypeError,
+                        "tuple index must be statically known".into(),
+                        *start,
+                        *end,
+                    )),
+                    Type::ForAll(_) => Ok(Substitutions::new()),
+                    t => Err(Error::new(
+                        ErrorType::TypeError,
+                        format!("cannot index tuple with type '{t:?}'"),
+                        *start,
+                        *end,
+                    )),
+                },
+                Type::ForAll(_) => match rhs.get_type() {
+                    Type::I64(Some(ind)) => match ind.constant_val() {
+                        Some(_) => Ok(Substitutions::new()),
+                        None => Err(Error::new(
+                            ErrorType::TypeError,
+                            "tuple index must be statically known".into(),
+                            *start,
+                            *end,
+                        )),
+                    },
+                    Type::I64(None) => Err(Error::new(
+                        ErrorType::TypeError,
+                        "tuple index must be statically known".into(),
+                        *start,
+                        *end,
+                    )),
+                    Type::ForAll(_) => Ok(Substitutions::new()),
+                    t => Err(Error::new(
+                        ErrorType::TypeError,
+                        format!("cannot index tuple with type '{t:?}'"),
+                        *start,
+                        *end,
+                    )),
+                },
                 t => Err(Error::new(
                     ErrorType::TypeError,
-                    format!("cannot call '{t:?}' as function"),
+                    format!("cannot index into type '{t:?}'"),
                     *start,
                     *end,
                 )),
             }
         }
+        TypedExpression::Identifier {
+            start,
+            t,
+            name,
+            end,
+        } => match context.get(name) {
+            Some(var_t) => match var_t {
+                Type::Function(_, _, _) => Ok(Substitutions::new()),
+                _ => match t.unify(var_t) {
+                    Some(subs) => Ok(subs),
+                    None => Err(Error::new(
+                        ErrorType::TypeError,
+                        format!("cannot unify types '{t:?}' and '{var_t:?}'"),
+                        *start,
+                        *end,
+                    )),
+                },
+            },
+            None => match t.unify(&Type::Unknown) {
+                Some(subs) => Ok(subs),
+                None => Err(Error::new(
+                    ErrorType::TypeError,
+                    format!("cannot unify types '{t:?}' and '{:?}'", Type::Unknown),
+                    *start,
+                    *end,
+                )),
+            },
+        },
+        TypedExpression::UnaryOp {
+            t,
+            start,
+            op,
+            inner,
+            end,
+        } => {
+            let mut subs = unify_expression(inner, context, curr_forall_var)?;
+
+            if inner.get_type().forall_vars().is_empty() {
+                match op {
+                    UnaryOp::ArithNeg => match inner.get_type() {
+                        Type::F64 => match Type::F64.unify(t) {
+                            Some(s) => subs.extend(*start, s, *end)?,
+                            None => {
+                                return Err(Error::new(
+                                    ErrorType::TypeError,
+                                    format!("cannot unify types '{t:?}' and '{:?}'", Type::F64),
+                                    *start,
+                                    *end,
+                                ))
+                            }
+                        },
+                        Type::I64(_) => match Type::I64(None).unify(t) {
+                            Some(s) => subs.extend(*start, s, *end)?,
+                            None => {
+                                return Err(Error::new(
+                                    ErrorType::TypeError,
+                                    format!(
+                                        "cannot unify types '{t:?}' and '{:?}'",
+                                        Type::I64(None)
+                                    ),
+                                    *start,
+                                    *end,
+                                ))
+                            }
+                        },
+                        t => {
+                            return Err(Error::new(
+                                ErrorType::TypeError,
+                                format!("cannot apply arithmetic negation to type '{t:?}'"),
+                                *start,
+                                *end,
+                            ))
+                        }
+                    },
+                    UnaryOp::BoolNeg => match inner.get_type() {
+                        Type::Bool => match Type::Bool.unify(t) {
+                            Some(s) => subs.extend(*start, s, *end)?,
+                            None => {
+                                return Err(Error::new(
+                                    ErrorType::TypeError,
+                                    format!("cannot unify types '{t:?}' and '{:?}'", Type::Bool),
+                                    *start,
+                                    *end,
+                                ))
+                            }
+                        },
+                        t => {
+                            return Err(Error::new(
+                                ErrorType::TypeError,
+                                format!("cannot apply boolean negation to type '{t:?}'"),
+                                *start,
+                                *end,
+                            ))
+                        }
+                    },
+                    UnaryOp::Tick => {
+                        return Err(Error::new(
+                            ErrorType::NotImplementedError,
+                            "tick operator not implemented yet".into(),
+                            *start,
+                            *end,
+                        ))
+                    }
+                }
+            }
+
+            Ok(subs)
+        }
+        TypedExpression::Tuple {
+            t,
+            start,
+            inner,
+            end,
+        } => {
+            let mut subs = Substitutions::new();
+            let inner_types = inner.iter().map(|e| e.get_type()).collect();
+            for e in inner {
+                subs.extend(*start, unify_expression(e, context, curr_forall_var)?, *end)?;
+            }
+
+            let tuple_t = Type::Tuple(inner_types);
+
+            match t.unify(&tuple_t) {
+                Some(s) => subs.extend(*start, s, *end)?,
+                None => {
+                    return Err(Error::new(
+                        ErrorType::TypeError,
+                        format!("cannot unify types '{t:?}' and '{tuple_t:?}'"),
+                        *start,
+                        *end,
+                    ))
+                }
+            }
+
+            Ok(subs)
+        }
+        TypedExpression::BinaryOp {
+            t,
+            start,
+            lhs,
+            op,
+            rhs,
+            end,
+        } => {
+            let lhs_subs = unify_expression(lhs, context, curr_forall_var)?;
+            let rhs_subs = unify_expression(rhs, context, curr_forall_var)?;
+
+            let mut subs = lhs_subs;
+            subs.extend(rhs.start(), rhs_subs, rhs.end())?;
+
+            let lhs_type = lhs.get_type();
+            let rhs_type = rhs.get_type();
+
+            if lhs_type.forall_vars().is_empty() && rhs_type.forall_vars().is_empty() {
+                if is_arith(op) {
+                    let arith_result = arith_coerce(*start, lhs_type, op, rhs_type, *end)?;
+
+                    match t.unify(&arith_result) {
+                        Some(s) => subs.extend(*start, s, *end)?,
+                        None => {
+                            return Err(Error::new(
+                                ErrorType::TypeError,
+                                format!("cannot unify types '{t:?}' and '{arith_result:?}'"),
+                                *start,
+                                *end,
+                            ))
+                        }
+                    }
+                } else {
+                    match op {
+                        Op::Equal | Op::NotEqual => match equality_check(&lhs_type, &rhs_type) {
+                            Ok(_) => match t.unify(&Type::Bool) {
+                                Some(s) => subs.extend(*start, s, *end)?,
+                                None => {
+                                    return Err(Error::new(
+                                        ErrorType::TypeError,
+                                        format!(
+                                            "cannot unify types '{t:?}' and '{:?}'",
+                                            Type::Bool
+                                        ),
+                                        *start,
+                                        *end,
+                                    ))
+                                }
+                            },
+                            Err(msg) => {
+                                return Err(Error::new(ErrorType::TypeError, msg, *start, *end))
+                            }
+                        },
+
+                        Op::Dot => {
+                            return Err(Error::new(
+                                ErrorType::NotImplementedError,
+                                "dot operator not implemented yet".into(),
+                                *start,
+                                *end,
+                            ))
+                        }
+                        Op::And | Op::Or => {
+                            if lhs_type != Type::Bool {
+                                return Err(Error::new(
+                                    ErrorType::TypeError,
+                                    format!("cannot apply boolean operator to type '{lhs_type:?}'",),
+                                    *start,
+                                    *end,
+                                ));
+                            } else if rhs_type != Type::Bool {
+                                return Err(Error::new(
+                                    ErrorType::TypeError,
+                                    format!("cannot apply boolean operator to type '{rhs_type:?}'",),
+                                    *start,
+                                    *end,
+                                ));
+                            } else {
+                                match t.unify(&Type::Bool) {
+                                    Some(s) => subs.extend(*start, s, *end)?,
+                                    None => {
+                                        return Err(Error::new(
+                                            ErrorType::TypeError,
+                                            format!(
+                                                "cannot unify types '{t:?}' and '{:?}'",
+                                                Type::Bool
+                                            ),
+                                            *start,
+                                            *end,
+                                        ))
+                                    }
+                                }
+                            }
+                        }
+                        Op::Apply => {
+                            return Err(Error::new(
+                                ErrorType::TypeError,
+                                "cannot use function operator in expression".into(),
+                                *start,
+                                *end,
+                            ))
+                        }
+                        _ => panic!(),
+                    }
+                }
+            }
+
+            Ok(subs)
+        }
+        TypedExpression::FnCall {
+            t,
+            start,
+            caller,
+            args,
+            end,
+        } => {
+            let mut subs = unify_expression(caller, context, curr_forall_var)?;
+            let arg_types: Vec<_> = args.iter().map(|e| e.get_type()).collect();
+            for e in args {
+                subs.extend(*start, unify_expression(e, context, curr_forall_var)?, *end)?;
+            }
+
+            match caller.get_type() {
+                Type::Function(type_vars, _, _) => match caller.get_type() {
+                    Type::Function(_, i, o) => {
+                        if i.len() != arg_types.len() {
+                            return Err(Error::new(
+                                ErrorType::TypeError,
+                                format!(
+                                    "expected {} arguments to function; found {}",
+                                    i.len(),
+                                    arg_types.len()
+                                ),
+                                *start,
+                                *end,
+                            ));
+                        } else {
+                            for (given_arg, expected_arg) in arg_types.iter().zip(i) {
+                                match given_arg.unify(&expected_arg) {
+                                    Some(s) => subs.extend(*start, s, *end)?,
+                                    None => {
+                                        return Err(Error::new(
+                                            ErrorType::TypeError,
+                                            format!("cannot unify types '{given_arg:?}' and '{expected_arg:?}'"),
+                                            *start,
+                                            *end,
+                                        ))
+                                    }
+                                }
+                            }
+                        }
+
+                        match t.unify(o.as_ref()) {
+                            Some(s) => subs.extend(*start, s, *end)?,
+                            None => {
+                                return Err(Error::new(
+                                    ErrorType::TypeError,
+                                    format!("cannot unify types '{t:?}' and '{o:?}'"),
+                                    *start,
+                                    *end,
+                                ))
+                            }
+                        }
+
+                        *curr_forall_var += type_vars.len();
+                    }
+                    _ => panic!(),
+                },
+                Type::ForAll(_) => (),
+                t => {
+                    return Err(Error::new(
+                        ErrorType::TypeError,
+                        format!("cannot call type '{t:?}' as function"),
+                        *start,
+                        *end,
+                    ))
+                }
+            }
+
+            Ok(subs)
+        }
     }
 }
 
-fn typecheck_block(
-    statements: &[Statement],
-    frame: Option<&mut Frame<Type>>,
-    globals: &Globals,
-    externals: &ExternalGlobals,
-    curr_function: &str,
-) -> (Vec<TypedStatement>, Vec<Error>) {
-    let mut empty_frame = Frame::default();
-    let frame = match frame {
-        Some(frame) => frame,
-        None => &mut empty_frame,
-    };
-
-    frame.push_scope();
-    let mut errors = vec![];
-    let mut typed_statements = vec![];
-
-    for statement in statements {
+pub fn unify(
+    block: &[TypedStatement],
+    context: &mut Frame<Type>,
+    curr_forall_var: &mut usize,
+    return_type: &Type,
+    errors: &mut Vec<Error>,
+    subs: &mut Substitutions,
+) {
+    for statement in block {
         match statement {
-            Statement::Let {
-                start,
-                name,
-                ann,
-                val,
-                end,
-            } => match expression_type(val, frame, globals, externals) {
-                Ok(typed_expr) => {
-                    if let Some(ann) = ann {
-                        match annotation_type(ann) {
-                            Ok(ann_t) => {
-                                if !typed_expr.get_type().is_subtype(&ann_t) {
-                                    let (val_start, val_end) = val.range();
-
-                                    errors.push(Error::new(
-                                        ErrorType::TypeError,
-                                        format!("annotation '{ann_t:?}' does not match expression '{:?}'", typed_expr.get_type()),
-                                        val_start,
-                                        val_end,
-                                    ));
-                                }
-                            }
-                            Err(error) => errors.push(error),
-                        }
-                    }
-                    frame.insert(name.into(), typed_expr.get_type());
-                    typed_statements.push(TypedStatement::Let {
-                        start: *start,
-                        name: name.into(),
-                        val: typed_expr,
-                        end: *end,
-                    });
-                }
-                Err(error) => {
-                    errors.push(error);
-                }
-            },
-
-            Statement::Print { start, val, end } => {
-                match expression_type(val, frame, globals, externals) {
-                    Ok(typed_expr) => typed_statements.push(TypedStatement::Print {
-                        start: *start,
-                        val: typed_expr,
-                        end: *end,
-                    }),
+            TypedStatement::Print { val, .. } => {
+                match unify_expression(val, context, curr_forall_var) {
+                    Ok(s) => match subs.extend(val.start(), s, val.end()) {
+                        Ok(()) => (),
+                        Err(error) => errors.push(error),
+                    },
                     Err(error) => errors.push(error),
                 }
             }
-
-            Statement::If {
-                start,
-                cond,
-                true_inner,
-                false_inner,
-                end,
-            } => {
-                let typed_cond = match expression_type(cond, frame, globals, externals) {
-                    Ok(typed_cond_expr) => {
-                        if typed_cond_expr.get_type() != Type::Bool {
-                            let (cond_start, cond_end) = cond.range();
-
-                            errors.push(Error::new(
-                                ErrorType::TypeError,
-                                format!(
-                                    "condition should be 'bool'; found '{:?}'",
-                                    typed_cond_expr.get_type()
-                                ),
-                                cond_start,
-                                cond_end,
-                            ));
-                        }
-                        Some(typed_cond_expr)
-                    }
-                    Err(err) => {
-                        errors.push(err);
-                        None
-                    }
-                };
-
-                let (true_inner_statements, mut true_inner_errors) =
-                    typecheck_block(true_inner, Some(frame), globals, externals, curr_function);
-                frame.pop_scope();
-                errors.append(&mut true_inner_errors);
-
-                if let Some(false_inner) = false_inner {
-                    let (false_inner_statements, mut false_inner_errors) = typecheck_block(
-                        false_inner,
-                        Some(frame),
-                        globals,
-                        externals,
-                        curr_function,
-                    );
-
-                    frame.pop_scope();
-                    errors.append(&mut false_inner_errors);
-
-                    if let Some(typed_cond) = typed_cond {
-                        typed_statements.push(TypedStatement::If {
-                            start: *start,
-                            cond: typed_cond,
-                            true_inner: true_inner_statements,
-                            false_inner: Some(false_inner_statements),
-                            end: *end,
-                        });
-                    }
-                } else if let Some(typed_cond) = typed_cond {
-                    typed_statements.push(TypedStatement::If {
-                        start: *start,
-                        cond: typed_cond,
-                        true_inner: true_inner_statements,
-                        false_inner: None,
-                        end: *end,
-                    });
-                }
-            }
-
-            Statement::For {
-                start,
-                iterator,
-                from,
-                to,
-                inner,
-                end,
-            } => {
-                let typed_from = match expression_type(from, frame, globals, externals) {
-                    Ok(typed_from_expr) => {
-                        if !typed_from_expr.get_type().is_int() {
-                            let (from_start, from_end) = from.range();
-
-                            errors.push(Error::new(
-                                ErrorType::TypeError,
-                                format!(
-                                    "from value should be 'i64'; found '{:?}'",
-                                    typed_from_expr.get_type()
-                                ),
-                                from_start,
-                                from_end,
-                            ));
-                        }
-                        Some(typed_from_expr)
-                    }
-                    Err(err) => {
-                        errors.push(err);
-                        None
-                    }
-                };
-
-                let typed_to = match expression_type(to, frame, globals, externals) {
-                    Ok(typed_to_expr) => {
-                        if !typed_to_expr.get_type().is_int() {
-                            let (to_start, to_end) = to.range();
-
-                            errors.push(Error::new(
-                                ErrorType::TypeError,
-                                format!(
-                                    "to value should be 'i64'; found '{:?}'",
-                                    typed_to_expr.get_type()
-                                ),
-                                to_start,
-                                to_end,
-                            ));
-                        }
-                        Some(typed_to_expr)
-                    }
-                    Err(err) => {
-                        errors.push(err);
-                        None
-                    }
-                };
-
-                frame.push_scope();
-                frame.insert(iterator.clone(), Type::I64 { nat: None });
-
-                let (inner_statements, mut inner_errors) =
-                    typecheck_block(inner, Some(frame), globals, externals, curr_function);
-
-                frame.pop_scope();
-                frame.pop_scope();
-
-                errors.append(&mut inner_errors);
-
-                if let (Some(typed_from), Some(typed_to)) = (typed_from, typed_to) {
-                    typed_statements.push(TypedStatement::For {
-                        start: *start,
-                        iterator: iterator.clone(),
-                        from: typed_from,
-                        to: typed_to,
-                        inner: inner_statements,
-                        end: *end,
-                    });
-                }
-            }
-
-            Statement::Return { start, val, end } => match val {
-                Some(val) => {
-                    let (val_start, val_end) = val.range();
-                    match expression_type(val, frame, globals, externals) {
-                        Ok(return_expr) => {
-                            if let Some(Type::Function(_, return_type)) = globals.get(curr_function)
-                            {
-                                if !return_expr.get_type().is_subtype(return_type.as_ref()) {
-                                    errors.push(Error::new(
-                                        ErrorType::TypeError,
-                                        format!(
-                                            "return type of function '{curr_function}' should be '{return_type:?}'; found '{:?}'",
-                                            return_expr.get_type()
-                                        ),
-                                        val_start,
-                                        val_end,
-                                    ));
-                                }
-                            }
-
-                            typed_statements.push(TypedStatement::Return {
-                                start: *start,
-                                val: Some(return_expr),
-                                end: *end,
-                            });
-                        }
-
+            TypedStatement::Let { ann, name, val, .. } => {
+                match unify_expression(val, context, curr_forall_var) {
+                    Ok(s) => match subs.extend(val.start(), s, val.end()) {
+                        Ok(()) => (),
                         Err(error) => errors.push(error),
+                    },
+                    Err(error) => errors.push(error),
+                }
+
+                context.insert(name.clone(), val.get_type());
+
+                if let Some(ann) = ann {
+                    match val.get_type().unify(ann) {
+                        Some(s) => match subs.extend(val.start(), s, val.end()) {
+                            Ok(()) => (),
+                            Err(error) => errors.push(error),
+                        },
+                        None => errors.push(Error::new(
+                            ErrorType::TypeError,
+                            format!(
+                                "cannot unify type '{:?}' with annotation '{ann:?}'",
+                                val.get_type()
+                            ),
+                            val.start(),
+                            val.end(),
+                        )),
+                    }
+                }
+
+                match context.get(name) {
+                    Some(var_t) => match val.get_type().unify(var_t) {
+                        Some(s) => match subs.extend(val.start(), s, val.end()) {
+                            Ok(()) => (),
+                            Err(error) => errors.push(error),
+                        },
+                        None => errors.push(Error::new(
+                            ErrorType::TypeError,
+                            format!("cannot unify types '{:?}' and '{var_t:?}'", val.get_type()),
+                            val.start(),
+                            val.end(),
+                        )),
+                    },
+                    None => panic!(),
+                }
+            }
+            TypedStatement::Return { start, val, end } => match val {
+                Some(val) => {
+                    if return_type == &Type::Void {
+                        errors.push(Error::new(
+                            ErrorType::TypeError,
+                            "cannot return value from void function".into(),
+                            *start,
+                            *end,
+                        ));
+                    } else {
+                        match unify_expression(val, context, curr_forall_var) {
+                            Ok(s) => match subs.extend(val.start(), s, val.end()) {
+                                Ok(()) => (),
+                                Err(error) => errors.push(error),
+                            },
+                            Err(error) => errors.push(error),
+                        }
+
+                        match val.get_type().unify(return_type) {
+                            Some(s) => match subs.extend(val.start(), s, val.end()) {
+                                Ok(()) => (),
+                                Err(error) => errors.push(error),
+                            },
+                            None => errors.push(Error::new(
+                                ErrorType::TypeError,
+                                format!(
+                                    "cannot unify type '{:?}' with return type '{return_type:?}'",
+                                    val.get_type()
+                                ),
+                                val.start(),
+                                val.end(),
+                            )),
+                        }
                     }
                 }
                 None => {
-                    let Some(Type::Function(_, return_type)) = globals.get(curr_function) else {
-                        continue;
-                    };
-
-                    if let Type::Void = **return_type {
-                        typed_statements.push(TypedStatement::Return {
-                            start: *start,
-                            val: None,
-                            end: *end,
-                        });
-                    } else {
+                    if return_type != &Type::Void {
                         errors.push(Error::new(
                             ErrorType::TypeError,
-                            format!(
-                                "return type of function '{curr_function}' should be '{:?}'; found 'void'",
-                                return_type.as_ref()
-                            ),
+                            "cannot return void from non-void function".into(),
                             *start,
-                            *start + 1,
+                            *end,
                         ));
                     }
                 }
             },
+            TypedStatement::If {
+                cond,
+                true_inner,
+                false_inner,
+                ..
+            } => {
+                match unify_expression(cond, context, curr_forall_var) {
+                    Ok(s) => {
+                        match subs.extend(cond.start(), s, cond.end()) {
+                            Ok(()) => (),
+                            Err(error) => errors.push(error),
+                        };
+                        match cond.get_type().unify(&Type::Bool) {
+                            Some(s) => match subs.extend(cond.start(), s, cond.end()) {
+                                Ok(()) => (),
+                                Err(error) => errors.push(error),
+                            },
+                            None => errors.push(Error::new(
+                                ErrorType::TypeError,
+                                "condition must be boolean type".into(),
+                                cond.start(),
+                                cond.end(),
+                            )),
+                        }
+                    }
+                    Err(error) => errors.push(error),
+                }
+
+                context.push_scope();
+                unify(
+                    true_inner,
+                    context,
+                    curr_forall_var,
+                    return_type,
+                    errors,
+                    subs,
+                );
+                context.pop_scope();
+
+                match false_inner {
+                    Some(false_inner) => {
+                        context.push_scope();
+                        unify(
+                            false_inner,
+                            context,
+                            curr_forall_var,
+                            return_type,
+                            errors,
+                            subs,
+                        );
+                        context.pop_scope();
+                    }
+                    None => (),
+                }
+            }
+            TypedStatement::For {
+                iterator,
+                from,
+                to,
+                inner,
+                ..
+            } => {
+                match unify_expression(from, context, curr_forall_var) {
+                    Ok(s) => {
+                        match subs.extend(from.start(), s, from.end()) {
+                            Ok(()) => (),
+                            Err(error) => errors.push(error),
+                        };
+                        match from.get_type().unify(&Type::I64(None)) {
+                            Some(s) => match subs.extend(from.start(), s, from.end()) {
+                                Ok(()) => (),
+                                Err(error) => errors.push(error),
+                            },
+                            None => errors.push(Error::new(
+                                ErrorType::TypeError,
+                                "iteration start must be integer type".into(),
+                                from.start(),
+                                from.end(),
+                            )),
+                        }
+                    }
+                    Err(error) => errors.push(error),
+                }
+
+                match unify_expression(to, context, curr_forall_var) {
+                    Ok(s) => {
+                        match subs.extend(to.start(), s, to.end()) {
+                            Ok(()) => (),
+                            Err(error) => errors.push(error),
+                        };
+                        match to.get_type().unify(&Type::I64(None)) {
+                            Some(s) => match subs.extend(to.start(), s, to.end()) {
+                                Ok(()) => (),
+                                Err(error) => errors.push(error),
+                            },
+                            None => errors.push(Error::new(
+                                ErrorType::TypeError,
+                                "iteration end must be integer type".into(),
+                                to.start(),
+                                to.end(),
+                            )),
+                        }
+                    }
+                    Err(error) => errors.push(error),
+                }
+
+                context.push_scope();
+                context.insert(iterator.clone(), Type::I64(None));
+                unify(inner, context, curr_forall_var, return_type, errors, subs);
+                context.pop_scope();
+            }
         }
     }
+}
 
-    (typed_statements, errors)
+pub fn substitute_expression(expression: &mut TypedExpression, subs: &Substitutions) {
+    match expression {
+        TypedExpression::Accessor { t, lhs, rhs, .. } => {
+            for sub in subs.iter() {
+                *t = t.substitute(sub);
+            }
+            substitute_expression(lhs, subs);
+            substitute_expression(rhs, subs);
+        }
+        TypedExpression::BinaryOp { t, lhs, rhs, .. } => {
+            for sub in subs.iter() {
+                *t = t.substitute(sub);
+            }
+            substitute_expression(lhs, subs);
+            substitute_expression(rhs, subs);
+        }
+        TypedExpression::UnaryOp { t, inner, .. } => {
+            for sub in subs.iter() {
+                *t = t.substitute(sub);
+            }
+            substitute_expression(inner, subs);
+        }
+        TypedExpression::FnCall {
+            t, caller, args, ..
+        } => {
+            for sub in subs.iter() {
+                *t = t.substitute(sub);
+            }
+            substitute_expression(caller, subs);
+            for arg in args {
+                substitute_expression(arg, subs);
+            }
+        }
+        TypedExpression::Identifier { t, .. } => {
+            for sub in subs.iter() {
+                *t = t.substitute(sub);
+            }
+        }
+        TypedExpression::Tuple { t, inner, .. } => {
+            for sub in subs.iter() {
+                *t = t.substitute(sub);
+            }
+            for e in inner {
+                substitute_expression(e, subs);
+            }
+        }
+        _ => (),
+    }
+}
+
+pub fn substitute(block: &mut [TypedStatement], context: &mut Frame<Type>, subs: &Substitutions) {
+    for statement in block.iter_mut() {
+        match statement {
+            TypedStatement::Print { val, .. } => substitute_expression(val, subs),
+            TypedStatement::Let { name, val, .. } => {
+                substitute_expression(val, subs);
+                context.insert(name.clone(), val.get_type());
+            }
+            TypedStatement::If {
+                cond,
+                true_inner,
+                false_inner,
+                ..
+            } => {
+                substitute_expression(cond, subs);
+                substitute(true_inner, context, subs);
+                match false_inner {
+                    Some(false_inner) => substitute(false_inner, context, subs),
+                    None => (),
+                }
+            }
+            TypedStatement::For {
+                iterator,
+                from,
+                to,
+                inner,
+                ..
+            } => {
+                substitute_expression(from, subs);
+                substitute_expression(to, subs);
+                context.push_scope();
+                context.insert(iterator.clone(), Type::I64(None));
+                substitute(inner, context, subs);
+                context.pop_scope();
+            }
+            TypedStatement::Return { val, .. } => match val {
+                Some(val) => {
+                    substitute_expression(val, subs);
+                }
+                None => (),
+            },
+        }
+    }
 }
 
 pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error>) {
     let mut errors: Vec<Error> = vec![];
 
-    if let Some(function) = ast.get("main") {
-        if let Some((_, ann)) = function.args.first() {
-            errors.push(Error::new(
-                ErrorType::TypeError,
-                "main should have no arguments".into(),
-                ann.range().0 - 2,
-                function.args.last().unwrap().1.range().1,
-            ));
-        }
+    let mut frame: Frame<Type> = Frame::default();
+    frame.push_scope();
 
-        if let Some(ann) = &function.return_type {
-            let (ann_start, ann_end) = ann.range();
-            let ann_type = annotation_type(ann);
-            if Ok(Type::Void) != ann_type {
-                errors.push(Error::new(
-                    ErrorType::TypeError,
-                    "main should have 'void' return type".into(),
-                    ann_start - 1,
-                    ann_end,
-                ));
-            }
-        }
+    for (name, (t, _)) in externals.iter() {
+        frame.insert(name.clone(), t.clone());
     }
 
-    let globals: Globals = ast
-        .iter()
-        .map(|(name, function)| {
-            let mut arg_types = vec![];
+    for (name, function) in ast.iter() {
+        let mut arg_types = vec![];
 
-            for (_, arg_ann) in &function.args {
-                match annotation_type(arg_ann) {
-                    Ok(t) => arg_types.push(t),
-                    Err(error) => {
-                        errors.push(error);
-                        arg_types.push(Type::Unknown)
-                    }
-                }
-            }
-
-            let return_type = match &function.return_type {
-                Some(return_type) => match annotation_type(return_type) {
-                    Ok(t) => Box::new(t),
-                    Err(error) => {
-                        errors.push(error);
-                        Box::new(Type::Unknown)
-                    }
-                },
-                None => Box::new(Type::Void),
-            };
-
-            (name.clone(), Type::Function(arg_types, return_type))
-        })
-        .collect();
-
-    let mut typed_ast: HashMap<String, TypedFunction> = HashMap::new();
-
-    for (function_name, function) in ast.iter() {
-        let mut frame = Frame::<Type>::default();
-        frame.push_scope();
-        let mut typed_args = vec![];
-
-        for (name, ann) in &function.args {
-            match annotation_type(ann) {
-                Ok(ann) => {
-                    frame.insert(name.clone(), ann.clone());
-                    typed_args.push((name.clone(), ann));
-                }
+        for (_, arg_ann) in &function.args {
+            match annotation_type(arg_ann, &function.type_args) {
+                Ok(t) => arg_types.push(t),
                 Err(error) => {
                     errors.push(error);
+                    arg_types.push(Type::Unknown)
                 }
             }
         }
 
         let return_type = match &function.return_type {
-            Some(ann) => match annotation_type(ann) {
-                Ok(ann) => ann,
-                Err(_) => Type::Unknown,
+            Some(return_type) => match annotation_type(return_type, &function.type_args) {
+                Ok(t) => Box::new(t),
+                Err(error) => {
+                    errors.push(error);
+                    Box::new(Type::Unknown)
+                }
             },
-            None => Type::Void,
+            None => Box::new(Type::Void),
         };
 
-        let (statements, mut block_errors) = typecheck_block(
-            &function.inner,
-            Some(&mut frame),
-            &globals,
-            externals,
-            function_name,
-        );
-
-        errors.append(&mut block_errors);
-
-        typed_ast.insert(
-            function_name.into(),
-            TypedFunction {
-                name: function_name.clone(),
-                args: typed_args,
-                return_type,
-                inner: statements,
-            },
+        frame.insert(
+            name.clone(),
+            Type::Function(function.type_args.clone(), arg_types, return_type),
         );
     }
 
+    let typed_ast: TypedAST = ast
+        .iter()
+        .map(|(name, function)| {
+            frame.push_scope();
+
+            let mut curr_forall_var = 0;
+
+            let (args, return_type) = match frame.get(name) {
+                Some(Type::Function(_, i, o)) => (
+                    function
+                        .args
+                        .iter()
+                        .map(|x| x.0.clone())
+                        .zip(i.clone())
+                        .collect::<Vec<(String, Type)>>(),
+                    *o.clone(),
+                ),
+                _ => panic!(),
+            };
+
+            for (arg_name, arg_type) in &args {
+                frame.insert(arg_name.clone(), arg_type.clone());
+            }
+
+            frame.push_scope();
+
+            let mut typed_function = TypedFunction {
+                name: name.clone(),
+                type_args: function.type_args.clone(),
+                args,
+                return_type,
+                inner: function
+                    .inner
+                    .iter()
+                    .map(|s| {
+                        initialize_typed_statement(
+                            s,
+                            &mut curr_forall_var,
+                            &mut frame,
+                            &mut errors,
+                            &function.type_args,
+                        )
+                    })
+                    .collect(),
+            };
+
+            frame.pop_scope();
+
+            frame.push_scope();
+            let mut subs = Substitutions::new();
+
+            unify(
+                &typed_function.inner,
+                &mut frame,
+                &mut curr_forall_var,
+                &typed_function.return_type,
+                &mut errors,
+                &mut subs,
+            );
+            frame.pop_scope();
+
+            while !subs.is_empty() {
+                // println!("SUBS: {subs:?}");
+                // println!("STATE: {:?}", typed_function.inner);
+                frame.push_scope();
+                substitute(&mut typed_function.inner, &mut frame, &subs);
+                frame.pop_scope();
+
+                frame.push_scope();
+                unify(
+                    &typed_function.inner,
+                    &mut frame,
+                    &mut curr_forall_var,
+                    &typed_function.return_type,
+                    &mut errors,
+                    &mut subs,
+                );
+                frame.pop_scope();
+                subs = Substitutions::new();
+            }
+
+            (name.clone(), typed_function)
+        })
+        .collect();
+
     (typed_ast, errors)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::typecheck;
+    use crate::parser::parse;
+
+    #[test]
+    fn basic_typecheck() {
+        let code = "
+            fn three_tuple_map{A, B}(x: (A, A, A), f: A->B): (B, B, B) {
+                return (f(x[0]), f(x[1]), f(x[2]));
+            }
+
+            fn map_test(x: f64): bool {
+                return x > 0;
+            }
+
+            fn main() {
+                let z = (1., -1., -0.34);
+                print three_tuple_map(z, map_test);
+            }
+        ";
+
+        let ast = parse(code).ast;
+        let typed_ast = typecheck(&ast, &HashMap::default());
+
+        println!("{:?}", typed_ast.0["main"]);
+    }
 }

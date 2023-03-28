@@ -1,153 +1,260 @@
 use serde::Serialize;
-//use std::collections::HashMap;
-use std::{cmp::Ordering, fmt};
+use std::fmt;
 
 use super::ind::Ind;
+use crate::error::{Error, ErrorType};
 
-#[allow(dead_code)]
 #[derive(PartialEq, Serialize, Clone)]
-enum Type {
+pub enum Type {
     Unknown,
     Void,
     F64,
     I64(Option<Ind>),
     Bool,
     Tuple(Vec<Type>),
-    Function(Vec<Type>, Box<Type>),
+    Function(Vec<String>, Vec<Type>, Box<Type>),
     TypeVar(String),
     ForAll(usize),
 }
 
-#[allow(dead_code)]
+type Substitution = (usize, Type);
+
+pub struct Substitutions(Vec<Substitution>);
+
+impl Substitutions {
+    pub fn push(&mut self, start: usize, sub: Substitution, end: usize) -> Result<(), Error> {
+        let (sub_i, sub_t) = sub;
+
+        for (curr_sub_i, curr_sub_t) in self.0.iter() {
+            if *curr_sub_i == sub_i {
+                match curr_sub_t.unify(&sub_t) {
+                    Some(_) => return Ok(()),
+                    None => {
+                        return Err(Error::new(
+                            ErrorType::TypeError,
+                            format!("cannot unify types '{curr_sub_t:?}' and '{sub_t:?}'"),
+                            start,
+                            end,
+                        ))
+                    }
+                }
+            }
+        }
+
+        self.0.push((sub_i, sub_t));
+
+        Ok(())
+    }
+
+    pub fn extend(&mut self, start: usize, subs: Substitutions, end: usize) -> Result<(), Error> {
+        for sub in subs.0 {
+            self.push(start, sub, end)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<Substitution> {
+        self.0.iter()
+    }
+
+    pub fn new() -> Self {
+        Self(vec![])
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl Default for Substitutions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Type {
-    fn forall_count(&self) -> usize {
+    pub fn forall_vars(&self) -> Vec<usize> {
         match self {
-            Type::Unknown => 0,
-            Type::Void => 0,
-            Type::F64 => 0,
-            Type::I64 { .. } => 0,
-            Type::Bool => 0,
             Type::Tuple(v) => {
-                let mut n = 0;
-
+                let mut vars = vec![];
                 for t in v {
-                    n = n.max(t.forall_count());
+                    vars.extend(t.forall_vars())
                 }
 
-                n
+                vars
             }
-            Type::Function(i, o) => {
-                let mut n = 0;
-
+            Type::Function(_, i, o) => {
+                let mut vars = vec![];
                 for t in i {
-                    n = n.max(t.forall_count());
+                    vars.extend(t.forall_vars())
                 }
 
-                n = n.max(o.forall_count());
+                vars.extend(o.forall_vars());
 
-                n
+                vars
             }
-            Type::TypeVar(_) => 0,
-            Type::ForAll(i) => *i + 1,
+            Type::ForAll(i) => {
+                vec![*i]
+            }
+            _ => vec![],
         }
     }
 
-    fn substitute(&self, var: usize, a: &Type) -> Type {
+    pub fn substitute(&self, sub: &Substitution) -> Type {
+        let (var, a) = sub;
         match self {
-            Type::Tuple(v) => Type::Tuple(v.iter().map(|x| x.substitute(var, a)).collect()),
-            Type::Function(i, o) => Type::Function(
-                i.iter().map(|x| x.substitute(var, a)).collect(),
-                Box::new(o.substitute(var, a)),
+            Type::Tuple(v) => Type::Tuple(v.iter().map(|x| x.substitute(sub)).collect()),
+            Type::Function(t_args, i, o) => Type::Function(
+                t_args.clone(),
+                i.iter().map(|x| x.substitute(sub)).collect(),
+                Box::new(o.substitute(sub)),
             ),
-            Type::ForAll(i) => match i.cmp(&var) {
-                Ordering::Equal => a.clone(),
-                Ordering::Greater => Type::ForAll(i - 1),
-                Ordering::Less => Type::ForAll(*i),
+            Type::ForAll(i) => {
+                if i == var {
+                    match a {
+                        Type::ForAll(ai) => Type::ForAll(*i.min(ai)),
+                        _ => a.clone(),
+                    }
+                } else {
+                    Type::ForAll(*i)
+                }
+            }
+            _ => self.clone(),
+        }
+    }
+
+    pub fn instantiate_fn(&self, subs: &[String], curr_forall: usize) -> Type {
+        match self {
+            Type::Tuple(v) => Type::Tuple(
+                v.iter()
+                    .map(|t| t.instantiate_fn(subs, curr_forall))
+                    .collect(),
+            ),
+            Type::Function(t_args, i, o) => Type::Function(
+                t_args.clone(),
+                i.iter()
+                    .map(|t| t.instantiate_fn(subs, curr_forall))
+                    .collect(),
+                Box::new(o.instantiate_fn(subs, curr_forall)),
+            ),
+            Type::TypeVar(name) => match subs.iter().position(|n| n == name) {
+                Some(i) => Type::ForAll(curr_forall + i),
+                None => self.clone(),
             },
             _ => self.clone(),
         }
     }
 
-    // fn unify(&mut self, a: &mut Type, l_sub: &mut HashMap<u8, Type>, r_sub: &mut HashMap<u8, Type>) -> bool {
-    //     match a {
-    //         Type::Unknown => {
-    //             *self = Type::Unknown;
-    //             true
-    //         },
-    //         Type::ForAll(i) => {
-    //             r_sub.insert(*i, self.clone());
-    //             true
-    //         }
-    //         _ => match self {
-    //             Type::Unknown => true,
-    //             Type::Void => if matches!(a, Type::Void) {
-    //                 true
-    //             } else {
-    //                 false
-    //             },
-    //             Type::Bool => if matches!(a, Type::Bool) {
-    //                 true
-    //             } else {
-    //                 false
-    //             },
-    //             Type::F64 => if matches!(a, Type::F64) {
-    //                 true
-    //             } else {
-    //                 false
-    //             },
-    //             Type::TypeVar(l_name) => if let Type::TypeVar(r_name) = a {
-    //                 if l_name == r_name {
-    //                     Some(Type::TypeVar(l_name.into()))
-    //                 } else {
-    //                     None
-    //                 }
-    //             } else {
-    //                 None
-    //             },
-    //             Type::I64(l_nat) => {
-    //                 if let Type::I64(r_nat) = a {
-    //                     if let Some(r_nat) = r_nat {
-    //                         if let Some(l_nat) = l_nat {
-    //                             if *l_nat == *r_nat {
-    //                                 Some(Type::I64 (Some(l_nat.clone())))
-    //                             } else {
-    //                                 Some(Type::I64(None))
-    //                             }
-    //                         } else {
-    //                             Some(Type::I64(Some(r_nat.clone())))
-    //                         }
-    //                     } else {
-    //                         if let Some(l_nat) = l_nat {
-    //                             Some(Type::I64(Some(l_nat.clone())))
-    //                         } else {
-    //                             Some(Type::I64(None))
-    //                         }
-    //                     }
-    //                 } else {
-    //                     None
-    //                 }
-    //             },
-    //             Type::ForAll(i) => {
-    //                 l_sub.insert(*i, a.clone());
-    //                 Some(a.clone())
-    //             },
-    //             Type::Tuple(l_types) => {
-    //                 if let Type::Tuple(r_types) = a {
-    //                     if l_types.len() != r_types.len() {
-    //                         None
-    //                     } else {
-    //                         for (l_type, r_type) in l_types.iter_mut().zip(r_types) {
+    pub fn unify(&self, other: &Type) -> Option<Substitutions> {
+        match self {
+            Type::Unknown => Some(Substitutions::new()),
+            Type::ForAll(self_i) => match other {
+                Type::ForAll(other_i) => {
+                    if self_i <= other_i {
+                        Some(Substitutions(vec![(*self_i, other.clone())]))
+                    } else {
+                        Some(Substitutions(vec![(*other_i, self.clone())]))
+                    }
+                }
+                _ => Some(Substitutions(vec![(*self_i, other.clone())])),
+            },
+            _ => match other {
+                Type::Unknown => Some(Substitutions::new()),
+                Type::Void => {
+                    if matches!(self, Type::Void) {
+                        Some(Substitutions::new())
+                    } else {
+                        None
+                    }
+                }
+                Type::Bool => {
+                    if matches!(self, Type::Bool) {
+                        Some(Substitutions::new())
+                    } else {
+                        None
+                    }
+                }
+                Type::F64 => {
+                    if matches!(self, Type::F64) {
+                        Some(Substitutions::new())
+                    } else {
+                        None
+                    }
+                }
+                Type::TypeVar(l_name) => {
+                    if let Type::TypeVar(r_name) = self {
+                        if l_name == r_name {
+                            Some(Substitutions::new())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
+                Type::I64(Some(other_i)) => match self {
+                    Type::I64(Some(self_i)) => {
+                        if other_i == self_i {
+                            Some(Substitutions::new())
+                        } else {
+                            None
+                        }
+                    }
+                    Type::I64(None) => Some(Substitutions::new()),
+                    _ => None,
+                },
+                Type::I64(None) => {
+                    if matches!(other, Type::I64(_)) {
+                        Some(Substitutions::new())
+                    } else {
+                        None
+                    }
+                }
+                Type::ForAll(i) => Some(Substitutions(vec![(*i, self.clone())])),
+                Type::Tuple(l_types) => {
+                    if let Type::Tuple(r_types) = self {
+                        if l_types.len() != r_types.len() {
+                            None
+                        } else {
+                            let mut subs = Substitutions::new();
+                            for (l_type, r_type) in l_types.iter().zip(r_types) {
+                                if subs.extend(0, Type::unify(l_type, r_type)?, 0).is_err() {
+                                    return None;
+                                }
+                            }
 
-    //                         }
-    //                     }
-    //                 } else {
-    //                     None
-    //                 }
-    //             },
-    //             Type::Function(_, _) => todo!(),
-    //         }
-    //     }
-    // }
+                            Some(subs)
+                        }
+                    } else {
+                        None
+                    }
+                }
+                Type::Function(_, l_i, l_o) => {
+                    if let Type::Function(_, r_i, r_o) = self {
+                        if l_i.len() != r_i.len() {
+                            None
+                        } else {
+                            let mut subs = Substitutions::new();
+                            for (l_type, r_type) in l_i.iter().zip(r_i) {
+                                if subs.extend(0, Type::unify(l_type, r_type)?, 0).is_err() {
+                                    return None;
+                                }
+                            }
+
+                            if subs.extend(0, Type::unify(l_o, r_o)?, 0).is_err() {
+                                None
+                            } else {
+                                Some(subs)
+                            }
+                        }
+                    } else {
+                        None
+                    }
+                }
+            },
+        }
+    }
 }
 
 fn usize_name(mut x: usize) -> String {
@@ -167,12 +274,12 @@ fn usize_name(mut x: usize) -> String {
 
 impl fmt::Debug for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let forall = self.forall_count();
-        if forall > 0 && !matches!(self, Type::ForAll(_)) {
+        let forall_vars = self.forall_vars();
+        if !forall_vars.is_empty() && !matches!(self, Type::ForAll(_)) {
             write!(f, "forall ")?;
-            for i in 0..forall {
-                write!(f, "{}", usize_name(i))?;
-                if i < forall - 1 {
+            for (i, var) in forall_vars.iter().enumerate() {
+                write!(f, "{}", usize_name(*var))?;
+                if i < forall_vars.len() - 1 {
                     write!(f, ", ")?;
                 }
             }
@@ -205,7 +312,7 @@ impl fmt::Debug for Type {
                     write!(f, "{res}")
                 }
             }
-            Type::Function(i, o) => {
+            Type::Function(_, i, o) => {
                 let mut res = "".to_string();
                 if i.len() == 1 {
                     res.push_str(&format!("{:?}->", i[0]));
@@ -248,6 +355,7 @@ mod tests {
         assert_eq!(usize_name(26), "aa");
         assert_eq!(usize_name(27), "ab");
         assert_eq!(usize_name(28), "ac");
+        assert_eq!(usize_name(700), "zy");
         assert_eq!(usize_name(701), "zz");
         assert_eq!(usize_name(702), "aaa");
         assert_eq!(usize_name(703), "aab");
@@ -268,7 +376,7 @@ mod tests {
         assert_eq!(
             format!(
                 "{:?}",
-                Type::Function(vec![Type::I64(None)], Box::new(Type::Bool))
+                Type::Function(vec![], vec![Type::I64(None)], Box::new(Type::Bool))
             ),
             "i64->bool"
         );
@@ -286,17 +394,17 @@ mod tests {
             format!(
                 "{:?}",
                 Type::Tuple(vec![Type::Bool, Type::ForAll(0), Type::ForAll(1)])
-                    .substitute(0, &Type::F64)
+                    .substitute(&(0, Type::F64))
             ),
-            "forall a . (bool, f64, a)"
+            "forall b . (bool, f64, b)"
         );
 
         assert_eq!(
             format!(
                 "{:?}",
                 Type::Tuple(vec![Type::Bool, Type::ForAll(0), Type::ForAll(1)])
-                    .substitute(1, &Type::I64(None))
-                    .substitute(0, &Type::F64)
+                    .substitute(&(1, Type::I64(None)))
+                    .substitute(&(0, Type::F64))
             ),
             "(bool, f64, i64)"
         );

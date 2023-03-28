@@ -28,15 +28,3 @@ impl Error {
         }
     }
 }
-
-pub fn cardinal(n: usize) -> String {
-    if n % 10 == 1 {
-        "1st".into()
-    } else if n % 10 == 2 {
-        "2nd".into()
-    } else if n % 10 == 3 {
-        "3rd".into()
-    } else {
-        format!("{n}th",)
-    }
-}

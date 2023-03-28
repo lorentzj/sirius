@@ -10,11 +10,12 @@ pub AST: HashMap<String, Function> = {
 }
 
 pub Fn: Function = {
-    "fn" <name: "identifier"> <args: FnSigParams> <return_type: (":" Expr)?>  <inner: Block> => {
+    "fn" <name: "identifier"> <type_args: FnTypeParams?> <args: FnSigParams> <return_type: (":" Expr)?>  <inner: Block> => {
         let return_type = return_type.map(|r| *r.1);
 
         Function {
             name,
+            type_args: type_args.unwrap_or(vec![]),
             args,
             return_type,
             inner
@@ -39,6 +40,25 @@ FnSigParamsInner: Vec<(String, Expression)> = {
         head
     }
 }
+
+FnTypeParams: Vec<String> = {
+    <start: @L> "{" <params: FnTypeParamsInner> "}" <end: @R> => {
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
+
+        params
+    }
+}
+
+FnTypeParamsInner: Vec<String> = {
+    () => vec![],
+    <name: "identifier"> => vec![name],
+    <mut head: FnTypeParamsInner> "," <name: "identifier"> => {
+        head.push(name);
+        head
+    }
+}
+
 
 pub Stmt: Statement = {
     <start: @L> "let" <name: "identifier"> <ann: (":" Expr)?> "=" <val: Expr> ";" <end: @R> => {

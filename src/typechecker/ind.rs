@@ -124,6 +124,18 @@ impl Ind {
 
         Ind { terms: new_terms }
     }
+
+    pub fn constant_val(&self) -> Option<(bool, usize)> {
+        if self.terms.len() == 1 {
+            if self.terms[0].2.is_empty() {
+                Some((self.terms[0].0, self.terms[0].1))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
 }
 
 fn add_signed(lhs_sign: bool, lhs_val: usize, rhs_sign: bool, rhs_val: usize) -> (bool, usize) {

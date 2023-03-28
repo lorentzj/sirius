@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-pub struct Frame<T>(Vec<HashMap<String, T>>);
+pub struct Frame<T>(pub Vec<HashMap<String, T>>);
 pub type Stack<T> = Vec<Frame<T>>;
 
 impl<T> std::default::Default for Frame<T> {

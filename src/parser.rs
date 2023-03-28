@@ -273,6 +273,7 @@ impl Statement {
 #[derive(Serialize, Debug)]
 pub struct Function {
     pub name: String,
+    pub type_args: Vec<String>,
     pub args: Vec<(String, Expression)>,
     pub return_type: Option<Expression>,
     pub inner: Vec<Statement>,
@@ -344,6 +345,7 @@ pub fn parse(code: &str) -> ParserOutput {
                 Tok::Op(op) => format!("unexpected operator '{op:?}'"),
                 Tok::Keyword(k) => format!("unexpected keyword '{k:?}'"),
                 Tok::Float(_) => "unexpected constant".into(),
+                Tok::Int(_) => "unexpected constant".into(),
                 Tok::Error(m) => m,
                 _ => format!("unexpected token '{:?}'", token.1),
             },

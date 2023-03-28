@@ -1,13 +1,13 @@
 use super::Type;
 
 pub fn equality_check(lhs: &Type, rhs: &Type) -> Result<(), String> {
-    if let Type::Function(_, _) = lhs {
+    if let Type::Function(_, _, _) = lhs {
         Err("cannot check function equality".into())
-    } else if let Type::Function(_, _) = rhs {
+    } else if let Type::Function(_, _, _) = rhs {
         Err("cannot check function equality".into())
     } else if lhs == rhs {
         return Ok(());
-    } else if lhs.is_int() && rhs.is_int() {
+    } else if matches!(lhs, Type::I64(_)) && matches!(rhs, Type::I64(_)) {
         Ok(())
     } else {
         match lhs {
