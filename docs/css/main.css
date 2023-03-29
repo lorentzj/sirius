@@ -110,11 +110,13 @@ code {
 }
 
 code.block {
+    outline: 1px solid black;
     display: block;
 }
 
 table {
     width: 100%;
+    border-spacing: 10px;
 }
 
 th {
@@ -123,6 +125,12 @@ th {
 
 tbody tr td:first-child {
     text-align: center;
+}
+
+tbody td {
+    padding: 10px;
+    outline: 1px solid black;
+    background-color: var(--primary-bg-color);
 }
 
 /* Header */

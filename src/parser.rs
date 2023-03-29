@@ -274,6 +274,7 @@ impl Statement {
 pub struct Function {
     pub name: String,
     pub type_args: Vec<String>,
+    pub type_arg_range: Option<(usize, usize)>,
     pub args: Vec<(String, Expression)>,
     pub return_type: Option<Expression>,
     pub inner: Vec<Statement>,
@@ -307,6 +308,13 @@ pub fn parse(code: &str) -> ParserOutput {
     ) {
         Ok(ast) => {
             for (_, function) in ast.iter() {
+                if let Some((start, end)) = function.type_arg_range {
+                    if end >= start {
+                        let tokens: Vec<usize> = (start..end).collect();
+                        type_tokens.extend(tokens);
+                    }
+                }
+
                 for (_, ann) in &function.args {
                     let (ann_start, ann_end) = ann.range();
                     let tokens: Vec<usize> = (ann_start..ann_end).collect();

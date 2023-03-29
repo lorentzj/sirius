@@ -12,10 +12,15 @@ pub AST: HashMap<String, Function> = {
 pub Fn: Function = {
     "fn" <name: "identifier"> <type_args: FnTypeParams?> <args: FnSigParams> <return_type: (":" Expr)?>  <inner: Block> => {
         let return_type = return_type.map(|r| *r.1);
+        let (type_args, type_arg_range) = match type_args {
+            Some((a, b)) => (a, Some(b)),
+            None => (vec![], None)
+        };
 
         Function {
             name,
-            type_args: type_args.unwrap_or(vec![]),
+            type_args,
+            type_arg_range,
             args,
             return_type,
             inner
@@ -41,12 +46,12 @@ FnSigParamsInner: Vec<(String, Expression)> = {
     }
 }
 
-FnTypeParams: Vec<String> = {
+FnTypeParams: (Vec<String>, (usize, usize)) = {
     <start: @L> "{" <params: FnTypeParamsInner> "}" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);
 
-        params
+        (params, (start + 1, end - 1))
     }
 }
 

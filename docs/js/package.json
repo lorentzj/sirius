@@ -8,5 +8,7 @@
   ],
   "module": "sirius.js",
   "types": "sirius.d.ts",
-  "sideEffects": false
+  "sideEffects": [
+    "./snippets/*"
+  ]
 }

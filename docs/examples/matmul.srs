@@ -1,10 +1,5 @@
 fn dot{#N}(a: f64[N], b: f64[N]): f64 {
-    let v = 0.;
-    for n from 0 to N {
-        v := v + a[n]*b[n];
-    }
-
-    return v;
+    return zip(a, b).map(mul).fold(0, add);
 }
  
 fn matmul{#I, #J, #K}(a: f64[I, J], b: f64[J, K]): f64[I, K] {

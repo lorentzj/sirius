@@ -146,4 +146,39 @@ mod tests {
         let output = super::interpret(code);
         assert_eq!(output, "{\"stdout\":\"true\\n(<external_function>, <external_function>, <external_function>, <external_function>, <external_function>)\\n3.141592653589793\\n\",\"error\":null}");
     }
+
+    #[test]
+    fn coercion() {
+        let code = "
+        fn main() {
+            let a = (1, 1, 1);
+            let b = (1., 1., 1.);
+            print a == b;
+        }
+        "
+        .into();
+
+        let output = super::interpret(code);
+        assert_eq!(output, "{\"stdout\":\"true\\n\",\"error\":null}");
+    }
+
+    #[test]
+    fn generic() {
+        let code = "
+        fn double{T}(t: T): (T, T) {
+            return (t, t);
+        }
+        
+        fn main() {
+            print double(1);
+            print double((false, true));
+        }
+        "
+        .into();
+        let output = super::interpret(code);
+        assert_eq!(
+            output,
+            "{\"stdout\":\"(1, 1)\\n((false, true), (false, true))\\n\",\"error\":null}"
+        );
+    }
 }
