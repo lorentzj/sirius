@@ -453,22 +453,35 @@ fn initialize_typed_statement(
             true_inner,
             false_inner,
             end,
-        } => TypedStatement::If {
-            start: *start,
-            cond: initialize_typed_expression(cond, curr_forall_var, context, errors),
-            true_inner: true_inner
-                .iter()
-                .map(|s| initialize_typed_statement(s, curr_forall_var, context, errors, type_vars))
-                .collect(),
-            false_inner: false_inner.as_ref().map(|i| {
-                i.iter()
+        } => {
+            context.push_scope();
+            let true_inner = {
+                true_inner
+                    .iter()
                     .map(|s| {
                         initialize_typed_statement(s, curr_forall_var, context, errors, type_vars)
                     })
                     .collect()
-            }),
-            end: *end,
-        },
+            };
+            context.pop_scope();
+            context.push_scope();
+            let false_inner = false_inner.as_ref().map(|false_inner| {
+                false_inner
+                    .iter()
+                    .map(|s| {
+                        initialize_typed_statement(s, curr_forall_var, context, errors, type_vars)
+                    })
+                    .collect()
+            });
+            context.pop_scope();
+            TypedStatement::If {
+                start: *start,
+                cond: initialize_typed_expression(cond, curr_forall_var, context, errors),
+                true_inner,
+                false_inner,
+                end: *end,
+            }
+        }
         Statement::For {
             start,
             iterator,
@@ -476,17 +489,24 @@ fn initialize_typed_statement(
             to,
             inner,
             end,
-        } => TypedStatement::For {
-            start: *start,
-            iterator: iterator.clone(),
-            from: initialize_typed_expression(from, curr_forall_var, context, errors),
-            to: initialize_typed_expression(to, curr_forall_var, context, errors),
-            inner: inner
+        } => {
+            context.push_scope();
+            context.insert(iterator.clone(), Type::I64(None));
+            let inner = inner
                 .iter()
                 .map(|s| initialize_typed_statement(s, curr_forall_var, context, errors, type_vars))
-                .collect(),
-            end: *end,
-        },
+                .collect();
+            context.pop_scope();
+
+            TypedStatement::For {
+                start: *start,
+                iterator: iterator.clone(),
+                from: initialize_typed_expression(from, curr_forall_var, context, errors),
+                to: initialize_typed_expression(to, curr_forall_var, context, errors),
+                inner,
+                end: *end,
+            }
+        }
         Statement::Return { start, val, end } => TypedStatement::Return {
             start: *start,
             val: val

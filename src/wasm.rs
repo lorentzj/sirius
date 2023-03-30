@@ -181,4 +181,31 @@ mod tests {
             "{\"stdout\":\"(1, 1)\\n((false, true), (false, true))\\n\",\"error\":null}"
         );
     }
+
+    #[test]
+    fn scope_test() {
+        let code = "
+        fn main() {
+            let i = true;
+            if true {
+                print i;
+                if i {
+                    let i = (1, 2);
+                    print i;
+                }
+                print i;
+            }
+        
+            for i from 1 to 3 + 1 {
+                print i;
+            }
+        }
+        "
+        .into();
+        let output = super::interpret(code);
+        assert_eq!(
+            output,
+            "{\"stdout\":\"true\\n(1, 2)\\ntrue\\n1\\n2\\n3\\n\",\"error\":null}"
+        );
+    }
 }
