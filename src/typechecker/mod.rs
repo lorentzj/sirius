@@ -895,7 +895,9 @@ fn unify_expression(
                         } else {
                             for (given_arg, expected_arg) in arg_types.iter().zip(i) {
                                 match given_arg.unify(&expected_arg) {
-                                    Some(s) => subs.extend(*start, s, *end)?,
+                                    Some(s) => {
+                                        subs.extend(*start, s, *end)?;
+                                    },
                                     None => {
                                         return Err(Error::new(
                                             ErrorType::TypeError,
@@ -1361,9 +1363,7 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
             );
             frame.pop_scope();
 
-            while !subs.is_empty() {
-                // println!("SUBS: {subs:?}");
-                // println!("STATE: {:?}", typed_function.inner);
+            while !subs.is_empty() && errors.is_empty() {
                 frame.push_scope();
                 substitute(&mut typed_function.inner, &mut frame, &subs);
                 frame.pop_scope();
@@ -1393,6 +1393,7 @@ mod tests {
     use std::collections::HashMap;
 
     use super::typecheck;
+    use crate::error::ErrorType;
     use crate::parser::parse;
 
     #[test]
@@ -1416,5 +1417,50 @@ mod tests {
         let typed_ast = typecheck(&ast, &HashMap::default());
 
         println!("{:?}", typed_ast.0["main"]);
+    }
+
+    #[test]
+    fn error_param_basic() {
+        let code = "
+            fn factorial(x: i64): i64 {
+                if x < 1 {
+                    return 1;
+                } else {
+                    return x * factorial(x - 1);
+                }
+            }
+            
+            fn main() {
+                print factorial((1, 1));
+            }
+        ";
+
+        let ast = parse(code).ast;
+        let typed_ast = typecheck(&ast, &HashMap::default());
+
+        assert_eq!(ErrorType::TypeError, typed_ast.1[0].error_type);
+    }
+
+    #[test]
+    fn error_param_generic() {
+        let code = "
+            fn three_tuple_map{A, B}(x: (A, A, A), f: A->B): (B, B, B) {
+                return (f(x[0]), f(x[1]), f(x[2]));
+            }
+
+            fn map_test(x: i64): bool {
+                return x > 0;
+            }
+
+            fn main() {
+                let z = (1., -1., -0.34);
+                print three_tuple_map(z, map_test);
+            }
+        ";
+
+        let ast = parse(code).ast;
+        let typed_ast = typecheck(&ast, &HashMap::default());
+
+        assert_eq!(ErrorType::TypeError, typed_ast.1[0].error_type);
     }
 }

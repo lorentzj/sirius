@@ -19,6 +19,7 @@ pub enum Type {
 
 type Substitution = (usize, Type);
 
+#[derive(Debug)]
 pub struct Substitutions(Vec<Substitution>);
 
 impl Substitutions {
@@ -205,7 +206,7 @@ impl Type {
                     _ => None,
                 },
                 Type::I64(None) => {
-                    if matches!(other, Type::I64(_)) {
+                    if matches!(self, Type::I64(_)) {
                         Some(Substitutions::new())
                     } else {
                         None
