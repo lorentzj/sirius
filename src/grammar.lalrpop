@@ -287,6 +287,33 @@ Array: Box<Expression> = {
     },
 }
 
+IdentifierTypeParams: Vec<Expression> = {
+    <start: @L> ":" ":" "{" "}" <end: @R> => {
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
+
+        vec![]
+    },
+
+    <start: @L> ":" ":" "{" <arg: Expr> "}" <end: @R> => {
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
+
+        vec![*arg]
+    },
+
+    <start: @L> ":" ":" "{" <args: OpenTuple> "}" <end: @R> => {
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
+
+        match *args {
+            Expression::OpenTuple{inner, ..} => inner,
+            _ => panic!()
+        }
+    }
+}
+
+
 FnCallParams: Vec<Expression> = {
     <start: @L> "(" ")" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
@@ -353,7 +380,7 @@ Term: Box<Expression> = {
     <start: @L> <val: "false"> <end: @R> => Box::new(Expression::Bool{start, val: false, end}),
     <start: @L> <val: "float"> <end: @R> => Box::new(Expression::F64{<>}),
     <start: @L> <val: "int"> <end: @R> => Box::new(Expression::I64{<>}),
-    <start: @L> <name: "identifier"> <end: @R> => Box::new(Expression::Identifier{<>}),
+    <start: @L> <name: "identifier"> <type_args: IdentifierTypeParams?> <end: @R> => Box::new(Expression::Identifier{<>}),
     <start: @L> "(" ")" <end: @R> => {
         Box::new(Expression::Tuple{ start, inner: vec![], end })
     },
@@ -364,7 +391,7 @@ Term: Box<Expression> = {
             Expression::Bool{val, ..} => Box::new(Expression::Bool{ start, val, end }),
             Expression::F64{val, ..} => Box::new(Expression::F64{ start, val, end }),
             Expression::I64{val, ..} => Box::new(Expression::I64{ start, val, end }),
-            Expression::Identifier{name, ..} => Box::new(Expression::Identifier{ start, name, end }),
+            Expression::Identifier{name, type_args, ..} => Box::new(Expression::Identifier{ start, name, type_args, end }),
             Expression::BinaryOp{lhs, op, rhs, ..} => Box::new(Expression::BinaryOp{ start, lhs, op, rhs, end }),
             Expression::UnaryOp{op, inner, ..} => Box::new(Expression::UnaryOp{ start, op, inner, end }),
             Expression::FnCall{caller, args, ..} => Box::new(Expression::FnCall{ start, caller, args, end }),

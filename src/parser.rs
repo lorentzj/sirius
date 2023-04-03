@@ -35,6 +35,7 @@ pub enum Expression {
     Identifier {
         start: usize,
         name: String,
+        type_args: Option<Vec<Expression>>,
         end: usize,
     },
     BinaryOp {

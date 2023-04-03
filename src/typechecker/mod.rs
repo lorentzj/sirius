@@ -175,8 +175,20 @@ pub type TypedAST = HashMap<String, TypedFunction>;
 
 pub fn annotation_type(annotation: &Expression, type_vars: &[String]) -> Result<Type, Error> {
     match &annotation {
-        Expression::Identifier { start, name, end } => {
-            if name.eq("f64") {
+        Expression::Identifier {
+            start,
+            name,
+            type_args,
+            end,
+        } => {
+            if type_args.is_some() {
+                Err(Error::new(
+                    ErrorType::TypeError,
+                    "cannot pass type arguments to type".into(),
+                    *start,
+                    *end,
+                ))
+            } else if name.eq("f64") {
                 Ok(Type::F64)
             } else if name.eq("i64") {
                 Ok(Type::I64(None))
@@ -246,6 +258,7 @@ fn initialize_typed_expression(
     expression: &Expression,
     curr_forall_var: &mut usize,
     context: &Frame<Type>,
+    type_vars: &[String],
     errors: &mut Vec<Error>,
 ) -> TypedExpression {
     match expression {
@@ -280,6 +293,7 @@ fn initialize_typed_expression(
                     inner,
                     curr_forall_var,
                     context,
+                    type_vars,
                     errors,
                 )),
                 end: *end,
@@ -300,6 +314,7 @@ fn initialize_typed_expression(
                     lhs,
                     curr_forall_var,
                     context,
+                    type_vars,
                     errors,
                 )),
                 op: op.clone(),
@@ -307,6 +322,7 @@ fn initialize_typed_expression(
                     rhs,
                     curr_forall_var,
                     context,
+                    type_vars,
                     errors,
                 )),
                 end: *end,
@@ -326,12 +342,14 @@ fn initialize_typed_expression(
                     lhs,
                     curr_forall_var,
                     context,
+                    type_vars,
                     errors,
                 )),
                 rhs: Box::new(initialize_typed_expression(
                     rhs,
                     curr_forall_var,
                     context,
+                    type_vars,
                     errors,
                 )),
                 end: *end,
@@ -344,7 +362,9 @@ fn initialize_typed_expression(
                 start: *start,
                 inner: inner
                     .iter()
-                    .map(|e| initialize_typed_expression(e, curr_forall_var, context, errors))
+                    .map(|e| {
+                        initialize_typed_expression(e, curr_forall_var, context, type_vars, errors)
+                    })
                     .collect(),
                 end: *end,
             }
@@ -363,23 +383,73 @@ fn initialize_typed_expression(
                     caller,
                     curr_forall_var,
                     context,
+                    type_vars,
                     errors,
                 )),
                 args: args
                     .iter()
-                    .map(|e| initialize_typed_expression(e, curr_forall_var, context, errors))
+                    .map(|e| {
+                        initialize_typed_expression(e, curr_forall_var, context, type_vars, errors)
+                    })
                     .collect(),
                 end: *end,
             }
         }
-        Expression::Identifier { start, name, end } => match context.get(name) {
+        Expression::Identifier {
+            start,
+            name,
+            type_args,
+            end,
+        } => match context.get(name) {
             Some(t) => TypedExpression::Identifier {
                 t: match t {
-                    Type::Function(type_vars, _, _) => {
-                        *curr_forall_var += type_vars.len();
-                        t.instantiate_fn(type_vars, *curr_forall_var - type_vars.len())
+                    Type::Function(function_type_vars, _, _) => {
+                        let mut subs: Vec<_> = (*curr_forall_var
+                            ..(*curr_forall_var + function_type_vars.len()))
+                            .map(Type::ForAll)
+                            .collect();
+                        *curr_forall_var += function_type_vars.len();
+
+                        if let Some(type_args) = type_args {
+                            if function_type_vars.len() < type_args.len() {
+                                errors.push(Error::new(
+                                    ErrorType::TypeError,
+                                    format!(
+                                        "expected {} maximum type arguments; found {}",
+                                        function_type_vars.len(),
+                                        type_args.len()
+                                    ),
+                                    *start,
+                                    *end,
+                                ));
+                            } else {
+                                for i in 0..type_args.len() {
+                                    match annotation_type(&type_args[i], type_vars) {
+                                        Ok(t) => subs[i] = t,
+                                        Err(err) => {
+                                            errors.push(err);
+                                            subs[i] = Type::Unknown
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        t.instantiate_fn(function_type_vars, &subs)
                     }
-                    _ => t.clone(),
+                    _ => {
+                        if type_args.is_some() {
+                            errors.push(Error::new(
+                                ErrorType::TypeError,
+                                "type arguments only allowed for functions".into(),
+                                *start,
+                                *end,
+                            ));
+                            Type::Unknown
+                        } else {
+                            t.clone()
+                        }
+                    }
                 },
                 start: *start,
                 name: name.clone(),
@@ -414,7 +484,7 @@ fn initialize_typed_statement(
     match statement {
         Statement::Print { start, val, end } => TypedStatement::Print {
             start: *start,
-            val: initialize_typed_expression(val, curr_forall_var, context, errors),
+            val: initialize_typed_expression(val, curr_forall_var, context, type_vars, errors),
             end: *end,
         },
         Statement::Let {
@@ -424,7 +494,7 @@ fn initialize_typed_statement(
             val,
             end,
         } => {
-            let val = initialize_typed_expression(val, curr_forall_var, context, errors);
+            let val = initialize_typed_expression(val, curr_forall_var, context, type_vars, errors);
 
             context.insert(name.clone(), val.get_type());
 
@@ -476,7 +546,13 @@ fn initialize_typed_statement(
             context.pop_scope();
             TypedStatement::If {
                 start: *start,
-                cond: initialize_typed_expression(cond, curr_forall_var, context, errors),
+                cond: initialize_typed_expression(
+                    cond,
+                    curr_forall_var,
+                    context,
+                    type_vars,
+                    errors,
+                ),
                 true_inner,
                 false_inner,
                 end: *end,
@@ -501,17 +577,23 @@ fn initialize_typed_statement(
             TypedStatement::For {
                 start: *start,
                 iterator: iterator.clone(),
-                from: initialize_typed_expression(from, curr_forall_var, context, errors),
-                to: initialize_typed_expression(to, curr_forall_var, context, errors),
+                from: initialize_typed_expression(
+                    from,
+                    curr_forall_var,
+                    context,
+                    type_vars,
+                    errors,
+                ),
+                to: initialize_typed_expression(to, curr_forall_var, context, type_vars, errors),
                 inner,
                 end: *end,
             }
         }
         Statement::Return { start, val, end } => TypedStatement::Return {
             start: *start,
-            val: val
-                .as_ref()
-                .map(|v| initialize_typed_expression(v, curr_forall_var, context, errors)),
+            val: val.as_ref().map(|v| {
+                initialize_typed_expression(v, curr_forall_var, context, type_vars, errors)
+            }),
             end: *end,
         },
     }
@@ -1402,21 +1484,32 @@ mod tests {
             fn three_tuple_map{A, B}(x: (A, A, A), f: A->B): (B, B, B) {
                 return (f(x[0]), f(x[1]), f(x[2]));
             }
-
-            fn map_test(x: f64): bool {
+            
+            fn map_test_1(x: f64): bool {
                 return x > 0;
             }
-
+            
+            fn map_test_2(x: f64): i64 {
+                if x > 0 {
+                    return 1;
+                } else {
+                    return -1;
+                }
+            }
+            
             fn main() {
-                let z = (1., -1., -0.34);
-                print three_tuple_map(z, map_test);
+                let a = (1., -1., -0.34);
+                print three_tuple_map(a, map_test_1);
+                print three_tuple_map::{f64}(a, map_test_1);
+                print three_tuple_map::{f64, bool}(a, map_test_1);
+                print three_tuple_map(a, map_test_2);
             }
         ";
 
         let ast = parse(code).ast;
         let typed_ast = typecheck(&ast, &HashMap::default());
 
-        println!("{:?}", typed_ast.0["main"]);
+        assert!(typed_ast.1.is_empty());
     }
 
     #[test]

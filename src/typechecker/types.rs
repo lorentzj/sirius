@@ -125,22 +125,16 @@ impl Type {
         }
     }
 
-    pub fn instantiate_fn(&self, subs: &[String], curr_forall: usize) -> Type {
+    pub fn instantiate_fn(&self, vars: &[String], subs: &[Type]) -> Type {
         match self {
-            Type::Tuple(v) => Type::Tuple(
-                v.iter()
-                    .map(|t| t.instantiate_fn(subs, curr_forall))
-                    .collect(),
-            ),
+            Type::Tuple(v) => Type::Tuple(v.iter().map(|t| t.instantiate_fn(vars, subs)).collect()),
             Type::Function(t_args, i, o) => Type::Function(
                 t_args.clone(),
-                i.iter()
-                    .map(|t| t.instantiate_fn(subs, curr_forall))
-                    .collect(),
-                Box::new(o.instantiate_fn(subs, curr_forall)),
+                i.iter().map(|t| t.instantiate_fn(vars, subs)).collect(),
+                Box::new(o.instantiate_fn(vars, subs)),
             ),
-            Type::TypeVar(name) => match subs.iter().position(|n| n == name) {
-                Some(i) => Type::ForAll(curr_forall + i),
+            Type::TypeVar(name) => match vars.iter().position(|n| n == name) {
+                Some(i) => subs[i].clone(),
                 None => self.clone(),
             },
             _ => self.clone(),
