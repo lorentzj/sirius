@@ -1445,11 +1445,12 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
             );
             frame.pop_scope();
 
-            while !subs.is_empty() && errors.is_empty() {
+            while !subs.is_empty() {
                 frame.push_scope();
                 substitute(&mut typed_function.inner, &mut frame, &subs);
                 frame.pop_scope();
 
+                subs = Substitutions::new();
                 frame.push_scope();
                 unify(
                     &typed_function.inner,
@@ -1460,7 +1461,6 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
                     &mut subs,
                 );
                 frame.pop_scope();
-                subs = Substitutions::new();
             }
 
             (name.clone(), typed_function)
@@ -1474,7 +1474,9 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
 mod tests {
     use std::collections::HashMap;
 
-    use super::typecheck;
+    use super::Ind;
+    use super::Type;
+    use super::{typecheck, TypedStatement};
     use crate::error::ErrorType;
     use crate::parser::parse;
 
@@ -1555,5 +1557,25 @@ mod tests {
         let typed_ast = typecheck(&ast, &HashMap::default());
 
         assert_eq!(ErrorType::TypeError, typed_ast.1[0].error_type);
+    }
+
+    #[test]
+    fn x() {
+        let code = "
+            fn main() {
+                let x = 1 + 1 + 1;
+            }
+        ";
+
+        let ast = parse(code).ast;
+        let typed_ast = typecheck(&ast, &HashMap::default());
+
+        assert!(
+            if let TypedStatement::Let { val, .. } = &typed_ast.0["main"].inner[0] {
+                val.get_type() == Type::I64(Ind::constant(3))
+            } else {
+                false
+            }
+        );
     }
 }

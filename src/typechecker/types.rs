@@ -331,7 +331,7 @@ impl fmt::Debug for Type {
                 write!(f, "{res}")
             }
             Type::TypeVar(var) => write!(f, "{var}"),
-            Type::ForAll(i) => write!(f, "{}", usize_name(*i)),
+            Type::ForAll(i) => write!(f, "'{}", usize_name(*i)),
         }
     }
 }
@@ -375,14 +375,14 @@ mod tests {
             ),
             "i64->bool"
         );
-        assert_eq!(format!("{:?}", Type::ForAll(0)), "a");
+        assert_eq!(format!("{:?}", Type::ForAll(0)), "'a");
         assert_eq!(format!("{:?}", Type::Bool), "bool");
         assert_eq!(
             format!(
                 "{:?}",
                 Type::Tuple(vec![Type::Bool, Type::ForAll(0), Type::ForAll(1)])
             ),
-            "forall a, b . (bool, a, b)"
+            "forall a, b . (bool, 'a, 'b)"
         );
 
         assert_eq!(
@@ -391,7 +391,7 @@ mod tests {
                 Type::Tuple(vec![Type::Bool, Type::ForAll(0), Type::ForAll(1)])
                     .substitute(&(0, Type::F64))
             ),
-            "forall b . (bool, f64, b)"
+            "forall b . (bool, f64, 'b)"
         );
 
         assert_eq!(
