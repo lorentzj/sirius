@@ -33,7 +33,7 @@ impl Substitutions {
                     None => {
                         return Err(Error::new(
                             ErrorType::TypeError,
-                            format!("cannot unify types '{curr_sub_t:?}' and '{sub_t:?}'"),
+                            format!("cannot unify types \"{curr_sub_t:?}\" and \"{sub_t:?}\""),
                             start,
                             end,
                         ))
@@ -146,7 +146,7 @@ impl Type {
             Type::Unknown => Some(Substitutions::new()),
             Type::ForAll(self_i) => match other {
                 Type::ForAll(other_i) => {
-                    if self_i <= other_i {
+                    if self_i > other_i {
                         Some(Substitutions(vec![(*self_i, other.clone())]))
                     } else {
                         Some(Substitutions(vec![(*other_i, self.clone())]))

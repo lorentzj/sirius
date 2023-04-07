@@ -14,7 +14,7 @@ export function initializeOutputArea(displayErrorsElem, displayLogElem, errorEle
 }
 function parseErrorMessage(errorMessage) {
     const messageElement = document.createElement('span');
-    const codePattern = /'(.*?)'/sg;
+    const codePattern = /"(.*?)"/sg;
     let match = codePattern.exec(errorMessage);
     let i = 0;
     while (match !== null) {

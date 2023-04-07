@@ -287,11 +287,3 @@ button.selected {
     font-style: italic;
     color: rgb(212, 212, 212);
 }
-
-.error_message_code::before {
-    content: "'";
-}
-
-.error_message_code::after {
-    content: "'";
-}

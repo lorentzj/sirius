@@ -35,7 +35,7 @@ pub enum Expression {
     Identifier {
         start: usize,
         name: String,
-        type_args: Option<Vec<Expression>>,
+        type_args: Option<(Vec<Expression>, (usize, usize))>,
         end: usize,
     },
     BinaryOp {
@@ -294,6 +294,87 @@ pub struct ParserOutput {
     pub ast: AST,
 }
 
+fn add_type_tokens_from_expression(expr: &Expression, type_tokens: &mut Vec<usize>) {
+    match expr {
+        Expression::Identifier {
+            type_args: Some((_, (start, end))),
+            ..
+        } => {
+            let tokens: Vec<usize> = (*start..*end).collect();
+            type_tokens.extend(tokens);
+        }
+        Expression::Tuple { inner, .. } => {
+            for expr in inner {
+                add_type_tokens_from_expression(expr, type_tokens);
+            }
+        }
+        Expression::FnCall { caller, args, .. } => {
+            add_type_tokens_from_expression(caller, type_tokens);
+            for expr in args {
+                add_type_tokens_from_expression(expr, type_tokens);
+            }
+        }
+        Expression::BinaryOp { lhs, rhs, .. } => {
+            add_type_tokens_from_expression(lhs, type_tokens);
+            add_type_tokens_from_expression(rhs, type_tokens);
+        }
+        Expression::Accessor { lhs, rhs, .. } => {
+            add_type_tokens_from_expression(lhs, type_tokens);
+            add_type_tokens_from_expression(rhs, type_tokens);
+        }
+        Expression::UnaryOp { inner, .. } => {
+            add_type_tokens_from_expression(inner, type_tokens);
+        }
+        _ => (),
+    }
+}
+
+fn add_type_tokens_from_statement(statement: &Statement, type_tokens: &mut Vec<usize>) {
+    match statement {
+        Statement::Print { val, .. } => {
+            add_type_tokens_from_expression(val, type_tokens);
+        }
+        Statement::Return { val, .. } => {
+            if let Some(val) = val {
+                add_type_tokens_from_expression(val, type_tokens);
+            }
+        }
+        Statement::Let { ann, val, .. } => {
+            add_type_tokens_from_expression(val, type_tokens);
+            if let Some(ann) = ann {
+                let (ann_start, ann_end) = ann.range();
+                let tokens: Vec<usize> = (ann_start..ann_end).collect();
+                type_tokens.extend(&tokens);
+            }
+        }
+        Statement::If {
+            cond,
+            true_inner,
+            false_inner,
+            ..
+        } => {
+            add_type_tokens_from_expression(cond, type_tokens);
+            for statement in true_inner {
+                add_type_tokens_from_statement(statement, type_tokens);
+            }
+            if let Some(false_inner) = false_inner {
+                for statement in false_inner {
+                    add_type_tokens_from_statement(statement, type_tokens);
+                }
+            }
+        }
+        Statement::For {
+            from, to, inner, ..
+        } => {
+            add_type_tokens_from_expression(from, type_tokens);
+            add_type_tokens_from_expression(to, type_tokens);
+            for statement in inner {
+                add_type_tokens_from_statement(statement, type_tokens);
+            }
+        }
+    }
+}
+
 pub fn parse(code: &str) -> ParserOutput {
     let tokens: Vec<_> = tokenize(code);
     let mut errors: Vec<Error> = vec![];
@@ -329,11 +410,7 @@ pub fn parse(code: &str) -> ParserOutput {
                 }
 
                 for statement in &function.inner {
-                    if let Statement::Let { ann: Some(ann), .. } = statement {
-                        let (ann_start, ann_end) = ann.range();
-                        let tokens: Vec<usize> = (ann_start..ann_end).collect();
-                        type_tokens.extend(&tokens);
-                    }
+                    add_type_tokens_from_statement(statement, &mut type_tokens);
                 }
             }
 
@@ -350,13 +427,13 @@ pub fn parse(code: &str) -> ParserOutput {
         Err(ParseError::ExtraToken { token }) => errors.push(Error::new(
             ErrorType::ParseError,
             match token.1 {
-                Tok::Identifier(n) => format!("unexpected identifier '{n}'"),
-                Tok::Op(op) => format!("unexpected operator '{op:?}'"),
-                Tok::Keyword(k) => format!("unexpected keyword '{k:?}'"),
+                Tok::Identifier(n) => format!("unexpected identifier \"{n}\""),
+                Tok::Op(op) => format!("unexpected operator \"{op:?}\""),
+                Tok::Keyword(k) => format!("unexpected keyword \"{k:?}\""),
                 Tok::Float(_) => "unexpected constant".into(),
                 Tok::Int(_) => "unexpected constant".into(),
                 Tok::Error(m) => m,
-                _ => format!("unexpected token '{:?}'", token.1),
+                _ => format!("unexpected token \"{:?}\"", token.1),
             },
             token.0,
             token.2,
@@ -376,12 +453,12 @@ pub fn parse(code: &str) -> ParserOutput {
         Err(ParseError::UnrecognizedToken { token, .. }) => errors.push(Error::new(
             ErrorType::ParseError,
             match token.1 {
-                Tok::Identifier(n) => format!("unexpected identifier '{n}'"),
-                Tok::Op(op) => format!("unexpected operator '{op:?}'"),
-                Tok::Keyword(k) => format!("unexpected keyword '{k:?}'"),
+                Tok::Identifier(n) => format!("unexpected identifier \"{n}\""),
+                Tok::Op(op) => format!("unexpected operator \"{op:?}\""),
+                Tok::Keyword(k) => format!("unexpected keyword \"{k:?}\""),
                 Tok::Float(_) => "unexpected constant".into(),
                 Tok::Error(m) => m,
-                _ => format!("unexpected token '{:?}'", token.1),
+                _ => format!("unexpected token \"{:?}\"", token.1),
             },
             token.0,
             token.2,
@@ -407,7 +484,7 @@ mod tests {
     fn lead_op() {
         let test_str = "fn main() { let x = + }";
         let message = parse(test_str).errors[0].message.clone();
-        assert_eq!(message, "unexpected operator '+'");
+        assert_eq!(message, "unexpected operator \"+\"");
     }
 
     #[test]
@@ -432,11 +509,11 @@ mod tests {
 
     #[test]
     fn annotation() {
-        let test_str = "fn main() { let y: (f64, 64) = x, 2; }";
+        let test_str = "fn main() { let y: (f64, f64) = x, 2; }";
         let tree = parse(test_str);
         assert_eq!(
             tree.ast["main"].inner[0].short_fmt(),
-            "let y: (f64,64) = (x,2);"
+            "let y: (f64,f64) = (x,2);"
         )
     }
 }

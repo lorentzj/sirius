@@ -173,7 +173,11 @@ pub struct TypedFunction {
 
 pub type TypedAST = HashMap<String, TypedFunction>;
 
-pub fn annotation_type(annotation: &Expression, type_vars: &[String]) -> Result<Type, Error> {
+pub fn annotation_type(
+    annotation: &Expression,
+    type_vars: &[String],
+    curr_forall_var: &mut Option<&mut usize>,
+) -> Result<Type, Error> {
     match &annotation {
         Expression::Identifier {
             start,
@@ -198,10 +202,22 @@ pub fn annotation_type(annotation: &Expression, type_vars: &[String]) -> Result<
                 Ok(Type::Void)
             } else if type_vars.contains(name) {
                 Ok(Type::TypeVar(name.into()))
+            } else if name.eq("_") {
+                if let Some(curr_forall_var) = curr_forall_var {
+                    **curr_forall_var += 1;
+                    Ok(Type::ForAll(**curr_forall_var - 1))
+                } else {
+                    Err(Error::new(
+                        ErrorType::TypeError,
+                        "cannot use wildcard here".into(),
+                        *start,
+                        *end,
+                    ))
+                }
             } else {
                 Err(Error::new(
                     ErrorType::TypeError,
-                    format!("could not find '{name}' in type context"),
+                    format!("could not find \"{name}\" in type context"),
                     *start,
                     *end,
                 ))
@@ -211,7 +227,7 @@ pub fn annotation_type(annotation: &Expression, type_vars: &[String]) -> Result<
         Expression::Tuple { inner, .. } => {
             let mut members = vec![];
             for expression in inner {
-                members.push(annotation_type(expression, type_vars)?);
+                members.push(annotation_type(expression, type_vars, curr_forall_var)?);
             }
             Ok(Type::Tuple(members))
         }
@@ -224,9 +240,9 @@ pub fn annotation_type(annotation: &Expression, type_vars: &[String]) -> Result<
         } => {
             let mut args = vec![];
             for expression in inner {
-                args.push(annotation_type(expression, type_vars)?);
+                args.push(annotation_type(expression, type_vars, curr_forall_var)?);
             }
-            let return_type = annotation_type(rhs, type_vars)?;
+            let return_type = annotation_type(rhs, type_vars, curr_forall_var)?;
 
             Ok(Type::Function(vec![], args, Box::new(return_type)))
         }
@@ -237,8 +253,8 @@ pub fn annotation_type(annotation: &Expression, type_vars: &[String]) -> Result<
             rhs,
             ..
         } => {
-            let args = vec![annotation_type(lhs, type_vars)?];
-            let return_type = annotation_type(rhs, type_vars)?;
+            let args = vec![annotation_type(lhs, type_vars, curr_forall_var)?];
+            let return_type = annotation_type(rhs, type_vars, curr_forall_var)?;
             Ok(Type::Function(vec![], args, Box::new(return_type)))
         }
 
@@ -410,7 +426,7 @@ fn initialize_typed_expression(
                             .collect();
                         *curr_forall_var += function_type_vars.len();
 
-                        if let Some(type_args) = type_args {
+                        if let Some((type_args, _)) = type_args {
                             if function_type_vars.len() < type_args.len() {
                                 errors.push(Error::new(
                                     ErrorType::TypeError,
@@ -424,7 +440,11 @@ fn initialize_typed_expression(
                                 ));
                             } else {
                                 for i in 0..type_args.len() {
-                                    match annotation_type(&type_args[i], type_vars) {
+                                    match annotation_type(
+                                        &type_args[i],
+                                        type_vars,
+                                        &mut Some(curr_forall_var),
+                                    ) {
                                         Ok(t) => subs[i] = t,
                                         Err(err) => {
                                             errors.push(err);
@@ -458,7 +478,7 @@ fn initialize_typed_expression(
             None => {
                 errors.push(Error::new(
                     ErrorType::UnboundIdentifierError,
-                    format!("identifier '{name}' not found in scope"),
+                    format!("identifier \"{name}\" not found in scope"),
                     *start,
                     *end,
                 ));
@@ -499,7 +519,7 @@ fn initialize_typed_statement(
             context.insert(name.clone(), val.get_type());
 
             let ann = match ann {
-                Some(ann) => match annotation_type(ann, type_vars) {
+                Some(ann) => match annotation_type(ann, type_vars, &mut Some(curr_forall_var)) {
                     Ok(t) => Some(t),
                     Err(e) => {
                         errors.push(e);
@@ -640,7 +660,7 @@ fn unify_expression(
                                     None => Err(Error::new(
                                         ErrorType::TypeError,
                                         format!(
-                                            "cannot unify types '{:?}' and '{:?}'",
+                                            "cannot unify types \"{:?}\" and \"{:?}\"",
                                             t, &lhs_members[val]
                                         ),
                                         *start,
@@ -665,7 +685,7 @@ fn unify_expression(
                     Type::ForAll(_) => Ok(Substitutions::new()),
                     t => Err(Error::new(
                         ErrorType::TypeError,
-                        format!("cannot index tuple with type '{t:?}'"),
+                        format!("cannot index tuple with type \"{t:?}\""),
                         *start,
                         *end,
                     )),
@@ -689,14 +709,14 @@ fn unify_expression(
                     Type::ForAll(_) => Ok(Substitutions::new()),
                     t => Err(Error::new(
                         ErrorType::TypeError,
-                        format!("cannot index tuple with type '{t:?}'"),
+                        format!("cannot index tuple with type \"{t:?}\""),
                         *start,
                         *end,
                     )),
                 },
                 t => Err(Error::new(
                     ErrorType::TypeError,
-                    format!("cannot index into type '{t:?}'"),
+                    format!("cannot index into type \"{t:?}\""),
                     *start,
                     *end,
                 )),
@@ -714,7 +734,7 @@ fn unify_expression(
                     Some(subs) => Ok(subs),
                     None => Err(Error::new(
                         ErrorType::TypeError,
-                        format!("cannot unify types '{t:?}' and '{var_t:?}'"),
+                        format!("cannot unify types \"{t:?}\" and \"{var_t:?}\""),
                         *start,
                         *end,
                     )),
@@ -724,7 +744,7 @@ fn unify_expression(
                 Some(subs) => Ok(subs),
                 None => Err(Error::new(
                     ErrorType::TypeError,
-                    format!("cannot unify types '{t:?}' and '{:?}'", Type::Unknown),
+                    format!("cannot unify types \"{t:?}\" and \"{:?}\"", Type::Unknown),
                     *start,
                     *end,
                 )),
@@ -747,7 +767,7 @@ fn unify_expression(
                             None => {
                                 return Err(Error::new(
                                     ErrorType::TypeError,
-                                    format!("cannot unify types '{t:?}' and '{:?}'", Type::F64),
+                                    format!("cannot unify types \"{t:?}\" and \"{:?}\"", Type::F64),
                                     *start,
                                     *end,
                                 ))
@@ -759,7 +779,7 @@ fn unify_expression(
                                 return Err(Error::new(
                                     ErrorType::TypeError,
                                     format!(
-                                        "cannot unify types '{t:?}' and '{:?}'",
+                                        "cannot unify types \"{t:?}\" and \"{:?}\"",
                                         Type::I64(None)
                                     ),
                                     *start,
@@ -770,7 +790,7 @@ fn unify_expression(
                         t => {
                             return Err(Error::new(
                                 ErrorType::TypeError,
-                                format!("cannot apply arithmetic negation to type '{t:?}'"),
+                                format!("cannot apply arithmetic negation to type \"{t:?}\""),
                                 *start,
                                 *end,
                             ))
@@ -782,7 +802,10 @@ fn unify_expression(
                             None => {
                                 return Err(Error::new(
                                     ErrorType::TypeError,
-                                    format!("cannot unify types '{t:?}' and '{:?}'", Type::Bool),
+                                    format!(
+                                        "cannot unify types \"{t:?}\" and \"{:?}\"",
+                                        Type::Bool
+                                    ),
                                     *start,
                                     *end,
                                 ))
@@ -791,7 +814,7 @@ fn unify_expression(
                         t => {
                             return Err(Error::new(
                                 ErrorType::TypeError,
-                                format!("cannot apply boolean negation to type '{t:?}'"),
+                                format!("cannot apply boolean negation to type \"{t:?}\""),
                                 *start,
                                 *end,
                             ))
@@ -829,7 +852,7 @@ fn unify_expression(
                 None => {
                     return Err(Error::new(
                         ErrorType::TypeError,
-                        format!("cannot unify types '{t:?}' and '{tuple_t:?}'"),
+                        format!("cannot unify types \"{t:?}\" and \"{tuple_t:?}\""),
                         *start,
                         *end,
                     ))
@@ -864,7 +887,7 @@ fn unify_expression(
                         None => {
                             return Err(Error::new(
                                 ErrorType::TypeError,
-                                format!("cannot unify types '{t:?}' and '{arith_result:?}'"),
+                                format!("cannot unify types \"{t:?}\" and \"{arith_result:?}\""),
                                 *start,
                                 *end,
                             ))
@@ -879,7 +902,7 @@ fn unify_expression(
                                     return Err(Error::new(
                                         ErrorType::TypeError,
                                         format!(
-                                            "cannot unify types '{t:?}' and '{:?}'",
+                                            "cannot unify types \"{t:?}\" and \"{:?}\"",
                                             Type::Bool
                                         ),
                                         *start,
@@ -904,14 +927,18 @@ fn unify_expression(
                             if lhs_type != Type::Bool {
                                 return Err(Error::new(
                                     ErrorType::TypeError,
-                                    format!("cannot apply boolean operator to type '{lhs_type:?}'",),
+                                    format!(
+                                        "cannot apply boolean operator to type \"{lhs_type:?}\"",
+                                    ),
                                     *start,
                                     *end,
                                 ));
                             } else if rhs_type != Type::Bool {
                                 return Err(Error::new(
                                     ErrorType::TypeError,
-                                    format!("cannot apply boolean operator to type '{rhs_type:?}'",),
+                                    format!(
+                                        "cannot apply boolean operator to type \"{rhs_type:?}\"",
+                                    ),
                                     *start,
                                     *end,
                                 ));
@@ -922,7 +949,7 @@ fn unify_expression(
                                         return Err(Error::new(
                                             ErrorType::TypeError,
                                             format!(
-                                                "cannot unify types '{t:?}' and '{:?}'",
+                                                "cannot unify types \"{t:?}\" and \"{:?}\"",
                                                 Type::Bool
                                             ),
                                             *start,
@@ -983,7 +1010,7 @@ fn unify_expression(
                                     None => {
                                         return Err(Error::new(
                                             ErrorType::TypeError,
-                                            format!("cannot unify types '{given_arg:?}' and '{expected_arg:?}'"),
+                                            format!("cannot unify types \"{given_arg:?}\" and \"{expected_arg:?}\""),
                                             *start,
                                             *end,
                                         ))
@@ -997,7 +1024,7 @@ fn unify_expression(
                             None => {
                                 return Err(Error::new(
                                     ErrorType::TypeError,
-                                    format!("cannot unify types '{t:?}' and '{o:?}'"),
+                                    format!("cannot unify types \"{t:?}\" and \"{o:?}\""),
                                     *start,
                                     *end,
                                 ))
@@ -1012,7 +1039,7 @@ fn unify_expression(
                 t => {
                     return Err(Error::new(
                         ErrorType::TypeError,
-                        format!("cannot call type '{t:?}' as function"),
+                        format!("cannot call type \"{t:?}\" as function"),
                         *start,
                         *end,
                     ))
@@ -1063,7 +1090,7 @@ pub fn unify(
                         None => errors.push(Error::new(
                             ErrorType::TypeError,
                             format!(
-                                "cannot unify type '{:?}' with annotation '{ann:?}'",
+                                "cannot unify type \"{:?}\" with annotation \"{ann:?}\"",
                                 val.get_type()
                             ),
                             val.start(),
@@ -1080,7 +1107,10 @@ pub fn unify(
                         },
                         None => errors.push(Error::new(
                             ErrorType::TypeError,
-                            format!("cannot unify types '{:?}' and '{var_t:?}'", val.get_type()),
+                            format!(
+                                "cannot unify types \"{:?}\" and \"{var_t:?}\"",
+                                val.get_type()
+                            ),
                             val.start(),
                             val.end(),
                         )),
@@ -1114,7 +1144,7 @@ pub fn unify(
                             None => errors.push(Error::new(
                                 ErrorType::TypeError,
                                 format!(
-                                    "cannot unify type '{:?}' with return type '{return_type:?}'",
+                                    "cannot unify type \"{:?}\" with return type \"{return_type:?}\"",
                                     val.get_type()
                                 ),
                                 val.start(),
@@ -1303,8 +1333,13 @@ pub fn substitute(block: &mut [TypedStatement], context: &mut Frame<Type>, subs:
     for statement in block.iter_mut() {
         match statement {
             TypedStatement::Print { val, .. } => substitute_expression(val, subs),
-            TypedStatement::Let { name, val, .. } => {
+            TypedStatement::Let { name, ann, val, .. } => {
                 substitute_expression(val, subs);
+                if let Some(ann) = ann {
+                    for sub in subs.iter() {
+                        *ann = ann.substitute(sub);
+                    }
+                }
                 context.insert(name.clone(), val.get_type());
             }
             TypedStatement::If {
@@ -1358,7 +1393,7 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
         let mut arg_types = vec![];
 
         for (_, arg_ann) in &function.args {
-            match annotation_type(arg_ann, &function.type_args) {
+            match annotation_type(arg_ann, &function.type_args, &mut None) {
                 Ok(t) => arg_types.push(t),
                 Err(error) => {
                     errors.push(error);
@@ -1368,7 +1403,8 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
         }
 
         let return_type = match &function.return_type {
-            Some(return_type) => match annotation_type(return_type, &function.type_args) {
+            Some(return_type) => match annotation_type(return_type, &function.type_args, &mut None)
+            {
                 Ok(t) => Box::new(t),
                 Err(error) => {
                     errors.push(error);
@@ -1504,6 +1540,7 @@ mod tests {
                 print three_tuple_map(a, map_test_1);
                 print three_tuple_map::{f64}(a, map_test_1);
                 print three_tuple_map::{f64, bool}(a, map_test_1);
+                print three_tuple_map::{_, bool}(a, map_test_1);
                 print three_tuple_map(a, map_test_2);
             }
         ";

@@ -287,19 +287,19 @@ Array: Box<Expression> = {
     },
 }
 
-IdentifierTypeParams: Vec<Expression> = {
+IdentifierTypeParams: (Vec<Expression>, (usize, usize)) = {
     <start: @L> ":" ":" "{" "}" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);
 
-        vec![]
+        (vec![], (start + 3, end - 1))
     },
 
     <start: @L> ":" ":" "{" <arg: Expr> "}" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);
 
-        vec![*arg]
+        (vec![*arg], (start + 3, end - 1))
     },
 
     <start: @L> ":" ":" "{" <args: OpenTuple> "}" <end: @R> => {
@@ -307,7 +307,7 @@ IdentifierTypeParams: Vec<Expression> = {
         highlight_map.insert(end - 1, vec![start, end - 1]);
 
         match *args {
-            Expression::OpenTuple{inner, ..} => inner,
+            Expression::OpenTuple{inner, ..} => (inner, (start + 3, end - 1)),
             _ => panic!()
         }
     }

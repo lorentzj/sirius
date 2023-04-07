@@ -32,7 +32,7 @@ pub fn check_flow(ast: &AST) -> Vec<Error> {
                 let (return_type_start, return_type_end) = return_type_expression.range();
                 errors.push(Error::new(
                     ErrorType::FlowError,
-                    format!("function '{name}' may not always return value"),
+                    format!("function \"{name}\" may not always return value"),
                     return_type_start,
                     return_type_end,
                 ))
