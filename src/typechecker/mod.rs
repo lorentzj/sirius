@@ -682,7 +682,11 @@ fn unify_expression(
                         *start,
                         *end,
                     )),
-                    Type::ForAll(_) => Ok(Substitutions::new()),
+                    Type::ForAll(_) => {
+                        let mut subs = lhs_subs;
+                        subs.extend(*start, rhs_subs, *end)?;
+                        Ok(subs)
+                    }
                     t => Err(Error::new(
                         ErrorType::TypeError,
                         format!("cannot index tuple with type \"{t:?}\""),
@@ -692,7 +696,11 @@ fn unify_expression(
                 },
                 Type::ForAll(_) => match rhs.get_type() {
                     Type::I64(Some(ind)) => match ind.constant_val() {
-                        Some(_) => Ok(Substitutions::new()),
+                        Some(_) => {
+                            let mut subs = lhs_subs;
+                            subs.extend(*start, rhs_subs, *end)?;
+                            Ok(subs)
+                        }
                         None => Err(Error::new(
                             ErrorType::TypeError,
                             "tuple index must be statically known".into(),
@@ -1379,6 +1387,177 @@ pub fn substitute(block: &mut [TypedStatement], context: &mut Frame<Type>, subs:
     }
 }
 
+fn check_expr_for_foralls(expression: &TypedExpression) -> Vec<Error> {
+    let mut errors: Vec<Error> = vec![];
+    match expression {
+        TypedExpression::Accessor {
+            start,
+            t,
+            lhs,
+            rhs,
+            end,
+        } => {
+            if !t.forall_vars().is_empty() {
+                errors.push(Error::new(
+                    ErrorType::TypeError,
+                    format!(
+                        "type \"{t:?}\" is not concrete; try adding annotations or type arguments"
+                    ),
+                    *start,
+                    *end,
+                ));
+            }
+
+            errors.extend(check_expr_for_foralls(lhs));
+            errors.extend(check_expr_for_foralls(rhs));
+            errors
+        }
+        TypedExpression::BinaryOp {
+            t,
+            start,
+            lhs,
+            rhs,
+            end,
+            ..
+        } => {
+            if !t.forall_vars().is_empty() {
+                errors.push(Error::new(
+                    ErrorType::TypeError,
+                    format!(
+                        "type \"{t:?}\" is not concrete; try adding annotations or type arguments"
+                    ),
+                    *start,
+                    *end,
+                ));
+            }
+
+            errors.extend(check_expr_for_foralls(lhs));
+            errors.extend(check_expr_for_foralls(rhs));
+            errors
+        }
+        TypedExpression::Tuple {
+            t,
+            start,
+            inner,
+            end,
+        } => {
+            if !t.forall_vars().is_empty() {
+                errors.push(Error::new(
+                    ErrorType::TypeError,
+                    format!(
+                        "type \"{t:?}\" is not concrete; try adding annotations or type arguments"
+                    ),
+                    *start,
+                    *end,
+                ));
+            }
+
+            for expr in inner {
+                errors.extend(check_expr_for_foralls(expr));
+            }
+            errors
+        }
+        TypedExpression::UnaryOp {
+            t,
+            start,
+            inner,
+            end,
+            ..
+        } => {
+            if !t.forall_vars().is_empty() {
+                errors.push(Error::new(
+                    ErrorType::TypeError,
+                    format!(
+                        "type \"{t:?}\" is not concrete; try adding annotations or type arguments"
+                    ),
+                    *start,
+                    *end,
+                ));
+            }
+
+            errors.extend(check_expr_for_foralls(inner));
+            errors
+        }
+        TypedExpression::FnCall {
+            t,
+            start,
+            caller,
+            args,
+            end,
+        } => {
+            if !t.forall_vars().is_empty() {
+                errors.push(Error::new(
+                    ErrorType::TypeError,
+                    format!(
+                        "type \"{t:?}\" is not concrete; try adding annotations or type arguments"
+                    ),
+                    *start,
+                    *end,
+                ));
+            }
+
+            errors.extend(check_expr_for_foralls(caller));
+            for expr in args {
+                errors.extend(check_expr_for_foralls(expr));
+            }
+
+            errors
+        }
+        TypedExpression::Identifier { t, start, end, .. } => {
+            if !t.forall_vars().is_empty() {
+                errors.push(Error::new(
+                    ErrorType::TypeError,
+                    format!(
+                        "type \"{t:?}\" is not concrete; try adding annotations or type arguments"
+                    ),
+                    *start,
+                    *end,
+                ));
+            }
+            errors
+        }
+        _ => errors,
+    }
+}
+
+fn check_stmt_for_foralls(statement: &TypedStatement) -> Vec<Error> {
+    let mut errors = vec![];
+
+    match statement {
+        TypedStatement::Print { val, .. } => errors.extend(check_expr_for_foralls(val)),
+        TypedStatement::Return { val: Some(val), .. } => errors.extend(check_expr_for_foralls(val)),
+        TypedStatement::Return { val: None, .. } => (),
+        TypedStatement::Let { val, .. } => errors.extend(check_expr_for_foralls(val)),
+        TypedStatement::If {
+            cond,
+            true_inner,
+            false_inner,
+            ..
+        } => {
+            errors.extend(check_expr_for_foralls(cond));
+            for stmt in true_inner {
+                errors.extend(check_stmt_for_foralls(stmt));
+            }
+            if let Some(false_inner) = false_inner {
+                for stmt in false_inner {
+                    errors.extend(check_stmt_for_foralls(stmt));
+                }
+            }
+        }
+        TypedStatement::For {
+            from, to, inner, ..
+        } => {
+            errors.extend(check_expr_for_foralls(from));
+            errors.extend(check_expr_for_foralls(to));
+            for stmt in inner {
+                errors.extend(check_stmt_for_foralls(stmt));
+            }
+        }
+    }
+
+    errors
+}
+
 pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error>) {
     let mut errors: Vec<Error> = vec![];
 
@@ -1497,6 +1676,12 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
                     &mut subs,
                 );
                 frame.pop_scope();
+            }
+
+            if errors.is_empty() {
+                for statement in &typed_function.inner {
+                    errors.extend(check_stmt_for_foralls(statement));
+                }
             }
 
             (name.clone(), typed_function)
