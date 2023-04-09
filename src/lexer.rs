@@ -87,6 +87,9 @@ pub enum Tok {
     CloseCurly,
     OpenSqBracket,
     CloseSqBracket,
+    Indent,
+    Dedent,
+    NewLine,
     Pound,
     Op(Op),
     Float(f64),
@@ -102,6 +105,9 @@ pub enum Tok {
 impl fmt::Debug for Tok {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Tok::Indent => write!(f, "[indent]"),
+            Tok::Dedent => write!(f, "[dedent]"),
+            Tok::NewLine => write!(f, "[newline]"),
             Tok::OpenParen => write!(f, "("),
             Tok::CloseParen => write!(f, ")"),
             Tok::OpenCurly => write!(f, "{{"),
@@ -198,9 +204,28 @@ impl Token {
     }
 }
 
+// fn only_whitespace_line(code: &str, from: usize) -> bool {
+//     let mut i = from + 1;
+//     while i < code.len() {
+//         if code.chars().nth(i).unwrap() == '\n' {
+//             return true;
+//         }
+
+//         if code.chars().nth(i).unwrap() != ' ' {
+//             return false;
+//         }
+
+//         i += 1;
+//     }
+
+//     true
+// }
+
 pub fn tokenize(code: &str) -> Vec<Token> {
     let mut tokens: Vec<Token> = vec![];
-
+    let mut bracket_level = (0, 0, 0);
+    let mut indent_spaces: Option<usize> = None;
+    let mut prev_indent_level = 0;
     let mut line = 0;
     let mut col = 0;
 
@@ -210,6 +235,32 @@ pub fn tokenize(code: &str) -> Vec<Token> {
     for (i, char) in code.char_indices() {
         match char {
             '0'..='9' | 'A'..='Z' | 'a'..='z' | '\u{0370}'..='\u{03FF}' | '_' => {
+                if let Some(spaces) = indent_spaces {
+                    if spaces % 4 == 0 {
+                        let curr_indent_level = spaces / 4;
+                        #[allow(clippy::comparison_chain)]
+                        if curr_indent_level > prev_indent_level {
+                            for _c in 0..(curr_indent_level - prev_indent_level) {
+                                tokens.push(Token::new(Tok::Indent, line, 0, 0));
+                            }
+                        } else if prev_indent_level > curr_indent_level {
+                            for _c in 0..(prev_indent_level - curr_indent_level) {
+                                tokens.push(Token::new(Tok::Dedent, line, 0, 0));
+                            }
+                        }
+                        prev_indent_level = curr_indent_level;
+                    } else {
+                        tokens.push(Token::new(
+                            Tok::Error(format!(
+                                "indent level must be multiple of 4; found \"{spaces}\""
+                            )),
+                            line,
+                            col + 1 - spaces,
+                            col + 1,
+                        ));
+                    }
+                }
+                indent_spaces = None;
                 if curr_substring_start.is_none() {
                     curr_substring_start = Some(i);
                     curr_substring_all_digits &= char.is_ascii_digit();
@@ -242,21 +293,81 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                     line += 1;
                     col = 0;
                 } else {
+                    if char != ' ' {
+                        if let Some(spaces) = indent_spaces {
+                            if spaces % 4 == 0 {
+                                let curr_indent_level = spaces / 4;
+                                #[allow(clippy::comparison_chain)]
+                                if curr_indent_level > prev_indent_level {
+                                    for _c in 0..(curr_indent_level - prev_indent_level) {
+                                        tokens.push(Token::new(Tok::Indent, line, 0, 0));
+                                    }
+                                } else if prev_indent_level > curr_indent_level {
+                                    for _c in 0..(prev_indent_level - curr_indent_level) {
+                                        tokens.push(Token::new(Tok::Dedent, line, 0, 0));
+                                    }
+                                }
+                                prev_indent_level = curr_indent_level;
+                            } else {
+                                tokens.push(Token::new(
+                                    Tok::Error(format!(
+                                        "indent level must be multiple of 4; found \"{spaces}\""
+                                    )),
+                                    line,
+                                    col + 1 - spaces,
+                                    col + 1,
+                                ));
+                            }
+                        }
+                        indent_spaces = None;
+                    }
                     col += 1;
                 }
 
                 let mut should_pop = false;
 
                 let new_token = match char {
-                    ' ' | '\t' | '\n' => continue,
+                    ' ' => match indent_spaces {
+                        Some(i) => {
+                            indent_spaces = Some(i + 1);
+                            continue;
+                        }
+                        None => continue,
+                    },
+                    '\n' => {
+                        if bracket_level != (0, 0, 0) {
+                            continue;
+                        } else {
+                            indent_spaces = Some(0);
+                            Token::new(Tok::NewLine, line, col, col)
+                        }
+                    }
                     ';' => Token::new(Tok::Semicolon, line, col - 1, col),
                     ':' => Token::new(Tok::Colon, line, col - 1, col),
-                    '(' => Token::new(Tok::OpenParen, line, col - 1, col),
-                    ')' => Token::new(Tok::CloseParen, line, col - 1, col),
-                    '{' => Token::new(Tok::OpenCurly, line, col - 1, col),
-                    '}' => Token::new(Tok::CloseCurly, line, col - 1, col),
-                    '[' => Token::new(Tok::OpenSqBracket, line, col - 1, col),
-                    ']' => Token::new(Tok::CloseSqBracket, line, col - 1, col),
+                    '(' => {
+                        bracket_level.0 += 1;
+                        Token::new(Tok::OpenParen, line, col - 1, col)
+                    }
+                    ')' => {
+                        bracket_level.0 -= 1;
+                        Token::new(Tok::CloseParen, line, col - 1, col)
+                    }
+                    '{' => {
+                        bracket_level.1 += 1;
+                        Token::new(Tok::OpenCurly, line, col - 1, col)
+                    }
+                    '}' => {
+                        bracket_level.1 -= 1;
+                        Token::new(Tok::CloseCurly, line, col - 1, col)
+                    }
+                    '[' => {
+                        bracket_level.2 += 1;
+                        Token::new(Tok::OpenSqBracket, line, col - 1, col)
+                    }
+                    ']' => {
+                        bracket_level.2 -= 1;
+                        Token::new(Tok::CloseSqBracket, line, col - 1, col)
+                    }
                     '#' => Token::new(Tok::Pound, line, col - 1, col),
                     '.' => Token::new(Tok::Op(Op::Dot), line, col - 1, col),
                     '\'' => Token::new(Tok::Op(Op::Tick), line, col - 1, col),
@@ -297,7 +408,7 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                     }
                     ',' => Token::new(Tok::Op(Op::Comma), line, col - 1, col),
                     _ => Token::new(
-                        Tok::Error(format!("unknown token '{char}'")),
+                        Tok::Error(format!("unknown token \"{char}\"")),
                         line,
                         col - 1,
                         col,
@@ -328,6 +439,14 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                 col + curr_substring_start - code.len(),
                 col,
             )),
+        }
+    }
+
+    if prev_indent_level > 0 {
+        tokens.push(Token::new(Tok::NewLine, line, col, col));
+
+        for _i in 0..prev_indent_level {
+            tokens.push(Token::new(Tok::Dedent, line, col, col))
         }
     }
 
@@ -368,20 +487,23 @@ mod tests {
 
     #[test]
     fn multi_line() {
-        let test_str = "this is\n*a test*\n with lots of newlines\n";
+        let test_str = "this is\n*a test*\nwith lots of newlines\n";
         let tokens = tokenize(test_str);
 
         let expected_tokens = vec![
             Token::new(Tok::Identifier("this".into()), 0, 0, 4),
             Token::new(Tok::Identifier("is".into()), 0, 5, 7),
+            Token::new(Tok::NewLine, 1, 0, 0),
             Token::new(Tok::Op(Op::Mul), 1, 0, 1),
             Token::new(Tok::Identifier("a".into()), 1, 1, 2),
             Token::new(Tok::Identifier("test".into()), 1, 3, 7),
             Token::new(Tok::Op(Op::Mul), 1, 7, 8),
-            Token::new(Tok::Identifier("with".into()), 2, 1, 5),
-            Token::new(Tok::Identifier("lots".into()), 2, 6, 10),
-            Token::new(Tok::Identifier("of".into()), 2, 11, 13),
-            Token::new(Tok::Identifier("newlines".into()), 2, 14, 22),
+            Token::new(Tok::NewLine, 2, 0, 0),
+            Token::new(Tok::Identifier("with".into()), 2, 0, 4),
+            Token::new(Tok::Identifier("lots".into()), 2, 5, 9),
+            Token::new(Tok::Identifier("of".into()), 2, 10, 12),
+            Token::new(Tok::Identifier("newlines".into()), 2, 13, 21),
+            Token::new(Tok::NewLine, 3, 0, 0),
         ];
 
         assert_eq!(tokens, expected_tokens);
@@ -418,5 +540,74 @@ mod tests {
         ];
 
         assert_eq!(tokens, expected_tokens);
+    }
+
+    #[test]
+    fn indent_dedent() {
+        let test_str = "
+a b c
+    a
+        b c d
+        e
+    g
+        h i j
+f
+d e f
+";
+        let tokens = tokenize(test_str);
+
+        let expected_tokens = vec![
+            Token::new(Tok::NewLine, 1, 0, 0),
+            Token::new(Tok::Identifier("a".into()), 1, 0, 1),
+            Token::new(Tok::Identifier("b".into()), 1, 2, 3),
+            Token::new(Tok::Identifier("c".into()), 1, 4, 5),
+            Token::new(Tok::NewLine, 2, 0, 0),
+            Token::new(Tok::Indent, 2, 0, 0),
+            Token::new(Tok::Identifier("a".into()), 2, 4, 5),
+            Token::new(Tok::NewLine, 3, 0, 0),
+            Token::new(Tok::Indent, 3, 0, 0),
+            Token::new(Tok::Identifier("b".into()), 3, 8, 9),
+            Token::new(Tok::Identifier("c".into()), 3, 10, 11),
+            Token::new(Tok::Identifier("d".into()), 3, 12, 13),
+            Token::new(Tok::NewLine, 4, 0, 0),
+            Token::new(Tok::Identifier("e".into()), 4, 8, 9),
+            Token::new(Tok::NewLine, 5, 0, 0),
+            Token::new(Tok::Dedent, 5, 0, 0),
+            Token::new(Tok::Identifier("g".into()), 5, 4, 5),
+            Token::new(Tok::NewLine, 6, 0, 0),
+            Token::new(Tok::Indent, 6, 0, 0),
+            Token::new(Tok::Identifier("h".into()), 6, 8, 9),
+            Token::new(Tok::Identifier("i".into()), 6, 10, 11),
+            Token::new(Tok::Identifier("j".into()), 6, 12, 13),
+            Token::new(Tok::NewLine, 7, 0, 0),
+            Token::new(Tok::Dedent, 7, 0, 0),
+            Token::new(Tok::Dedent, 7, 0, 0),
+            Token::new(Tok::Identifier("f".into()), 7, 0, 1),
+            Token::new(Tok::NewLine, 8, 0, 0),
+            Token::new(Tok::Identifier("d".into()), 8, 0, 1),
+            Token::new(Tok::Identifier("e".into()), 8, 2, 3),
+            Token::new(Tok::Identifier("f".into()), 8, 4, 5),
+            Token::new(Tok::NewLine, 9, 0, 0),
+        ];
+
+        for (a, b) in tokens.iter().zip(expected_tokens) {
+            assert_eq!(a, &b);
+        }
+    }
+
+    #[test]
+    fn indents_brackets() {
+        let test_str = "
+    a b c(d)
+        e f {
+            g h i
+        }
+    j
+    ";
+        let tokens = tokenize(test_str);
+
+        for token in tokens {
+            println!("{token:?}");
+        }
     }
 }

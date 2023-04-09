@@ -1,26 +1,21 @@
-fn dot{#N}(a: f64[N], b: f64[N]): f64 {
-    return zip(a, b).map(mul).fold(0, add);
-}
+fn dot{#N}(a: f64[N], b: f64[N]) -> f64:
+    return zip(a, b).map(mul).fold(0, add)
  
-fn matmul{#I, #J, #K}(a: f64[I, J], b: f64[J, K]): f64[I, K] {
-    for i from 0 to I {
-        for k from 0 to K {
-            yield dot(a[i], b'[k]);
-        }
-    }
-}
+fn matmul{#I, #J, #K}(a: f64[I, J], b: f64[J, K]) -> f64[I, K]:
+    for i from 0 to I:
+        for k from 0 to K:
+            yield dot(a[i], b'[k])
 
-fn main() {
+fn main():
     let a = [
         [1., 2., 3.],
         [4., 5., 6.]
-    ];
+    ]
 
     let b = [
         [1., 2.],
         [3., 4.],
         [5., 6.]
-    ];
+    ]
 
-    print matmul(a, b);
-}
+    print matmul(a, b)

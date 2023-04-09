@@ -1,17 +1,13 @@
-fn trig_fns(choice: i64): f64 -> f64 {
-    if choice == 0 {
-       return sin;
-    }
+fn trig_fns(choice: i64) -> f64 -> f64:
+    if choice == 0:
+        return sin
 
-    if choice == 1 {
-        return cos;
-    }
+    if choice == 1:
+        return cos
 
-    return tan;
-}
+    return tan
 
-fn main() {
-    print trig_fns(0)(pi/2);
-    print trig_fns(1)(pi/2);
-    print trig_fns(2)(pi/2);
-}
+fn main():
+    print trig_fns(0)(pi/2)
+    print trig_fns(1)(pi/2)
+    print trig_fns(2)(pi/2)

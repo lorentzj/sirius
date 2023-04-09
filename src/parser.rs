@@ -207,11 +207,11 @@ impl Statement {
     fn short_fmt(&self) -> String {
         match self {
             Statement::Let { name, ann, val, .. } => match ann {
-                Some(ann) => format!("let {name}: {} = {};", ann.short_fmt(), val.short_fmt()),
-                None => format!("let {name} = {};", val.short_fmt()),
+                Some(ann) => format!("let {name}: {} = {}", ann.short_fmt(), val.short_fmt()),
+                None => format!("let {name} = {}", val.short_fmt()),
             },
             Statement::Print { val, .. } => {
-                format!("print {};", val.short_fmt())
+                format!("print {}", val.short_fmt())
             }
             Statement::If {
                 cond,
@@ -263,7 +263,7 @@ impl Statement {
             }
             Statement::Return { val, .. } => {
                 format!(
-                    "return {};",
+                    "return {}",
                     val.as_ref().map(|v| v.short_fmt()).unwrap_or("".into())
                 )
             }
@@ -482,38 +482,50 @@ mod tests {
 
     #[test]
     fn lead_op() {
-        let test_str = "fn main() { let x = + }";
+        let test_str = "
+fn main():
+    let x = + 
+";
         let message = parse(test_str).errors[0].message.clone();
         assert_eq!(message, "unexpected operator \"+\"");
     }
 
     #[test]
     fn op_precedence() {
-        let test_str = "fn main() { print (a^2/3 + 4/0.1*b*c^2 - 3 && 4/2)^(d, 0.5^e - 3); }";
+        let test_str = "
+fn main():
+    print (a^2/3 + 4/0.1*b*c^2 - 3 && 4/2)^(d, 0.5^e - 3)
+";
         let tree = parse(test_str);
         assert_eq!(
             tree.ast["main"].inner[0].short_fmt(),
-            "print ((((((a^2)/3)+(((4/0.1)*b)*(c^2)))-3)&&(4/2))^(d,((0.5^e)-3)));"
+            "print ((((((a^2)/3)+(((4/0.1)*b)*(c^2)))-3)&&(4/2))^(d,((0.5^e)-3)))"
         );
     }
 
     #[test]
     fn tuples() {
-        let test_str = "fn main() { let x = (a + 2, (b, c, (d, e), e), f^2, (g, h)), (i, j), k; }";
+        let test_str = "
+fn main():
+    let x = (a + 2, (b, c, (d, e), e), f^2, (g, h)), (i, j), k
+";
         let tree = parse(test_str);
         assert_eq!(
             tree.ast["main"].inner[0].short_fmt(),
-            "let x = (((a+2),(b,c,(d,e),e),(f^2),(g,h)),(i,j),k);"
+            "let x = (((a+2),(b,c,(d,e),e),(f^2),(g,h)),(i,j),k)"
         )
     }
 
     #[test]
     fn annotation() {
-        let test_str = "fn main() { let y: (f64, f64) = x, 2; }";
+        let test_str = "
+fn main():
+    let y: (f64, f64) = x, 2
+";
         let tree = parse(test_str);
         assert_eq!(
             tree.ast["main"].inner[0].short_fmt(),
-            "let y: (f64,f64) = (x,2);"
+            "let y: (f64,f64) = (x,2)"
         )
     }
 }

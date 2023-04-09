@@ -6,11 +6,11 @@ use crate::lexer::Op;
 grammar(highlight_map: &mut HashMap<usize, Vec<usize>>);
 
 pub AST: HashMap<String, Function> = {
-    <fns: Fn*> => fns.into_iter().map(|func| (func.name.clone(), func)).collect()
+    <fns: Fn*> "newline" * => fns.into_iter().map(|func| (func.name.clone(), func)).collect()
 }
 
 pub Fn: Function = {
-    "fn" <name: "identifier"> <type_args: FnTypeParams?> <args: FnSigParams> <return_type: (":" Expr)?>  <inner: Block> => {
+    "newline" * "fn" <name: "identifier"> <type_args: FnTypeParams?> <args: FnSigParams> <return_type: ("->" Expr)?> ":" "newline" * <inner: Block> => {
         let return_type = return_type.map(|r| *r.1);
         let (type_args, type_arg_range) = match type_args {
             Some((a, b)) => (a, Some(b)),
@@ -64,9 +64,8 @@ FnTypeParamsInner: Vec<String> = {
     }
 }
 
-
 pub Stmt: Statement = {
-    <start: @L> "let" <name: "identifier"> <ann: (":" Expr)?> "=" <val: Expr> ";" <end: @R> => {
+    "newline" * <start: @L> "let" <name: "identifier"> <ann: (":" Expr)?> "=" <val: Expr> "newline" <end: @R> => {
         Statement::Let {
             start,
             name, 
@@ -76,7 +75,7 @@ pub Stmt: Statement = {
         }
     },
 
-    <start: @L> "let" <name: "identifier"> <ann: (":" Expr)?> "=" <val: OpenTuple> ";" <end: @R> => {
+    "newline" * <start: @L> "let" <name: "identifier"> <ann: (":" Expr)?> "=" <val: OpenTuple> "newline" <end: @R> => {
         Statement::Let {
             start,
             name: name, 
@@ -89,33 +88,33 @@ pub Stmt: Statement = {
         }
     },
 
-    <start: @L> "print" <val: Expr> ";" <end: @R> => {
+    "newline" * <start: @L> "print" <val: Expr> "newline" <end: @R> => {
         Statement::Print{<>}
     },
 
-    <start: @L> "print" <val: OpenTuple> <end: @R> ";" => {
+    "newline" * <start: @L> "print" <val: OpenTuple> "newline" <end: @R> => {
         Statement::Print{ start, val: match *val {
             Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
             _ => panic!()
         }, end }
     },
 
-    <start: @L> "if" <cond: Expr> <true_inner: Block> <false_inner: ("else" Block)?> <end: @R> => {
+    "newline" * <start: @L> "if" <cond: Expr> ":" "newline" <true_inner: Block> <false_inner: ("else" ":" "newline" Block)?> <end: @R> => {
         Statement::If{ start, cond: match *cond {
             Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
             _ => cond
-        }, true_inner, false_inner: false_inner.map(|(_, b)| b), end }
+        }, true_inner, false_inner: false_inner.map(|(_, _, _, b)| b), end }
     },
 
-    <start: @L> "for" <iterator: "identifier"> "from" <from: Expr> "to" <to: Expr> <inner: Block> <end: @R> => {
+    "newline" * <start: @L> "for" <iterator: "identifier"> "from" <from: Expr> "to" <to: Expr> ":" "newline" <inner: Block> <end: @R> => {
         Statement::For{<>}
     },
 
-    <start: @L> "return" <val: Expr?> ";" <end: @R> => {
+    "newline" * <start: @L> "return" <val: Expr?> "newline" <end: @R> => {
         Statement::Return{<>}
     },
 
-    <start: @L> "return" <val: OpenTuple> <end: @R> ";" => {
+    "newline" * <start: @L> "return" <val: OpenTuple> "newline" <end: @R> => {
         Statement::Return{ start, val: match *val {
             Expression::OpenTuple{ start, inner, end } => Some(Box::new(Expression::Tuple{ start, inner, end })),
             _ => panic!()
@@ -124,13 +123,11 @@ pub Stmt: Statement = {
 }
 
 pub Block: Vec<Statement> = {
-    <start: @L> "{" <inner: Stmt*> "}" <end: @R> => {
-        highlight_map.insert(start, vec![start, end - 1]);
-        highlight_map.insert(end - 1, vec![start, end - 1]);
+    <start: @L> "indent" <inner: Stmt*> "newline" * "dedent" <end: @R> => {
         inner
     }
 }
-   
+
 pub Expr: Box<Expression> = {
     #[precedence(level="1")]
     <t: Term> => t,
@@ -288,26 +285,26 @@ Array: Box<Expression> = {
 }
 
 IdentifierTypeParams: (Vec<Expression>, (usize, usize)) = {
-    <start: @L> ":" ":" "{" "}" <end: @R> => {
+    <start: @L> "{" "}" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);
 
-        (vec![], (start + 3, end - 1))
+        (vec![], (start + 1, end - 1))
     },
 
-    <start: @L> ":" ":" "{" <arg: Expr> "}" <end: @R> => {
+    <start: @L> "{" <arg: Expr> "}" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);
 
-        (vec![*arg], (start + 3, end - 1))
+        (vec![*arg], (start + 1, end - 1))
     },
 
-    <start: @L> ":" ":" "{" <args: OpenTuple> "}" <end: @R> => {
+    <start: @L> "{" <args: OpenTuple> "}" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);
 
         match *args {
-            Expression::OpenTuple{inner, ..} => (inner, (start + 3, end - 1)),
+            Expression::OpenTuple{inner, ..} => (inner, (start + 1, end - 1)),
             _ => panic!()
         }
     }
@@ -421,6 +418,9 @@ extern {
         "}"          => crate::lexer::Tok::CloseCurly,
         "["          => crate::lexer::Tok::OpenSqBracket,
         "]"          => crate::lexer::Tok::CloseSqBracket,
+        "newline"    => crate::lexer::Tok::NewLine,
+        "indent"     => crate::lexer::Tok::Indent,
+        "dedent"     => crate::lexer::Tok::Dedent,        
         "."          => crate::lexer::Tok::Op(Op::Dot),
         "^"          => crate::lexer::Tok::Op(Op::Exp),
         "'"          => crate::lexer::Tok::Op(Op::Tick),

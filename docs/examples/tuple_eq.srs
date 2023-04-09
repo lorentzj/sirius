@@ -1,12 +1,9 @@
-fn main() {
-    let a = (1, 2, (true, 4.));
-    let b = (-2 + 3, 4 - 2, (false || true, 16.0/4));
+fn main():
+    let a = (1, 2, (true, 4.))
+    let b = (-2 + 3, 4 - 2, (false || true, 16.0/4))
     
-    if a == b {
-        print true;
-    }
+    if a == b:
+        print true
 
-    if a[2][1] == b[0] + 3 {
-        print true;
-    }
-}
+    if a[2][1] == b[0] + 3:
+        print true

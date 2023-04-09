@@ -176,17 +176,19 @@ export function updateEditorWithCode(editorElem: HTMLElement, editorLinesElem: H
             }
 
             const token_code = lineCode.slice(parseOutput.tokens[token_i].start, parseOutput.tokens[token_i].end);
-            const token_code_span = createCodeSpan(
-                parseOutput.tokens[token_i],
-                token_i,
-                parseOutput.typeTokens.has(token_i),
-                parseOutput.annotations.get(token_i)
-            );
-
-            setMouseOverHandler(editorElem, token_code_span, token_i, parseOutput.highlightMap);
-            token_code_span.textContent = token_code;
-            lineElement.appendChild(token_code_span);
-
+            if(token_code.length > 0) {
+                const token_code_span = createCodeSpan(
+                    parseOutput.tokens[token_i],
+                    token_i,
+                    parseOutput.typeTokens.has(token_i),
+                    parseOutput.annotations.get(token_i)
+                );
+    
+                setMouseOverHandler(editorElem, token_code_span, token_i, parseOutput.highlightMap);
+                token_code_span.textContent = token_code;
+                lineElement.appendChild(token_code_span);    
+            }
+            
             line_i = parseOutput.tokens[token_i].end;
             token_i += 1;
         }
