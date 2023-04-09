@@ -252,11 +252,11 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                     } else {
                         tokens.push(Token::new(
                             Tok::Error(format!(
-                                "indent level must be multiple of 4; found \"{spaces}\""
+                                "indent level must be multiple of 4; found {spaces}"
                             )),
                             line,
-                            col + 1 - spaces,
-                            col + 1,
+                            col - spaces,
+                            col,
                         ));
                     }
                 }
@@ -311,11 +311,11 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                             } else {
                                 tokens.push(Token::new(
                                     Tok::Error(format!(
-                                        "indent level must be multiple of 4; found \"{spaces}\""
+                                        "indent level must be multiple of 4; found {spaces}"
                                     )),
                                     line,
-                                    col + 1 - spaces,
-                                    col + 1,
+                                    col - spaces,
+                                    col,
                                 ));
                             }
                         }
