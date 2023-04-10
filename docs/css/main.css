@@ -162,6 +162,10 @@ tbody td {
     user-select: none;
 }
 
+#editor_line_numbers .error {
+    color: rgb(255, 0, 0);
+}
+
 code, #editor {
     padding: 3px;
     caret-color: black;

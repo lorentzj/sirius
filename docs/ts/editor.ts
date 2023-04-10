@@ -209,11 +209,21 @@ export function updateEditorWithCode(editorElem: HTMLElement, editorLinesElem: H
         editorElem.appendChild(lineElement);
     });
 
-    let lines = [];
-    for(let i = 1; i < code.length; ++i) {
-        lines.push(`${i + 1}`);
+    let errorLines = new Set<Number>();
+    for(let error of parseOutput.errors) {
+        errorLines.add(parseOutput.tokens[error.start].line);
     }
-    editorLinesElem.innerHTML = '1\n' + lines.join('\n');
+
+    let newEditorLines = [];
+    for(let i = 0; i < code.length; ++i) {
+        let rowLine = document.createElement('span');
+        rowLine.innerText = `${i + 1}\n`;
+        if(errorLines.has(i)) {
+            rowLine.classList.add('error')
+        }
+        newEditorLines.push(rowLine);
+    }
+    editorLinesElem.replaceChildren(...newEditorLines);
 }
 
 function setMouseOverHandler(editorElem: HTMLElement, codeSpan: HTMLElement, tokenId: number, highlightMap: Map<number, number[]>) {

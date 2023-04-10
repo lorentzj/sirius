@@ -10,7 +10,7 @@ pub AST: HashMap<String, Function> = {
 }
 
 pub Fn: Function = {
-    "newline" * "fn" <name: "identifier"> <type_args: FnTypeParams?> <args: FnSigParams> <return_type: ("->" Expr)?> ":" "newline" * <inner: Block> => {
+    "newline" * "fn" <name: "identifier"> <type_args: FnTypeParams?> <args: FnSigParams> <return_type: ("->" Expr)?> ":" "newline" <inner: Block> => {
         let return_type = return_type.map(|r| *r.1);
         let (type_args, type_arg_range) = match type_args {
             Some((a, b)) => (a, Some(b)),
@@ -123,7 +123,7 @@ pub Stmt: Statement = {
 }
 
 pub Block: Vec<Statement> = {
-    <start: @L> "indent" <inner: Stmt*> "newline" * "dedent" <end: @R> => {
+    <start: @L> "newline" * "indent" <inner: Stmt*> "newline" * "dedent" <end: @R> => {
         inner
     }
 }
