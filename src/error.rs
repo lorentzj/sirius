@@ -4,6 +4,7 @@ use serde::Serialize;
 pub enum ErrorType {
     ParseError,
     TypeError,
+    NameError,
     UnboundIdentifierError,
     FlowError,
     RuntimeError,

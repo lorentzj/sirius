@@ -83,6 +83,7 @@ impl Type {
                     vars.extend(t.forall_vars())
                 }
 
+                vars.dedup();
                 vars
             }
             Type::Function(_, i, o) => {
@@ -93,6 +94,7 @@ impl Type {
 
                 vars.extend(o.forall_vars());
 
+                vars.dedup();
                 vars
             }
             Type::ForAll(i) => {
@@ -267,6 +269,60 @@ fn usize_name(mut x: usize) -> String {
     res
 }
 
+fn priv_print(t: &Type) -> String {
+    match t {
+        Type::Unknown => "unknown".into(),
+        Type::Void => "void".into(),
+        Type::F64 => "f64".into(),
+        Type::I64(ind) => match ind {
+            Some(ind) => format!("i64(ind={ind:?})"),
+            None => "i64".into(),
+        },
+        Type::Bool => "bool".into(),
+        Type::Tuple(v) => {
+            if v.is_empty() {
+                "()".into()
+            } else {
+                let mut res = "(".to_string();
+                for t in v {
+                    res.push_str(&priv_print(t));
+                    res.push(',');
+                    res.push(' ');
+                }
+                res.pop();
+                res.pop();
+                res.push(')');
+                res
+            }
+        }
+        Type::Function(_, i, o) => {
+            let mut res = "".to_string();
+            if i.len() == 1 {
+                res.push_str(&format!("{}->", &priv_print(&i[0])));
+            } else {
+                res.push('(');
+                for t in i {
+                    res.push_str(&priv_print(t));
+                    res.push(',');
+                    res.push(' ');
+                }
+
+                if !i.is_empty() {
+                    res.pop();
+                    res.pop();
+                }
+                res.push_str(")->");
+            }
+
+            res.push_str(&priv_print(o));
+
+            res
+        }
+        Type::TypeVar(var) => var.clone(),
+        Type::ForAll(i) => format!("'{}", usize_name(*i)),
+    }
+}
+
 impl fmt::Debug for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let forall_vars = self.forall_vars();
@@ -281,58 +337,7 @@ impl fmt::Debug for Type {
 
             write!(f, " . ")?;
         }
-
-        match self {
-            Type::Unknown => write!(f, "unknown"),
-            Type::Void => write!(f, "void"),
-            Type::F64 => write!(f, "f64"),
-            Type::I64(ind) => match ind {
-                Some(ind) => write!(f, "i64(ind={ind:?})"),
-                None => write!(f, "i64"),
-            },
-            Type::Bool => write!(f, "bool"),
-            Type::Tuple(v) => {
-                if v.is_empty() {
-                    write!(f, "())")
-                } else {
-                    let mut res = "(".to_string();
-                    for t in v {
-                        res.push_str(&format!("{t:?}"));
-                        res.push(',');
-                        res.push(' ');
-                    }
-                    res.pop();
-                    res.pop();
-                    res.push(')');
-                    write!(f, "{res}")
-                }
-            }
-            Type::Function(_, i, o) => {
-                let mut res = "".to_string();
-                if i.len() == 1 {
-                    res.push_str(&format!("{:?}->", i[0]));
-                } else {
-                    res.push('(');
-                    for t in i {
-                        res.push_str(&format!("{t:?}"));
-                        res.push(',');
-                        res.push(' ');
-                    }
-
-                    if !i.is_empty() {
-                        res.pop();
-                        res.pop();
-                    }
-                    res.push_str(")->");
-                }
-
-                res.push_str(&format!("{o:?}"));
-
-                write!(f, "{res}")
-            }
-            Type::TypeVar(var) => write!(f, "{var}"),
-            Type::ForAll(i) => write!(f, "'{}", usize_name(*i)),
-        }
+        write!(f, "{}", priv_print(self))
     }
 }
 
@@ -403,5 +408,24 @@ mod tests {
             ),
             "(bool, f64, i64)"
         );
+
+        assert_eq!(
+            format!(
+                "{:?}",
+                Type::Function(
+                    vec![],
+                    vec![
+                        Type::Tuple(vec![Type::ForAll(0), Type::ForAll(0), Type::ForAll(0)]),
+                        Type::Function(vec![], vec![Type::ForAll(0)], Box::new(Type::ForAll(1)))
+                    ],
+                    Box::new(Type::Tuple(vec![
+                        Type::ForAll(1),
+                        Type::ForAll(1),
+                        Type::ForAll(1)
+                    ]))
+                )
+            ),
+            "forall a, b . (('a, 'a, 'a), 'a->'b)->('b, 'b, 'b)"
+        )
     }
 }

@@ -274,11 +274,18 @@ impl Statement {
 #[derive(Serialize, Debug)]
 pub struct Function {
     pub name: String,
-    pub type_args: Vec<String>,
+    pub type_args: Vec<(String, (usize, usize))>,
     pub type_arg_range: Option<(usize, usize)>,
-    pub args: Vec<(String, Expression)>,
+    pub sig_range: (usize, usize),
+    pub args: Vec<(String, (usize, usize), Expression)>,
     pub return_type: Option<Expression>,
     pub inner: Vec<Statement>,
+}
+
+impl Function {
+    pub fn get_type_arg_names(&self) -> Vec<String> {
+        self.type_args.iter().map(|n| n.0.clone()).collect()
+    }
 }
 
 pub type AST = HashMap<String, Function>;
@@ -397,7 +404,7 @@ pub fn parse(code: &str) -> ParserOutput {
                     }
                 }
 
-                for (_, ann) in &function.args {
+                for (_, _, ann) in &function.args {
                     let (ann_start, ann_end) = ann.range();
                     let tokens: Vec<usize> = (ann_start..ann_end).collect();
                     type_tokens.extend(&tokens);

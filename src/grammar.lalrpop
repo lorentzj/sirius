@@ -10,7 +10,7 @@ pub AST: HashMap<String, Function> = {
 }
 
 pub Fn: Function = {
-    "newline" * "fn" <name: "identifier"> <type_args: FnTypeParams?> <args: FnSigParams> <return_type: ("->" Expr)?> ":" "newline" <inner: Block> => {
+    "newline" * <sig_start: @L> "fn" <name: "identifier"> <type_args: FnTypeParams?> <args: FnSigParams> <return_type: ("->" Expr)?> ":" <sig_end: @R> "newline" <inner: Block> => {
         let return_type = return_type.map(|r| *r.1);
         let (type_args, type_arg_range) = match type_args {
             Some((a, b)) => (a, Some(b)),
@@ -21,6 +21,7 @@ pub Fn: Function = {
             name,
             type_args,
             type_arg_range,
+            sig_range: (sig_start, sig_end),
             args,
             return_type,
             inner
@@ -28,7 +29,7 @@ pub Fn: Function = {
     }
 }
 
-FnSigParams: Vec<(String, Expression)> = {
+FnSigParams: Vec<(String, (usize, usize), Expression)> = {
     <start: @L> "(" <arg_list: FnSigParamsInner> ")" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);
@@ -37,16 +38,16 @@ FnSigParams: Vec<(String, Expression)> = {
     }
 }
 
-FnSigParamsInner: Vec<(String, Expression)> = {
+FnSigParamsInner: Vec<(String, (usize, usize), Expression)> = {
     () => vec![],
-    <name: "identifier"> ":" <ann: Expr> => vec![(name, *ann)],
-    <mut head: FnSigParamsInner> "," <name: "identifier"> ":" <ann: Expr> => {
-        head.push((name, *ann));
+    <start: @L> <name: "identifier"> <end: @R> ":" <ann: Expr> => vec![(name, (start, end), *ann)],
+    <mut head: FnSigParamsInner> "," <start: @L> <name: "identifier"> <end: @R> ":" <ann: Expr> => {
+        head.push((name, (start, end), *ann));
         head
     }
 }
 
-FnTypeParams: (Vec<String>, (usize, usize)) = {
+FnTypeParams: (Vec<(String, (usize, usize))>, (usize, usize)) = {
     <start: @L> "{" <params: FnTypeParamsInner> "}" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);
@@ -55,11 +56,11 @@ FnTypeParams: (Vec<String>, (usize, usize)) = {
     }
 }
 
-FnTypeParamsInner: Vec<String> = {
+FnTypeParamsInner: Vec<(String, (usize, usize))> = {
     () => vec![],
-    <name: "identifier"> => vec![name],
-    <mut head: FnTypeParamsInner> "," <name: "identifier"> => {
-        head.push(name);
+    <start: @L> <name: "identifier"> <end: @R> => vec![(name, (start, end))],
+    <mut head: FnTypeParamsInner> "," <start: @L> <name: "identifier"> <end: @R> => {
+        head.push((name, (start, end)));
         head
     }
 }

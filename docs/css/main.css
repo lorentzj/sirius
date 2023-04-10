@@ -202,19 +202,19 @@ span.token.keyword {
 }
 
 span.token.assign {
-    color: rgb(189, 173, 83);
+    color: rgb(255, 255, 255);
 }
 
 span.token.semicolon {
-    color: rgb(189, 173, 83);
+    color: rgb(255, 255, 255);
 }
 
 span.token.colon {
-    color: rgb(189, 173, 83);
+    color: rgb(255, 255, 255);
 }
 
 span.token.operator {
-    color: rgb(189, 173, 83);
+    color: rgb(255, 255, 255);
 }
 
 span.token.openparen, span.token.closeparen {
@@ -222,7 +222,7 @@ span.token.openparen, span.token.closeparen {
 }
 
 span.token.type {
-    font-weight: bolder;
+    font-weight: bold;
 }
 
 span.code.error {

@@ -1569,10 +1569,47 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
     }
 
     for (name, function) in ast.iter() {
+        let mut type_arg_names = vec![];
+        for (type_arg_name, (type_arg_start, type_arg_end)) in function.type_args.iter() {
+            if type_arg_names.contains(type_arg_name) {
+                errors.push(Error::new(
+                    ErrorType::NameError,
+                    format!("duplicate type argument name \"{type_arg_name}\""),
+                    *type_arg_start,
+                    *type_arg_end,
+                ));
+            }
+
+            type_arg_names.push(type_arg_name.clone());
+        }
+
+        let mut arg_names = vec![];
+        for (arg_name, (arg_start, arg_end), _) in function.args.iter() {
+            if arg_names.contains(arg_name) {
+                errors.push(Error::new(
+                    ErrorType::NameError,
+                    format!("duplicate argument name \"{arg_name}\""),
+                    *arg_start,
+                    *arg_end,
+                ));
+            }
+
+            if type_arg_names.contains(arg_name) {
+                errors.push(Error::new(
+                    ErrorType::NameError,
+                    format!("duplicate argument/type argument name \"{arg_name}\""),
+                    *arg_start,
+                    *arg_end,
+                ));
+            }
+
+            arg_names.push(arg_name.clone());
+        }
+
         let mut arg_types = vec![];
 
-        for (_, arg_ann) in &function.args {
-            match annotation_type(arg_ann, &function.type_args, &mut None) {
+        for (_, _, arg_ann) in &function.args {
+            match annotation_type(arg_ann, &function.get_type_arg_names(), &mut None) {
                 Ok(t) => arg_types.push(t),
                 Err(error) => {
                     errors.push(error);
@@ -1582,21 +1619,41 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
         }
 
         let return_type = match &function.return_type {
-            Some(return_type) => match annotation_type(return_type, &function.type_args, &mut None)
-            {
-                Ok(t) => Box::new(t),
-                Err(error) => {
-                    errors.push(error);
-                    Box::new(Type::Unknown)
+            Some(return_type) => {
+                match annotation_type(return_type, &function.get_type_arg_names(), &mut None) {
+                    Ok(t) => Box::new(t),
+                    Err(error) => {
+                        errors.push(error);
+                        Box::new(Type::Unknown)
+                    }
                 }
-            },
+            }
             None => Box::new(Type::Void),
         };
 
         frame.insert(
             name.clone(),
-            Type::Function(function.type_args.clone(), arg_types, return_type),
+            Type::Function(function.get_type_arg_names(), arg_types, return_type),
         );
+    }
+
+    if let Some(f) = ast.get("main") {
+        let return_type = match frame.get("main") {
+            Some(Type::Function(_, _, o)) => o.as_ref().clone(),
+            _ => panic!(),
+        };
+
+        if !f.args.is_empty() || !f.type_args.is_empty() || return_type != Type::Void {
+            errors.push(Error::new(
+                ErrorType::TypeError,
+                format!(
+                    "function \"main\" must have type \"{:?}\"",
+                    Type::Function(vec![], vec![], Box::new(Type::Void))
+                ),
+                f.sig_range.0,
+                f.sig_range.1,
+            ));
+        }
     }
 
     let typed_ast: TypedAST = ast
@@ -1627,7 +1684,7 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
 
             let mut typed_function = TypedFunction {
                 name: name.clone(),
-                type_args: function.type_args.clone(),
+                type_args: function.get_type_arg_names(),
                 args,
                 return_type,
                 inner: function
@@ -1639,7 +1696,7 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
                             &mut curr_forall_var,
                             &mut frame,
                             &mut errors,
-                            &function.type_args,
+                            &function.get_type_arg_names(),
                         )
                     })
                     .collect(),
