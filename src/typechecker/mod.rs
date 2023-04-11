@@ -1717,7 +1717,7 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
             );
             frame.pop_scope();
 
-            while !subs.is_empty() {
+            while !subs.is_empty() && errors.is_empty() {
                 frame.push_scope();
                 substitute(&mut typed_function.inner, &mut frame, &subs);
                 frame.pop_scope();
@@ -1828,7 +1828,7 @@ fn main():
     }
 
     #[test]
-    fn x() {
+    fn ind_val() {
         let code = "
 fn main():
     let x = 1 + 1 + 1
@@ -1844,5 +1844,21 @@ fn main():
                 false
             }
         );
+    }
+
+    #[test]
+    fn inference_error() {
+        let code = "
+fn dbl{A}(a: A) -> (A, A):
+    return (a, a)
+
+fn main():
+    let x = dbl{(_, bool)}((5, true))[0][1] || 1
+    print x
+";
+
+        let ast = parse(code).ast;
+        let (_, errors) = typecheck(&ast, &HashMap::default());
+        assert_eq!(errors[0].error_type, ErrorType::TypeError);
     }
 }
