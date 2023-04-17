@@ -135,6 +135,12 @@ pub enum TypedStatement {
         val: TypedExpression,
         end: usize,
     },
+    Assign {
+        start: usize,
+        place: String,
+        val: TypedExpression,
+        end: usize,
+    },
     Print {
         start: usize,
         val: TypedExpression,
@@ -217,7 +223,7 @@ pub fn annotation_type(
             } else {
                 Err(Error::new(
                     ErrorType::TypeError,
-                    format!("could not find \"{name}\" in type context"),
+                    format!("type \"{name}\" not found in context"),
                     *start,
                     *end,
                 ))
@@ -533,6 +539,39 @@ fn initialize_typed_statement(
                 start: *start,
                 ann,
                 name: name.clone(),
+                val,
+                end: *end,
+            }
+        }
+        Statement::Assign {
+            start,
+            place,
+            place_position: (place_position_start, place_position_end),
+            val,
+            end,
+            ..
+        } => {
+            let val = initialize_typed_expression(val, curr_forall_var, context, type_vars, errors);
+
+            if context.get(place).is_none() {
+                errors.push(Error::new(
+                    ErrorType::UnboundIdentifierError,
+                    format!("identifier \"{place}\" not found in scope"),
+                    *place_position_start,
+                    *place_position_end,
+                ));
+            } else if context.is_global(place) {
+                errors.push(Error::new(
+                    ErrorType::MutationError,
+                    format!("\"{place}\" is global and cannot be mutated"),
+                    *place_position_start,
+                    *place_position_end,
+                ));
+            }
+
+            TypedStatement::Assign {
+                start: *start,
+                place: place.clone(),
                 val,
                 end: *end,
             }
@@ -1078,6 +1117,39 @@ pub fn unify(
                     Err(error) => errors.push(error),
                 }
             }
+            TypedStatement::Assign {
+                start,
+                place,
+                val,
+                end,
+            } => match context.get(place) {
+                Some(var_t) => {
+                    match var_t.unify(&val.get_type()) {
+                        Some(s) => match subs.extend(val.start(), s, val.end()) {
+                            Ok(()) => (),
+                            Err(error) => errors.push(error),
+                        },
+                        None => errors.push(Error::new(
+                            ErrorType::TypeError,
+                            format!(
+                                "cannot unify types \"{var_t:?}\" and \"{:?}\"",
+                                val.get_type()
+                            ),
+                            *start,
+                            *end,
+                        )),
+                    }
+
+                    match unify_expression(val, context, curr_forall_var) {
+                        Ok(s) => match subs.extend(val.start(), s, val.end()) {
+                            Ok(()) => (),
+                            Err(error) => errors.push(error),
+                        },
+                        Err(error) => errors.push(error),
+                    }
+                }
+                None => panic!(),
+            },
             TypedStatement::Let { ann, name, val, .. } => {
                 match unify_expression(val, context, curr_forall_var) {
                     Ok(s) => match subs.extend(val.start(), s, val.end()) {
@@ -1341,6 +1413,7 @@ pub fn substitute(block: &mut [TypedStatement], context: &mut Frame<Type>, subs:
     for statement in block.iter_mut() {
         match statement {
             TypedStatement::Print { val, .. } => substitute_expression(val, subs),
+            TypedStatement::Assign { val, .. } => substitute_expression(val, subs),
             TypedStatement::Let { name, ann, val, .. } => {
                 substitute_expression(val, subs);
                 if let Some(ann) = ann {
@@ -1525,6 +1598,7 @@ fn check_stmt_for_foralls(statement: &TypedStatement) -> Vec<Error> {
 
     match statement {
         TypedStatement::Print { val, .. } => errors.extend(check_expr_for_foralls(val)),
+        TypedStatement::Assign { val, .. } => errors.extend(check_expr_for_foralls(val)),
         TypedStatement::Return { val: Some(val), .. } => errors.extend(check_expr_for_foralls(val)),
         TypedStatement::Return { val: None, .. } => (),
         TypedStatement::Let { val, .. } => errors.extend(check_expr_for_foralls(val)),
@@ -1703,6 +1777,10 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
             };
 
             frame.pop_scope();
+
+            if !errors.is_empty() {
+                return (name.clone(), typed_function);
+            }
 
             frame.push_scope();
             let mut subs = Substitutions::new();

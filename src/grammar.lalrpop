@@ -89,6 +89,16 @@ pub Stmt: Statement = {
         }
     },
 
+    "newline" * <start: @L> <place: Place> "=" <val: Expr> "newline" <end: @R> => {
+        Statement::Assign {
+            start,
+            place: place.0,
+            place_position: place.1, 
+            val,
+            end
+        }
+    },
+
     "newline" * <start: @L> "print" <val: Expr> "newline" <end: @R> => {
         Statement::Print{<>}
     },
@@ -127,6 +137,10 @@ pub Block: Vec<Statement> = {
     <start: @L> "newline" * "indent" <inner: Stmt*> "newline" * "dedent" <end: @R> => {
         inner
     }
+}
+
+Place: (String, (usize, usize)) = {
+    <start: @L> <n: "identifier"> <end: @R> => (n, (start, end))
 }
 
 pub Expr: Box<Expression> = {

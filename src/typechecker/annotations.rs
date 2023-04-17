@@ -51,6 +51,9 @@ fn annotations_from_block(block: Vec<TypedStatement>) -> HashMap<usize, String> 
     for statement in block {
         match statement {
             TypedStatement::Let { val, .. } => annotations.extend(annotations_from_expression(val)),
+            TypedStatement::Assign { val, .. } => {
+                annotations.extend(annotations_from_expression(val))
+            }
             TypedStatement::Print { val, .. } => {
                 annotations.extend(annotations_from_expression(val))
             }

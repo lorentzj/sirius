@@ -284,6 +284,10 @@ fn interpret_block(
                 frame.insert(name.clone(), val);
                 defined_idents.insert(name.clone());
             }
+            TypedStatement::Assign { place, val, .. } => {
+                let val = interpret_expression(val, frame, globals, externals, output);
+                frame.assign(place, val);
+            }
             TypedStatement::Print { val, .. } => {
                 let val = interpret_expression(val, frame, globals, externals, output);
                 output.stdout.push_str(&print_value(val));

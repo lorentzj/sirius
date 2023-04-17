@@ -165,6 +165,13 @@ pub enum Statement {
         val: Box<Expression>,
         end: usize,
     },
+    Assign {
+        start: usize,
+        place: String,
+        place_position: (usize, usize),
+        val: Box<Expression>,
+        end: usize,
+    },
     Print {
         start: usize,
         val: Box<Expression>,
@@ -198,6 +205,7 @@ impl Statement {
             Statement::If { start, end, .. } => (*start, *end),
             Statement::For { start, end, .. } => (*start, *end),
             Statement::Let { start, end, .. } => (*start, *end),
+            Statement::Assign { start, end, .. } => (*start, *end),
             Statement::Print { start, end, .. } => (*start, *end),
             Statement::Return { start, end, .. } => (*start, *end),
         }
@@ -210,6 +218,7 @@ impl Statement {
                 Some(ann) => format!("let {name}: {} = {}", ann.short_fmt(), val.short_fmt()),
                 None => format!("let {name} = {}", val.short_fmt()),
             },
+            Statement::Assign { place, val, .. } => format!("{place} = {}", val.short_fmt()),
             Statement::Print { val, .. } => {
                 format!("print {}", val.short_fmt())
             }
@@ -339,6 +348,9 @@ fn add_type_tokens_from_expression(expr: &Expression, type_tokens: &mut Vec<usiz
 fn add_type_tokens_from_statement(statement: &Statement, type_tokens: &mut Vec<usize>) {
     match statement {
         Statement::Print { val, .. } => {
+            add_type_tokens_from_expression(val, type_tokens);
+        }
+        Statement::Assign { val, .. } => {
             add_type_tokens_from_expression(val, type_tokens);
         }
         Statement::Return { val, .. } => {

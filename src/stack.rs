@@ -32,11 +32,29 @@ impl<T> Frame<T> {
         self.0.last_mut().unwrap().insert(key, value);
     }
 
+    pub fn assign(&mut self, key: &str, value: T) {
+        for scope in self.0.iter_mut().rev() {
+            if let Some(t) = scope.get_mut(key) {
+                *t = value;
+                break;
+            }
+        }
+    }
+
     pub fn push_scope(&mut self) {
         self.0.push(HashMap::default());
     }
 
     pub fn pop_scope(&mut self) {
         self.0.pop();
+    }
+
+    pub fn is_global(&self, key: &str) -> bool {
+        for (i, scope) in self.0.iter().enumerate().rev() {
+            if scope.contains_key(key) {
+                return i == 0;
+            }
+        }
+        false
     }
 }

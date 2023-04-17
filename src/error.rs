@@ -6,6 +6,7 @@ pub enum ErrorType {
     TypeError,
     NameError,
     UnboundIdentifierError,
+    MutationError,
     FlowError,
     RuntimeError,
     NotImplementedError,
