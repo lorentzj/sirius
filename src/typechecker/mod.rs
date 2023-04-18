@@ -1793,6 +1793,7 @@ pub fn typecheck(ast: &AST, externals: &ExternalGlobals) -> (TypedAST, Vec<Error
                 &mut errors,
                 &mut subs,
             );
+            println!("\n!!! {:?}\n {:?}\n {:?}", subs, typed_function.inner, frame.0);
             frame.pop_scope();
 
             while !subs.is_empty() && errors.is_empty() {
@@ -1934,6 +1935,21 @@ fn main():
     let x = dbl{(_, bool)}((5, true))[0][1] || 1
     print x
 ";
+
+        let ast = parse(code).ast;
+        let (_, errors) = typecheck(&ast, &HashMap::default());
+        assert_eq!(errors[0].error_type, ErrorType::TypeError);
+    }
+
+    #[test]
+    fn non_concrete() {
+        let code = "
+fn double{T}(x: T) -> (T, T):
+    return (x, x)
+
+fn main():
+    let f = double
+    ";
 
         let ast = parse(code).ast;
         let (_, errors) = typecheck(&ast, &HashMap::default());

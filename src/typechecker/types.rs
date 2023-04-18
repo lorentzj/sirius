@@ -150,8 +150,10 @@ impl Type {
                 Type::ForAll(other_i) => {
                     if self_i > other_i {
                         Some(Substitutions(vec![(*self_i, other.clone())]))
-                    } else {
+                    } else if self_i < other_i {
                         Some(Substitutions(vec![(*other_i, self.clone())]))
+                    } else {
+                        Some(Substitutions(vec![]))
                     }
                 }
                 _ => Some(Substitutions(vec![(*self_i, other.clone())])),
