@@ -15,7 +15,7 @@ pub fn equality_check(lhs: &Type, rhs: &Type) -> Result<(), String> {
                 Type::Tuple(rhsv) => {
                     if lhsv.len() != rhsv.len() {
                         Err(format!(
-                            "cannot check equality between '{lhs:?}' and '{rhs:?}'"
+                            "cannot check equality between \"{lhs:?}\" and \"{rhs:?}\""
                         ))
                     } else {
                         for (lv, rv) in lhsv.iter().zip(rhsv.iter()) {
@@ -25,7 +25,7 @@ pub fn equality_check(lhs: &Type, rhs: &Type) -> Result<(), String> {
                     }
                 }
                 _ => Err(format!(
-                    "cannot check equality between '{lhs:?}' and '{rhs:?}'"
+                    "cannot check equality between \"{lhs:?}\" and \"{rhs:?}\""
                 )),
             },
             Type::F64 => {
@@ -33,7 +33,7 @@ pub fn equality_check(lhs: &Type, rhs: &Type) -> Result<(), String> {
                     Ok(())
                 } else {
                     Err(format!(
-                        "cannot check equality between '{lhs:?}' and '{rhs:?}'"
+                        "cannot check equality between \"{lhs:?}\" and \"{rhs:?}\""
                     ))
                 }
             }
@@ -42,12 +42,12 @@ pub fn equality_check(lhs: &Type, rhs: &Type) -> Result<(), String> {
                     Ok(())
                 } else {
                     Err(format!(
-                        "cannot check equality between '{lhs:?}' and '{rhs:?}'"
+                        "cannot check equality between \"{lhs:?}\" and \"{rhs:?}\""
                     ))
                 }
             }
             _ => Err(format!(
-                "cannot check equality between '{lhs:?}' and '{rhs:?}'"
+                "cannot check equality between \"{lhs:?}\" and \"{rhs:?}\""
             )),
         }
     }

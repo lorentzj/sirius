@@ -3,10 +3,51 @@ use std::collections::HashMap;
 use lalrpop_util::ParseError;
 use serde::Serialize;
 
+use crate::typechecker::{annotation_type, Ind, Type};
+
 use crate::error::{Error, ErrorType};
 use crate::lexer::{tokenize, Op, Tok, Token};
 
 lalrpop_mod!(#[allow(clippy::all)] pub grammar);
+
+#[derive(Serialize, Clone, Debug)]
+pub struct Positioned<T> {
+    pub inner: T,
+    pub start: usize,
+    pub end: usize,
+}
+
+impl<T> Positioned<T> {
+    pub fn new(start: usize, inner: T, end: usize) -> Self {
+        Positioned { start, inner, end }
+    }
+
+    pub fn map<A>(&self, f: fn(&T) -> A) -> Positioned<A> {
+        Positioned {
+            start: self.start,
+            inner: f(&self.inner),
+            end: self.end,
+        }
+    }
+}
+
+impl std::hash::Hash for Positioned<String> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.inner.hash(state);
+    }
+}
+
+fn expr_to_pos_type(e: &Expression) -> Result<Positioned<Type>, Error> {
+    match annotation_type(e) {
+        Ok(t) => Ok(Positioned::new(e.start, t, e.end)),
+        Err((start, end)) => Err(Error::new(
+            ErrorType::ParseError,
+            "illegal expression in annotation".to_string(),
+            start,
+            end,
+        )),
+    }
+}
 
 #[derive(Serialize, Clone, Debug)]
 pub enum UnaryOp {
@@ -16,266 +57,126 @@ pub enum UnaryOp {
 }
 
 #[derive(Serialize, Clone, Debug)]
-pub enum Expression {
-    F64 {
-        start: usize,
-        val: f64,
-        end: usize,
-    },
-    I64 {
-        start: usize,
-        val: i64,
-        end: usize,
-    },
-    Bool {
-        start: usize,
-        val: bool,
-        end: usize,
-    },
-    Identifier {
-        start: usize,
-        name: String,
-        type_args: Option<(Vec<Expression>, (usize, usize))>,
-        end: usize,
-    },
-    BinaryOp {
-        start: usize,
-        lhs: Box<Expression>,
-        op: Op,
-        rhs: Box<Expression>,
-        end: usize,
-    },
-    UnaryOp {
-        start: usize,
-        op: UnaryOp,
-        inner: Box<Expression>,
-        end: usize,
-    },
-    OpenTuple {
-        start: usize,
-        inner: Vec<Expression>,
-        end: usize,
-    },
-    Tuple {
-        start: usize,
-        inner: Vec<Expression>,
-        end: usize,
-    },
-    Accessor {
-        start: usize,
-        lhs: Box<Expression>,
-        rhs: Box<Expression>,
-        end: usize,
-    },
-    FnCall {
-        start: usize,
-        caller: Box<Expression>,
-        args: Vec<Expression>,
-        end: usize,
-    },
+pub enum E {
+    F64(f64),
+    I64(i64, Option<Ind>),
+    Bool(bool),
+    Ident(String, Option<Vec<Positioned<Type>>>),
+    BinaryOp(Box<Expression>, Op, Box<Expression>),
+    UnaryOp(UnaryOp, Box<Expression>),
+    OpenTuple(Vec<Expression>),
+    Tuple(Vec<Expression>),
+    Accessor(Box<Expression>, Box<Expression>),
+    FnCall(Box<Expression>, Vec<Expression>),
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct Expression {
+    pub start: usize,
+    pub data: E,
+    pub t: Type,
+    pub end: usize,
 }
 
 impl Expression {
-    pub fn range(&self) -> (usize, usize) {
-        match self {
-            Expression::F64 { start, end, .. } => (*start, *end),
-            Expression::I64 { start, end, .. } => (*start, *end),
-            Expression::Bool { start, end, .. } => (*start, *end),
-            Expression::Identifier { start, end, .. } => (*start, *end),
-            Expression::BinaryOp { start, end, .. } => (*start, *end),
-            Expression::UnaryOp { start, end, .. } => (*start, *end),
-            Expression::OpenTuple { start, end, .. } => (*start, *end),
-            Expression::Tuple { start, end, .. } => (*start, *end),
-            Expression::Accessor { start, end, .. } => (*start, *end),
-            Expression::FnCall { start, end, .. } => (*start, *end),
-        }
-    }
-
-    #[cfg(test)]
-    fn short_fmt(&self) -> String {
-        match self {
-            Expression::F64 { val, .. } => format!("{}", val),
-            Expression::I64 { val, .. } => format!("{}", val),
-            Expression::Bool { val, .. } => {
-                if *val {
-                    "true".into()
-                } else {
-                    "false".into()
-                }
-            }
-            Expression::Identifier { name, .. } => format!("{}", name),
-            Expression::BinaryOp { lhs, op, rhs, .. } => {
-                format!("({}{:?}{})", lhs.short_fmt(), op, rhs.short_fmt())
-            }
-            Expression::UnaryOp {
-                inner,
-                op: UnaryOp::ArithNeg,
-                ..
-            } => format!("(-{})", inner.short_fmt()),
-            Expression::UnaryOp {
-                inner,
-                op: UnaryOp::BoolNeg,
-                ..
-            } => format!("(!{})", inner.short_fmt()),
-            Expression::UnaryOp {
-                inner,
-                op: UnaryOp::Tick,
-                ..
-            } => format!("({}')", inner.short_fmt()),
-            Expression::Tuple { inner, .. } => {
-                let mut result = String::new();
-                result.push_str("(");
-                for (i, expr) in inner.iter().enumerate() {
-                    result.push_str(&expr.short_fmt());
-                    if i < inner.len() - 1 {
-                        result.push_str(",");
-                    }
-                }
-                result.push_str(")");
-                result
-            }
-            Expression::FnCall { caller, args, .. } => {
-                let mut result = format!("({})", caller.short_fmt());
-                result.push_str("(");
-                for (i, expr) in args.iter().enumerate() {
-                    result.push_str(&expr.short_fmt());
-                    if i < args.len() - 1 {
-                        result.push_str(",");
-                    }
-                }
-                result.push_str(")");
-                result
-            }
-
-            Expression::Accessor { lhs, rhs, .. } => {
-                format!("({}[{}])", lhs.short_fmt(), rhs.short_fmt())
-            }
-
-            Expression::OpenTuple { .. } => panic!(),
-        }
+    pub fn fresh(start: usize, data: E, end: usize) -> Box<Self> {
+        Box::new(Expression {
+            start,
+            data,
+            t: Type::ForAll(0),
+            end,
+        })
     }
 }
 
 #[derive(Serialize, Clone, Debug)]
-pub enum Statement {
-    Let {
-        start: usize,
-        name: String,
-        ann: Option<Box<Expression>>,
-        val: Box<Expression>,
-        end: usize,
-    },
-    Assign {
-        start: usize,
-        place: String,
-        place_position: (usize, usize),
-        val: Box<Expression>,
-        end: usize,
-    },
-    Print {
-        start: usize,
-        val: Box<Expression>,
-        end: usize,
-    },
-    Return {
-        start: usize,
-        val: Option<Box<Expression>>,
-        end: usize,
-    },
-    If {
-        start: usize,
-        cond: Box<Expression>,
-        true_inner: Vec<Statement>,
-        false_inner: Option<Vec<Statement>>,
-        end: usize,
-    },
-    For {
-        start: usize,
-        iterator: String,
-        from: Box<Expression>,
-        to: Box<Expression>,
-        inner: Vec<Statement>,
-        end: usize,
-    },
+pub enum S {
+    Let(Positioned<String>, Option<Positioned<Type>>, Expression),
+    Assign(Positioned<String>, Expression),
+    Print(Expression),
+    Return(Option<Expression>),
+    If(Expression, Vec<Statement>, Option<Vec<Statement>>),
+    For(Positioned<String>, Expression, Expression, Vec<Statement>),
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct Statement {
+    pub start: usize,
+    pub data: S,
+    pub end: usize,
 }
 
 impl Statement {
-    fn _range(&self) -> (usize, usize) {
-        match self {
-            Statement::If { start, end, .. } => (*start, *end),
-            Statement::For { start, end, .. } => (*start, *end),
-            Statement::Let { start, end, .. } => (*start, *end),
-            Statement::Assign { start, end, .. } => (*start, *end),
-            Statement::Print { start, end, .. } => (*start, *end),
-            Statement::Return { start, end, .. } => (*start, *end),
+    pub fn new_let(
+        name: Positioned<String>,
+        annotation: Option<Positioned<Type>>,
+        val: Expression,
+    ) -> Self {
+        let start = name.start - 1;
+        let end = val.end;
+        Statement {
+            start,
+            data: S::Let(name, annotation, val),
+            end,
         }
     }
 
-    #[cfg(test)]
-    fn short_fmt(&self) -> String {
-        match self {
-            Statement::Let { name, ann, val, .. } => match ann {
-                Some(ann) => format!("let {name}: {} = {}", ann.short_fmt(), val.short_fmt()),
-                None => format!("let {name} = {}", val.short_fmt()),
-            },
-            Statement::Assign { place, val, .. } => format!("{place} = {}", val.short_fmt()),
-            Statement::Print { val, .. } => {
-                format!("print {}", val.short_fmt())
-            }
-            Statement::If {
-                cond,
-                true_inner,
-                false_inner,
-                ..
-            } => {
-                let mut res = String::new();
-                res.push_str(&format!("if {} {{\n", cond.short_fmt()));
+    pub fn new_assign(name: Positioned<String>, val: Expression) -> Self {
+        let start = name.start;
+        let end = val.end;
+        Statement {
+            start,
+            data: S::Assign(name, val),
+            end,
+        }
+    }
 
-                for stmt in true_inner {
-                    res.push_str(&stmt.short_fmt());
-                    res.push('\n');
-                }
+    pub fn new_print(val: Expression) -> Self {
+        let start = val.start - 1;
+        let end = val.end;
+        Statement {
+            start,
+            data: S::Print(val),
+            end,
+        }
+    }
 
-                res.push('}');
-                if let Some(false_inner) = false_inner {
-                    res.push_str(" else {{\n".into());
-                    for stmt in false_inner {
-                        res.push_str(&stmt.short_fmt());
-                        res.push('\n');
-                    }
-                    res.push('}');
-                }
-                res
-            }
-            Statement::For {
-                iterator,
-                from,
-                to,
-                inner,
-                ..
-            } => {
-                let mut res = String::new();
-                res.push_str(&format!(
-                    "for {} from {} to {} {{\n",
-                    iterator,
-                    from.short_fmt(),
-                    to.short_fmt()
-                ));
+    pub fn new_return(start: usize, val: Option<Expression>) -> Self {
+        let end = val.as_ref().map(|val| val.end).unwrap_or(start + 1);
 
-                for stmt in inner {
-                    res.push_str(&stmt.short_fmt());
-                    res.push('\n');
-                }
+        Statement {
+            start,
+            data: S::Return(val),
+            end,
+        }
+    }
 
-                res.push('}');
-                res
-            }
-            Statement::Return { val, .. } => {
-                format!(
-                    "return {}",
-                    val.as_ref().map(|v| v.short_fmt()).unwrap_or("".into())
-                )
-            }
+    pub fn new_if(
+        start: usize,
+        cond: Expression,
+        true_block: Vec<Statement>,
+        false_block: Option<Vec<Statement>>,
+        end: usize,
+    ) -> Self {
+        Statement {
+            start,
+            data: S::If(cond, true_block, false_block),
+            end,
+        }
+    }
+
+    pub fn new_for(
+        start: usize,
+        iterator: Positioned<String>,
+        from: Expression,
+        to: Expression,
+        inner: Vec<Statement>,
+        end: usize,
+    ) -> Self {
+        Statement {
+            start,
+            data: S::For(iterator, from, to, inner),
+            end,
         }
     }
 }
@@ -283,17 +184,23 @@ impl Statement {
 #[derive(Serialize, Debug)]
 pub struct Function {
     pub name: String,
-    pub type_args: Vec<(String, (usize, usize))>,
-    pub type_arg_range: Option<(usize, usize)>,
-    pub sig_range: (usize, usize),
-    pub args: Vec<(String, (usize, usize), Expression)>,
-    pub return_type: Option<Expression>,
-    pub inner: Vec<Statement>,
+    pub type_args: Vec<Positioned<String>>,
+    pub args: Vec<(Positioned<String>, Positioned<Type>)>,
+    pub return_type: Positioned<Type>,
+    pub body: Vec<Statement>,
 }
 
 impl Function {
-    pub fn get_type_arg_names(&self) -> Vec<String> {
-        self.type_args.iter().map(|n| n.0.clone()).collect()
+    pub fn type_arg_names(&self) -> Vec<String> {
+        self.type_args.iter().map(|n| n.inner.clone()).collect()
+    }
+
+    pub fn arg_names(&self) -> Vec<String> {
+        self.args.iter().map(|n| n.0.inner.clone()).collect()
+    }
+
+    pub fn arg_types(&self) -> Vec<Type> {
+        self.args.iter().map(|n| n.1.inner.clone()).collect()
     }
 }
 
@@ -301,100 +208,15 @@ pub type AST = HashMap<String, Function>;
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct ParserOutput {
+pub struct CompilerState {
     pub tokens: Vec<Token>,
     pub errors: Vec<Error>,
     pub type_tokens: Vec<usize>,
     pub highlight_map: HashMap<usize, Vec<usize>>,
-    pub annotations: HashMap<usize, String>,
     pub ast: AST,
 }
 
-fn add_type_tokens_from_expression(expr: &Expression, type_tokens: &mut Vec<usize>) {
-    match expr {
-        Expression::Identifier {
-            type_args: Some((_, (start, end))),
-            ..
-        } => {
-            let tokens: Vec<usize> = (*start..*end).collect();
-            type_tokens.extend(tokens);
-        }
-        Expression::Tuple { inner, .. } => {
-            for expr in inner {
-                add_type_tokens_from_expression(expr, type_tokens);
-            }
-        }
-        Expression::FnCall { caller, args, .. } => {
-            add_type_tokens_from_expression(caller, type_tokens);
-            for expr in args {
-                add_type_tokens_from_expression(expr, type_tokens);
-            }
-        }
-        Expression::BinaryOp { lhs, rhs, .. } => {
-            add_type_tokens_from_expression(lhs, type_tokens);
-            add_type_tokens_from_expression(rhs, type_tokens);
-        }
-        Expression::Accessor { lhs, rhs, .. } => {
-            add_type_tokens_from_expression(lhs, type_tokens);
-            add_type_tokens_from_expression(rhs, type_tokens);
-        }
-        Expression::UnaryOp { inner, .. } => {
-            add_type_tokens_from_expression(inner, type_tokens);
-        }
-        _ => (),
-    }
-}
-
-fn add_type_tokens_from_statement(statement: &Statement, type_tokens: &mut Vec<usize>) {
-    match statement {
-        Statement::Print { val, .. } => {
-            add_type_tokens_from_expression(val, type_tokens);
-        }
-        Statement::Assign { val, .. } => {
-            add_type_tokens_from_expression(val, type_tokens);
-        }
-        Statement::Return { val, .. } => {
-            if let Some(val) = val {
-                add_type_tokens_from_expression(val, type_tokens);
-            }
-        }
-        Statement::Let { ann, val, .. } => {
-            add_type_tokens_from_expression(val, type_tokens);
-            if let Some(ann) = ann {
-                let (ann_start, ann_end) = ann.range();
-                let tokens: Vec<usize> = (ann_start..ann_end).collect();
-                type_tokens.extend(&tokens);
-            }
-        }
-        Statement::If {
-            cond,
-            true_inner,
-            false_inner,
-            ..
-        } => {
-            add_type_tokens_from_expression(cond, type_tokens);
-            for statement in true_inner {
-                add_type_tokens_from_statement(statement, type_tokens);
-            }
-            if let Some(false_inner) = false_inner {
-                for statement in false_inner {
-                    add_type_tokens_from_statement(statement, type_tokens);
-                }
-            }
-        }
-        Statement::For {
-            from, to, inner, ..
-        } => {
-            add_type_tokens_from_expression(from, type_tokens);
-            add_type_tokens_from_expression(to, type_tokens);
-            for statement in inner {
-                add_type_tokens_from_statement(statement, type_tokens);
-            }
-        }
-    }
-}
-
-pub fn parse(code: &str) -> ParserOutput {
+pub fn parse(code: &str) -> CompilerState {
     let tokens: Vec<_> = tokenize(code);
     let mut errors: Vec<Error> = vec![];
     let mut type_tokens: Vec<usize> = vec![];
@@ -402,149 +224,63 @@ pub fn parse(code: &str) -> ParserOutput {
 
     match grammar::ASTParser::new().parse(
         &mut highlight_map,
+        &mut type_tokens,
+        &mut errors,
         tokens
             .iter()
             .enumerate()
             .map(|(i, token)| Ok((i, token.data.clone(), i + 1))),
     ) {
-        Ok(ast) => {
-            for (_, function) in ast.iter() {
-                if let Some((start, end)) = function.type_arg_range {
-                    if end >= start {
-                        let tokens: Vec<usize> = (start..end).collect();
-                        type_tokens.extend(tokens);
-                    }
+        Ok(ast) => CompilerState {
+            tokens,
+            errors,
+            type_tokens,
+            highlight_map,
+            ast,
+        },
+        Err(err) => {
+            let error = match err {
+                ParseError::InvalidToken { location } => Error::new(
+                    ErrorType::ParseError,
+                    "invalid token".into(),
+                    location,
+                    location + 1,
+                ),
+                ParseError::UnrecognizedEOF { location, .. } => Error::new(
+                    ErrorType::ParseError,
+                    "unexpected EOF".into(),
+                    location - 1,
+                    location,
+                ),
+                ParseError::UnrecognizedToken { token, .. } | ParseError::ExtraToken { token } => {
+                    Error::new(
+                        ErrorType::ParseError,
+                        match token.1 {
+                            Tok::Identifier(n) => format!("unexpected identifier \"{n}\""),
+                            Tok::Op(op) => format!("unexpected operator \"{op:?}\""),
+                            Tok::Keyword(k) => format!("unexpected keyword \"{k:?}\""),
+                            Tok::Float(_) => "unexpected constant".into(),
+                            Tok::Int(_) => "unexpected constant".into(),
+                            Tok::Indent => "unexpected indent".into(),
+                            Tok::Dedent => "unexpected dedent".into(),
+                            Tok::Error(m) => m,
+                            _ => format!("unexpected token \"{:?}\"", token.1),
+                        },
+                        token.0,
+                        token.2,
+                    )
                 }
+                ParseError::User { error } => error,
+            };
 
-                for (_, _, ann) in &function.args {
-                    let (ann_start, ann_end) = ann.range();
-                    let tokens: Vec<usize> = (ann_start..ann_end).collect();
-                    type_tokens.extend(&tokens);
-                }
-
-                if let Some(ann) = &function.return_type {
-                    let (ann_start, ann_end) = ann.range();
-                    let tokens: Vec<usize> = (ann_start..ann_end).collect();
-                    type_tokens.extend(&tokens);
-                }
-
-                for statement in &function.inner {
-                    add_type_tokens_from_statement(statement, &mut type_tokens);
-                }
-            }
-
-            return ParserOutput {
+            errors.push(error);
+            CompilerState {
                 tokens,
                 errors,
-                type_tokens,
-                highlight_map,
-                ast,
-                annotations: HashMap::default(),
-            };
+                type_tokens: vec![],
+                highlight_map: HashMap::default(),
+                ast: HashMap::default(),
+            }
         }
-
-        Err(ParseError::ExtraToken { token }) => errors.push(Error::new(
-            ErrorType::ParseError,
-            match token.1 {
-                Tok::Identifier(n) => format!("unexpected identifier \"{n}\""),
-                Tok::Op(op) => format!("unexpected operator \"{op:?}\""),
-                Tok::Keyword(k) => format!("unexpected keyword \"{k:?}\""),
-                Tok::Float(_) => "unexpected constant".into(),
-                Tok::Int(_) => "unexpected constant".into(),
-                Tok::Error(m) => m,
-                _ => format!("unexpected token \"{:?}\"", token.1),
-            },
-            token.0,
-            token.2,
-        )),
-        Err(ParseError::InvalidToken { location }) => errors.push(Error::new(
-            ErrorType::ParseError,
-            "invalid token".into(),
-            location,
-            location + 1,
-        )),
-        Err(ParseError::UnrecognizedEOF { location, .. }) => errors.push(Error::new(
-            ErrorType::ParseError,
-            "unexpected EOF".into(),
-            location - 1,
-            location,
-        )),
-        Err(ParseError::UnrecognizedToken { token, .. }) => errors.push(Error::new(
-            ErrorType::ParseError,
-            match token.1 {
-                Tok::Identifier(n) => format!("unexpected identifier \"{n}\""),
-                Tok::Op(op) => format!("unexpected operator \"{op:?}\""),
-                Tok::Keyword(k) => format!("unexpected keyword \"{k:?}\""),
-                Tok::Float(_) => "unexpected constant".into(),
-                Tok::Error(m) => m,
-                _ => format!("unexpected token \"{:?}\"", token.1),
-            },
-            token.0,
-            token.2,
-        )),
-        Err(ParseError::User { error }) => errors.push(error),
-    }
-
-    ParserOutput {
-        tokens,
-        errors,
-        type_tokens: vec![],
-        highlight_map: HashMap::default(),
-        ast: HashMap::default(),
-        annotations: HashMap::default(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse;
-
-    #[test]
-    fn lead_op() {
-        let test_str = "
-fn main():
-    let x = + 
-";
-        let message = parse(test_str).errors[0].message.clone();
-        assert_eq!(message, "unexpected operator \"+\"");
-    }
-
-    #[test]
-    fn op_precedence() {
-        let test_str = "
-fn main():
-    print (a^2/3 + 4/0.1*b*c^2 - 3 && 4/2)^(d, 0.5^e - 3)
-";
-        let tree = parse(test_str);
-        assert_eq!(
-            tree.ast["main"].inner[0].short_fmt(),
-            "print ((((((a^2)/3)+(((4/0.1)*b)*(c^2)))-3)&&(4/2))^(d,((0.5^e)-3)))"
-        );
-    }
-
-    #[test]
-    fn tuples() {
-        let test_str = "
-fn main():
-    let x = (a + 2, (b, c, (d, e), e), f^2, (g, h)), (i, j), k
-";
-        let tree = parse(test_str);
-        assert_eq!(
-            tree.ast["main"].inner[0].short_fmt(),
-            "let x = (((a+2),(b,c,(d,e),e),(f^2),(g,h)),(i,j),k)"
-        )
-    }
-
-    #[test]
-    fn annotation() {
-        let test_str = "
-fn main():
-    let y: (f64, f64) = x, 2
-";
-        let tree = parse(test_str);
-        assert_eq!(
-            tree.ast["main"].inner[0].short_fmt(),
-            "let y: (f64,f64) = (x,2)"
-        )
     }
 }

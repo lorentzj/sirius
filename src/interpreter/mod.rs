@@ -1,31 +1,20 @@
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
 use crate::parser::UnaryOp;
-use crate::stack::Frame;
+use crate::parser::{Expression, Statement, AST, E, S};
+use crate::scope::Scope;
 use crate::stdlib::ExternalGlobals;
-use crate::typechecker::{TypedAST, TypedExpression, TypedStatement};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use serde::Serialize;
 
 mod number_coersion;
+mod value;
+
 pub type ExternalFunctionPointer = fn(&[Value]) -> Option<Value>;
 
-#[derive(Clone)]
-pub enum Value {
-    F64(f64),
-    I64(i64),
-    Bool(bool),
-    Tuple(Vec<Value>),
-    Array(usize, Vec<Value>),
-    Function {
-        arg_names: Vec<String>,
-        statements: Vec<TypedStatement>,
-    },
-    ExternalFunction(ExternalFunctionPointer),
-}
-
-type Globals = HashMap<String, Value>;
+use value::print_value;
+pub use value::Value;
 
 #[derive(Serialize)]
 pub struct InterpreterOutput {
@@ -105,51 +94,44 @@ fn execute_bin_op(lhs: Value, rhs: Value, op: &Op) -> Value {
 }
 
 pub fn interpret_expression(
-    expression: &TypedExpression,
-    frame: &mut Frame<Value>,
-    globals: &Globals,
-    externals: &ExternalGlobals,
+    expression: &Expression,
+    scope: &mut Scope<Value>,
+    globals: &HashMap<String, Value>,
     output: &mut InterpreterOutput,
 ) -> Value {
-    match expression {
-        TypedExpression::F64 { val, .. } => Value::F64(*val),
-        TypedExpression::I64 { val, .. } => Value::I64(*val),
-        TypedExpression::Bool { val, .. } => Value::Bool(*val),
-        TypedExpression::BinaryOp { lhs, op, rhs, .. } => {
+    match &expression.data {
+        E::F64(val) => Value::F64(*val),
+        E::I64(val, _) => Value::I64(*val),
+        E::Bool(val) => Value::Bool(*val),
+        E::BinaryOp(lhs, op, rhs) => {
             let (lhs, rhs) = (
-                interpret_expression(lhs, frame, globals, externals, output),
-                interpret_expression(rhs, frame, globals, externals, output),
+                interpret_expression(lhs, scope, globals, output),
+                interpret_expression(rhs, scope, globals, output),
             );
             execute_bin_op(lhs, rhs, op)
         }
 
-        TypedExpression::UnaryOp {
-            op: UnaryOp::ArithNeg,
-            inner,
-            ..
-        } => match interpret_expression(inner, frame, globals, externals, output) {
-            Value::F64(val) => Value::F64(-val),
-            Value::I64(val) => Value::I64(-val),
-            _ => panic!(),
-        },
+        E::UnaryOp(UnaryOp::ArithNeg, inner) => {
+            match interpret_expression(inner, scope, globals, output) {
+                Value::F64(val) => Value::F64(-val),
+                Value::I64(val) => Value::I64(-val),
+                _ => panic!(),
+            }
+        }
 
-        TypedExpression::UnaryOp {
-            op: UnaryOp::BoolNeg,
-            inner,
-            ..
-        } => match interpret_expression(inner, frame, globals, externals, output) {
-            Value::Bool(val) => Value::Bool(!val),
-            _ => panic!(),
-        },
+        E::UnaryOp(UnaryOp::BoolNeg, inner) => {
+            match interpret_expression(inner, scope, globals, output) {
+                Value::Bool(val) => Value::Bool(!val),
+                _ => panic!(),
+            }
+        }
 
-        TypedExpression::UnaryOp {
-            op: UnaryOp::Tick, ..
-        } => panic!(),
+        E::UnaryOp(UnaryOp::Tick, _) => panic!(),
 
-        TypedExpression::Accessor { lhs, rhs, .. } => {
+        E::Accessor(lhs, rhs) => {
             let (lhs, rhs) = (
-                interpret_expression(lhs, frame, globals, externals, output),
-                interpret_expression(rhs, frame, globals, externals, output),
+                interpret_expression(lhs, scope, globals, output),
+                interpret_expression(rhs, scope, globals, output),
             );
             match lhs {
                 Value::Tuple(v) => match rhs {
@@ -160,247 +142,161 @@ pub fn interpret_expression(
             }
         }
 
-        TypedExpression::Identifier { name, .. } => match frame.get(name) {
+        E::Ident(name, _) => match scope.get(name) {
             Some(val) => val.clone(),
             None => match globals.get(name) {
                 Some(val) => val.clone(),
-                None => match externals.get(name) {
-                    Some((_, val)) => val.clone(),
-                    None => panic!(),
-                },
+                None => panic!(),
             },
         },
 
-        TypedExpression::Tuple { inner, .. } => {
+        E::Tuple(inner) => {
             let mut members = vec![];
-            for expression in inner {
-                members.push(interpret_expression(
-                    expression, frame, globals, externals, output,
-                ));
+            for e in inner {
+                members.push(interpret_expression(e, scope, globals, output));
             }
             Value::Tuple(members)
         }
-        TypedExpression::FnCall { caller, args, .. } => {
-            match interpret_expression(caller, frame, globals, externals, output) {
-                Value::Function {
-                    arg_names,
-                    statements,
-                } => {
-                    let mut inner_frame = Frame::<Value>::default();
-                    inner_frame.push_scope();
-                    for (arg, arg_name) in args.iter().zip(arg_names.iter()) {
-                        inner_frame.insert(
-                            arg_name.clone(),
-                            interpret_expression(arg, frame, globals, externals, output),
-                        );
-                    }
+        E::FnCall(caller, args) => match interpret_expression(caller, scope, globals, output) {
+            Value::Function(arg_names, body) => {
+                let mut inner_scope = Scope::default();
 
-                    interpret_block(
-                        &statements,
-                        Some(&mut inner_frame),
-                        globals,
-                        externals,
-                        output,
-                    );
+                inner_scope.push();
 
-                    output.value.as_ref().unwrap().clone()
+                for (arg_name, arg) in arg_names.iter().zip(args.iter()) {
+                    let arg_value = interpret_expression(arg, scope, globals, output);
+                    inner_scope.insert(arg_name.clone(), arg_value);
                 }
-                Value::ExternalFunction(function_pointer) => {
-                    let arg_values: Vec<Value> = args
-                        .iter()
-                        .map(|arg| interpret_expression(arg, frame, globals, externals, output))
-                        .collect();
-                    function_pointer(&arg_values).unwrap()
-                }
-                _ => panic!(),
-            }
-        }
-    }
-}
 
-pub fn print_value(value: Value) -> String {
-    match value {
-        Value::F64(val) => val.to_string(),
-        Value::I64(val) => val.to_string(),
-        Value::Bool(val) => val.to_string(),
-        Value::Tuple(v) => {
-            if v.is_empty() {
-                "()".into()
-            } else {
-                let mut out = "(".to_string();
-                for val in v {
-                    out.push_str(&print_value(val));
-                    out.push(',');
-                    out.push(' ');
-                }
-                out.pop();
-                out.pop();
-                out.push(')');
-                out
+                interpret_block(&body, &mut inner_scope, globals, output);
+
+                output.value.as_ref().unwrap().clone()
             }
-        }
-        Value::Array(_, v) => {
-            if v.is_empty() {
-                "[]".into()
-            } else {
-                let mut out = "[".to_string();
-                for val in v {
-                    out.push_str(&print_value(val));
-                    out.push(',');
-                    out.push(' ');
-                }
-                out.pop();
-                out.pop();
-                out.push(']');
-                out
+            Value::ExternalFunction(function_pointer) => {
+                let arg_values: Vec<Value> = args
+                    .iter()
+                    .map(|arg| interpret_expression(arg, scope, globals, output))
+                    .collect();
+                function_pointer(&arg_values).unwrap()
             }
-        }
-        Value::Function { .. } => "<function>".into(),
-        Value::ExternalFunction { .. } => "<external_function>".into(),
+            _ => panic!(),
+        },
+
+        E::OpenTuple(_) => panic!(),
     }
 }
 
 fn interpret_block(
-    block: &[TypedStatement],
-    frame: Option<&mut Frame<Value>>,
-    globals: &Globals,
-    externals: &ExternalGlobals,
+    block: &[Statement],
+    scope: &mut Scope<Value>,
+    globals: &HashMap<String, Value>,
     output: &mut InterpreterOutput,
 ) -> bool {
-    let mut empty_frame = Frame::<Value>::default();
-    let frame = match frame {
-        Some(frame) => frame,
-        None => &mut empty_frame,
-    };
-
-    frame.push_scope();
-
-    let mut defined_idents: HashSet<String> = HashSet::new();
+    scope.push();
 
     for statement in block {
-        match statement {
-            TypedStatement::Let { name, val, .. } => {
-                let val = interpret_expression(val, frame, globals, externals, output);
-                frame.insert(name.clone(), val);
-                defined_idents.insert(name.clone());
+        match &statement.data {
+            S::Let(name, _, val) => {
+                let val = interpret_expression(val, scope, globals, output);
+                scope.insert(name.inner.clone(), val);
             }
-            TypedStatement::Assign { place, val, .. } => {
-                let val = interpret_expression(val, frame, globals, externals, output);
-                frame.assign(place, val);
+            S::Assign(place, val) => {
+                let val = interpret_expression(val, scope, globals, output);
+                scope.assign(&place.inner, val);
             }
-            TypedStatement::Print { val, .. } => {
-                let val = interpret_expression(val, frame, globals, externals, output);
+            S::Print(val) => {
+                let val = interpret_expression(val, scope, globals, output);
                 output.stdout.push_str(&print_value(val));
                 output.stdout.push('\n');
             }
-            TypedStatement::If {
-                cond,
-                true_inner,
-                false_inner,
-                ..
-            } => {
-                if let Value::Bool(true) =
-                    interpret_expression(cond, frame, globals, externals, output)
-                {
-                    let cont = interpret_block(true_inner, Some(frame), globals, externals, output);
-                    if !cont {
+            S::If(cond, true_inner, false_inner) => {
+                if let Value::Bool(true) = interpret_expression(cond, scope, globals, output) {
+                    if !interpret_block(true_inner, scope, globals, output) {
+                        scope.pop();
                         return false;
                     }
                 } else if let Some(false_inner) = false_inner {
-                    let cont =
-                        interpret_block(false_inner, Some(frame), globals, externals, output);
-                    if !cont {
+                    if !interpret_block(false_inner, scope, globals, output) {
+                        scope.pop();
                         return false;
                     }
                 }
-
-                frame.pop_scope();
             }
 
-            TypedStatement::For {
-                iterator,
-                from,
-                to,
-                inner,
-                ..
-            } => {
-                let mut i_val = match interpret_expression(from, frame, globals, externals, output)
-                {
+            S::For(iterator, from, to, inner) => {
+                let mut i_val = match interpret_expression(from, scope, globals, output) {
                     Value::I64(v) => v,
                     _ => panic!(),
                 };
 
-                let target = match interpret_expression(to, frame, globals, externals, output) {
+                let target = match interpret_expression(to, scope, globals, output) {
                     Value::I64(v) => v,
                     _ => panic!(),
                 };
 
-                frame.push_scope();
-                frame.insert(iterator.clone(), Value::I64(i_val));
+                scope.push();
+                scope.insert(iterator.inner.clone(), Value::I64(i_val));
 
                 while i_val < target {
-                    let cont = interpret_block(inner, Some(frame), globals, externals, output);
-                    if !cont {
+                    if !interpret_block(inner, scope, globals, output) {
+                        scope.pop();
+                        scope.pop();
                         return false;
                     }
 
                     i_val += 1;
-                    frame.insert(iterator.clone(), Value::I64(i_val));
+                    scope.pop();
+                    scope.push();
+                    scope.insert(iterator.inner.clone(), Value::I64(i_val));
                 }
+
+                scope.pop();
             }
-            TypedStatement::Return { val, .. } => {
-                match val {
-                    Some(val) => {
-                        output.value =
-                            Some(interpret_expression(val, frame, globals, externals, output))
-                    }
-                    None => (),
+            S::Return(val) => {
+                if let Some(val) = val {
+                    output.value = Some(interpret_expression(val, scope, globals, output))
                 }
+
+                scope.pop();
                 return false;
             }
         }
     }
 
+    scope.pop();
     true
 }
 
-pub fn interpret(ast: TypedAST, externals: &ExternalGlobals) -> InterpreterOutput {
+pub fn interpret(ast: AST, externals: &ExternalGlobals) -> InterpreterOutput {
     let mut output = InterpreterOutput {
         stdout: String::new(),
         value: None,
         error: None,
     };
 
-    let globals: Globals = ast
-        .into_iter()
-        .map(|(name, function)| {
-            (
-                name,
-                Value::Function {
-                    arg_names: function
-                        .args
-                        .iter()
-                        .map(|(arg_name, _)| arg_name.clone())
-                        .collect(),
-                    statements: function.inner,
-                },
-            )
-        })
-        .collect();
+    let mut globals = HashMap::<String, Value>::default();
 
-    match globals.get("main") {
-        Some(Value::Function { statements, .. }) => {
-            interpret_block(statements, None, &globals, externals, &mut output);
-            output
-        }
-        _ => {
-            output.error = Some(Error::new(
-                ErrorType::RuntimeError,
-                "no entry point; define function 'main'".into(),
-                0,
-                0,
-            ));
-            output
-        }
+    for (name, (_, val)) in externals {
+        globals.insert(name.clone(), val.clone());
     }
+
+    for (name, function) in ast.into_iter() {
+        globals.insert(name, Value::Function(function.arg_names(), function.body));
+    }
+
+    let main_code = if let Some(Value::Function(_, body)) = globals.get("main") {
+        body.clone()
+    } else {
+        output.error = Some(Error::new(
+            ErrorType::RuntimeError,
+            "no entry point; define function \"main\"".into(),
+            0,
+            0,
+        ));
+        return output;
+    };
+
+    interpret_block(&main_code, &mut Scope::default(), &globals, &mut output);
+
+    output
 }

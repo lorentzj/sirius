@@ -1,35 +1,57 @@
 use std::collections::HashMap;
 
-use crate::parser::{Function, Statement, Expression, UnaryOp};
 use crate::lexer::Op;
+use crate::parser::{Function, Statement, E, Expression, UnaryOp, Positioned, expr_to_pos_type};
+use crate::typechecker::{Type, Ind};
+use crate::error::Error;
 
-grammar(highlight_map: &mut HashMap<usize, Vec<usize>>);
+grammar(highlight_map: &mut HashMap<usize, Vec<usize>>, type_tokens: &mut Vec<usize>, errors: &mut Vec<Error>);
 
 pub AST: HashMap<String, Function> = {
     <fns: Fn*> "newline" * => fns.into_iter().map(|func| (func.name.clone(), func)).collect()
 }
 
 pub Fn: Function = {
-    "newline" * <sig_start: @L> "fn" <name: "identifier"> <type_args: FnTypeParams?> <args: FnSigParams> <return_type: ("->" Expr)?> ":" <sig_end: @R> "newline" <inner: Block> => {
-        let return_type = return_type.map(|r| *r.1);
-        let (type_args, type_arg_range) = match type_args {
-            Some((a, b)) => (a, Some(b)),
-            None => (vec![], None)
-        };
+    "newline" * "fn" <name: "identifier"> <type_args: FnTypeParams?> <args: FnSigParams> <ret_place: @L> <return_type: ("->" Expr)?> ":" "newline" <inner: Block> => {
+        if let Some(return_type) = &return_type {
+            let curr_type_tokens: Vec<usize> = (return_type.1.start..return_type.1.end).collect();
+            type_tokens.extend(curr_type_tokens);    
+        }
+
+        let return_type = return_type.map(|r| match expr_to_pos_type(&*r.1) {
+            Ok(t) => t,
+            Err(error) => {
+                errors.push(error);
+                Positioned::new(r.1.start, Type::Unknown, r.1.end)
+            }
+        });
+
+        let mut args_typed = vec![];
+
+        for (arg_name, arg_ann) in args {
+            let curr_type_tokens: Vec<usize> = (arg_ann.start..arg_ann.end).collect();
+            type_tokens.extend(curr_type_tokens);
+
+            args_typed.push((arg_name, match expr_to_pos_type(&arg_ann) {
+                Ok(t) => t,
+                Err(error) => {
+                    errors.push(error);
+                    Positioned::new(arg_ann.start, Type::Unknown, arg_ann.end)
+                }
+            }));
+        }
 
         Function {
             name,
-            type_args,
-            type_arg_range,
-            sig_range: (sig_start, sig_end),
-            args,
-            return_type,
-            inner
+            type_args: type_args.unwrap_or(vec![]),
+            args: args_typed,
+            return_type: return_type.unwrap_or(Positioned::new(ret_place, Type::Void, ret_place + 1)),
+            body: inner
         }
     }
 }
 
-FnSigParams: Vec<(String, (usize, usize), Expression)> = {
+FnSigParams: Vec<(Positioned<String>, Expression)> = {
     <start: @L> "(" <arg_list: FnSigParamsInner> ")" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);
@@ -38,293 +60,189 @@ FnSigParams: Vec<(String, (usize, usize), Expression)> = {
     }
 }
 
-FnSigParamsInner: Vec<(String, (usize, usize), Expression)> = {
+FnSigParamsInner: Vec<(Positioned<String>, Expression)> = {
     () => vec![],
-    <start: @L> <name: "identifier"> <end: @R> ":" <ann: Expr> => vec![(name, (start, end), *ann)],
+    <start: @L> <name: "identifier"> <end: @R> ":" <ann: Expr> => vec![(Positioned::new(start, name, end), *ann)],
     <mut head: FnSigParamsInner> "," <start: @L> <name: "identifier"> <end: @R> ":" <ann: Expr> => {
-        head.push((name, (start, end), *ann));
+        head.push((Positioned::new(start, name, end), *ann));
         head
     }
 }
 
-FnTypeParams: (Vec<(String, (usize, usize))>, (usize, usize)) = {
+FnTypeParams: Vec<Positioned<String>> = {
     <start: @L> "{" <params: FnTypeParamsInner> "}" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);
 
-        (params, (start + 1, end - 1))
+        params
     }
 }
 
-FnTypeParamsInner: Vec<(String, (usize, usize))> = {
+FnTypeParamsInner: Vec<Positioned<String>> = {
     () => vec![],
-    <start: @L> <name: "identifier"> <end: @R> => vec![(name, (start, end))],
+    <start: @L> <name: "identifier"> <end: @R> => {
+        let curr_type_tokens: Vec<usize> = (start..end).collect();
+        type_tokens.extend(curr_type_tokens);
+
+        vec![Positioned::new(start, name, end)]
+    },
     <mut head: FnTypeParamsInner> "," <start: @L> <name: "identifier"> <end: @R> => {
-        head.push((name, (start, end)));
+        let curr_type_tokens: Vec<usize> = (start..end).collect();
+        type_tokens.extend(curr_type_tokens);
+
+        head.push(Positioned::new(start, name, end));
         head
     }
 }
 
-pub Stmt: Statement = {
-    "newline" * <start: @L> "let" <name: "identifier"> <ann: (":" Expr)?> "=" <val: Expr> "newline" <end: @R> => {
-        Statement::Let {
-            start,
-            name, 
-            ann: ann.map(|ann| Box::new(*ann.1)),
-            val,
-            end
-        }
-    },
-
-    "newline" * <start: @L> "let" <name: "identifier"> <ann: (":" Expr)?> "=" <val: OpenTuple> "newline" <end: @R> => {
-        Statement::Let {
-            start,
-            name: name, 
-            ann: ann.map(|ann| Box::new(*ann.1)),
-            val: match *val {
-                Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
-                _ => panic!()
-            },
-            end
-        }
-    },
-
-    "newline" * <start: @L> <place: Place> "=" <val: Expr> "newline" <end: @R> => {
-        Statement::Assign {
-            start,
-            place: place.0,
-            place_position: place.1, 
-            val,
-            end
-        }
-    },
-
-    "newline" * <start: @L> "print" <val: Expr> "newline" <end: @R> => {
-        Statement::Print{<>}
-    },
-
-    "newline" * <start: @L> "print" <val: OpenTuple> "newline" <end: @R> => {
-        Statement::Print{ start, val: match *val {
-            Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
-            _ => panic!()
-        }, end }
-    },
-
-    "newline" * <start: @L> "if" <cond: Expr> ":" "newline" <true_inner: Block> <false_inner: ("else" ":" "newline" Block)?> <end: @R> => {
-        Statement::If{ start, cond: match *cond {
-            Expression::OpenTuple{ start, inner, end } => Box::new(Expression::Tuple{ start, inner, end }),
-            _ => cond
-        }, true_inner, false_inner: false_inner.map(|(_, _, _, b)| b), end }
-    },
-
-    "newline" * <start: @L> "for" <iterator: "identifier"> "from" <from: Expr> "to" <to: Expr> ":" "newline" <inner: Block> <end: @R> => {
-        Statement::For{<>}
-    },
-
-    "newline" * <start: @L> "return" <val: Expr?> "newline" <end: @R> => {
-        Statement::Return{<>}
-    },
-
-    "newline" * <start: @L> "return" <val: OpenTuple> "newline" <end: @R> => {
-        Statement::Return{ start, val: match *val {
-            Expression::OpenTuple{ start, inner, end } => Some(Box::new(Expression::Tuple{ start, inner, end })),
-            _ => panic!()
-        }, end }
-    },
-}
-
 pub Block: Vec<Statement> = {
-    <start: @L> "newline" * "indent" <inner: Stmt*> "newline" * "dedent" <end: @R> => {
+    "newline" * "indent" <inner: Stmt*> "newline" * "dedent" => {
         inner
     }
 }
 
-Place: (String, (usize, usize)) = {
-    <start: @L> <n: "identifier"> <end: @R> => (n, (start, end))
+pub Stmt: Statement = {
+    "newline" * "let" <start: @L> <name: "identifier"> <end: @R> <ann: (":" Expr)?> "=" <val: Expr> "newline" => {
+        if let Some((_, e)) = &ann {
+            let curr_type_tokens: Vec<usize> = (e.start..e.end).collect();
+            type_tokens.extend(curr_type_tokens);
+        }
+        
+        let ann = ann.map(|(_, e)| match expr_to_pos_type(&*e) {
+            Ok(t) => t,
+            Err(error) => {
+                errors.push(error);
+                Positioned::new(e.start, Type::Unknown, e.end)
+            }            
+        });
+
+        Statement::new_let(
+            Positioned::new(start, name, end),
+            ann,
+            *val    
+        )
+    },
+
+    "newline" * "let" <start: @L> <name: "identifier"> <end: @R> <ann: (":" Expr)?> "=" <val: OpenTuple> "newline" => {
+        if let Some((_, e)) = &ann {
+            let curr_type_tokens: Vec<usize> = (e.start..e.end).collect();
+            type_tokens.extend(curr_type_tokens);
+        }
+
+        let ann = ann.map(|(_, e)| match expr_to_pos_type(&*e) {
+            Ok(t) => t,
+            Err(error) => {
+                errors.push(error);
+                Positioned::new(e.start, Type::Unknown, e.end)
+            }
+        });
+        
+        Statement::new_let(
+            Positioned::new(start, name, end),
+            ann,
+            match val.data {
+                E::OpenTuple(inner) => {
+                    *Expression::fresh(val.start, E::Tuple(inner), val.end)
+                },
+                _ => panic!()
+            }
+        )
+    },
+
+    "newline" * <place: Place> "=" <val: Expr> "newline" => {
+        Statement::new_assign(place, *val)
+    },
+
+    "newline" * "print" <val: Expr> "newline" => {
+        Statement::new_print(*val)
+    },
+
+    "newline" * "print" <val: OpenTuple> "newline" => {
+        Statement::new_print(match val.data {
+            E::OpenTuple(inner) => *Expression::fresh(val.start, E::Tuple(inner), val.end),
+            _ => panic!()
+        })
+    },
+
+    "newline" * "return" <val: Expr> "newline" => {
+        Statement::new_return(val.start, Some(*val))
+    },
+
+    "newline" * "return" <val: OpenTuple> "newline" <end: @R> => {
+        Statement::new_return(val.start, Some(match val.data {
+            E::OpenTuple(inner) => *Expression::fresh(val.start, E::Tuple(inner), val.end),
+            _ => panic!()
+        }))
+    },
+
+    "newline" * <start: @L> "return" "newline" => {
+        Statement::new_return(start, None)
+    },
+
+    "newline" * <start: @L> "if" <cond: Expr> ":" "newline" <true_inner: Block> <false_inner: ("else" ":" "newline" Block)?> <end: @R> => {
+        Statement::new_if(
+            start,
+            *cond,
+            true_inner,
+            false_inner.map(|(_, _, _, b)| b),
+            end
+        )
+    },
+
+    "newline" * <start: @L> "for" <start_it: @L> <iterator: "identifier"> <end_it: @L> "from" <from: Expr> "to" <to: Expr> ":" "newline" <inner: Block> <end: @R> => {
+        Statement::new_for(
+            start,
+            Positioned::new(start_it, iterator, end_it),
+            *from,
+            *to,
+            inner,
+            end
+        )
+    },
+}
+
+Place: Positioned<String> = {
+    <start: @L> <name: "identifier"> <end: @R> => Positioned::new(start, name, end)
 }
 
 pub Expr: Box<Expression> = {
     #[precedence(level="1")]
     <t: Term> => t,
-    <start: @L> <caller: Expr> <args: FnCallParams> <end: @R> => {
-        Box::new(Expression::FnCall{<>})
-    },
-
-    <start: @L> <lhs: Expr> <rhs: Array> <end: @R> => {
-        Box::new(Expression::Accessor{<>})
-    },
 
     #[precedence(level="2")] #[assoc(side="left")]
-    <start: @L> <lhs: Expr> "." <rhs: Expr> <end: @R>  => Box::new(Expression::BinaryOp{
-        start,
-        lhs,
-        op: Op::Dot,
-        rhs,
-        end
-    }),
+    <start: @L> <caller: Expr> <args: FnCallParams> <end: @R> => Expression::fresh(start, E::FnCall(caller, args), end),
+    <start: @L> <lhs: Expr> <rhs: Array> <end: @R>            => Expression::fresh(start, E::Accessor(lhs, rhs), end),
+    <start: @L> <lhs: Expr> "." <rhs: Expr> <end: @R>         => Expression::fresh(start, E::BinaryOp(lhs, Op::Dot, rhs), end),
 
     #[precedence(level="3")] #[assoc(side="left")]
-    <start: @L> <lhs: Expr> "^" <rhs: Expr> <end: @R>  => Box::new(Expression::BinaryOp{
-        start,
-        lhs,
-        op: Op::Exp,
-        rhs,
-        end
-    }),
-
-    #[precedence(level="3")] #[assoc(side="left")]
-    <start: @L> <inner: Expr> "'" <end: @R>  => Box::new(Expression::UnaryOp{
-        start,
-        inner,
-        op: UnaryOp::Tick,
-        end
-    }),
-
+    <start: @L> <lhs: Expr> "^" <rhs: Expr> <end: @R>         => Expression::fresh(start, E::BinaryOp(lhs, Op::Exp, rhs), end),
+    
     #[precedence(level="4")] #[assoc(side="left")]
-    <start: @L> "!" <inner: Expr> <end: @R>  => Box::new(Expression::UnaryOp{
-        start,
-        op: UnaryOp::BoolNeg,
-        inner,
-        end
-    }),
-    <start: @L> "-" <inner: Expr> <end: @R>  => Box::new(Expression::UnaryOp{
-        start,
-        op: UnaryOp::ArithNeg,
-        inner,
-        end
-    }),
+    <start: @L> <inner: Expr> "'" <end: @R>                   => Expression::fresh(start, E::UnaryOp(UnaryOp::Tick, inner), end),
 
     #[precedence(level="5")] #[assoc(side="left")]
-    <start: @L> <lhs: Expr> "*" <rhs: Expr> <end: @R>  => Box::new(Expression::BinaryOp{
-        start,
-        lhs,
-        op: Op::Mul,
-        rhs,
-        end
-    }),
-    <start: @L> <lhs: Expr> "/" <rhs: Expr> <end: @R>  => Box::new(Expression::BinaryOp{
-        start,
-        lhs,
-        op: Op::Div,
-        rhs,
-        end
-    }),
+    <start: @L> "!" <inner: Expr> <end: @R>                   => Expression::fresh(start, E::UnaryOp(UnaryOp::BoolNeg, inner), end),
+    <start: @L> "-" <inner: Expr> <end: @R>                   => Expression::fresh(start, E::UnaryOp(UnaryOp::ArithNeg, inner), end),
 
     #[precedence(level="6")] #[assoc(side="left")]
-    <start: @L> <lhs: Expr> "+" <rhs: Expr> <end: @R>  => Box::new(Expression::BinaryOp{
-        start,
-        lhs,
-        op: Op::Add,
-        rhs,
-        end
-    }),
-    <start: @L> <lhs: Expr> "-" <rhs: Expr> <end: @R>  => Box::new(Expression::BinaryOp{
-        start,
-        lhs,
-        op: Op::Sub,
-        rhs,
-        end
-    }),
+    <start: @L> <lhs: Expr> "*" <rhs: Expr> <end: @R>         => Expression::fresh(start, E::BinaryOp(lhs, Op::Mul, rhs), end),
+    <start: @L> <lhs: Expr> "/" <rhs: Expr> <end: @R>         => Expression::fresh(start, E::BinaryOp(lhs, Op::Div, rhs), end),
 
     #[precedence(level="7")] #[assoc(side="left")]
-    <start: @L> <lhs: Expr> ">" <rhs: Expr> <end: @R>  => Box::new(Expression::BinaryOp{
-        start,
-        lhs,
-        op: Op::Greater,
-        rhs,
-        end
-    }),
-    <start: @L> <lhs: Expr> "<" <rhs: Expr> <end: @R>  => Box::new(Expression::BinaryOp{
-        start,
-        lhs,
-        op: Op::Less,
-        rhs,
-        end
-    }),
-    <start: @L> <lhs: Expr> "==" <rhs: Expr> <end: @R>  => Box::new(Expression::BinaryOp{
-        start,
-        lhs,
-        op: Op::Equal,
-        rhs,
-        end
-    }),
-    <start: @L> <lhs: Expr> "!" "=" <rhs: Expr> <end: @R>  => Box::new(Expression::BinaryOp{
-        start,
-        lhs,
-        op: Op::NotEqual,
-        rhs,
-        end
-    }),
+    <start: @L> <lhs: Expr> "+" <rhs: Expr> <end: @R>         => Expression::fresh(start, E::BinaryOp(lhs, Op::Add, rhs), end),
+    <start: @L> <lhs: Expr> "-" <rhs: Expr> <end: @R>         => Expression::fresh(start, E::BinaryOp(lhs, Op::Sub, rhs), end),
 
     #[precedence(level="8")] #[assoc(side="left")]
-    <start: @L> <lhs: Expr> "&" "&" <rhs: Expr> <end: @R>  => Box::new(Expression::BinaryOp{
-        start,
-        lhs,
-        op: Op::And,
-        rhs,
-        end
-    }),
-    <start: @L> <lhs: Expr> "|" "|" <rhs: Expr> <end: @R>  => Box::new(Expression::BinaryOp{
-        start,
-        lhs,
-        op: Op::Or,
-        rhs,
-        end
-    }),
-    <start: @L> <lhs: Expr> "->" <rhs: Expr> <end: @R>  => Box::new(Expression::BinaryOp{
-        start,
-        lhs,
-        op: Op::Apply,
-        rhs,
-        end
-    }),
+    <start: @L> <lhs: Expr> ">" <rhs: Expr> <end: @R>         => Expression::fresh(start, E::BinaryOp(lhs, Op::Greater, rhs), end),
+    <start: @L> <lhs: Expr> "<" <rhs: Expr> <end: @R>         => Expression::fresh(start, E::BinaryOp(lhs, Op::Less, rhs), end),
+    <start: @L> <lhs: Expr> "==" <rhs: Expr> <end: @R>        => Expression::fresh(start, E::BinaryOp(lhs, Op::Equal, rhs), end),
+    <start: @L> <lhs: Expr> "!" "=" <rhs: Expr> <end: @R>     => Expression::fresh(start, E::BinaryOp(lhs, Op::NotEqual, rhs), end),
+
+    #[precedence(level="9")] #[assoc(side="left")]
+    <start: @L> <lhs: Expr> "&" "&" <rhs: Expr> <end: @R>     => Expression::fresh(start, E::BinaryOp(lhs, Op::And, rhs), end),
+    <start: @L> <lhs: Expr> "|" "|" <rhs: Expr> <end: @R>     => Expression::fresh(start, E::BinaryOp(lhs, Op::Or, rhs), end),
+    <start: @L> <lhs: Expr> "->" <rhs: Expr> <end: @R>        => Expression::fresh(start, E::BinaryOp(lhs, Op::Apply, rhs), end)
 };
-
-Array: Box<Expression> = {
-    <start: @L> "[" <inner: Expr> "]" <end: @R> => {
-        highlight_map.insert(start, vec![start, end - 1]);
-        highlight_map.insert(end - 1, vec![start, end - 1]);
-
-        inner
-    },
-
-    <start: @L> "[" <inner: OpenTuple> "]" <end: @R> => {
-        highlight_map.insert(start, vec![start, end - 1]);
-        highlight_map.insert(end - 1, vec![start, end - 1]);
-
-        match *inner {
-            Expression::OpenTuple{inner, ..} => Box::new(Expression::Tuple { start, inner, end }),
-            _ => panic!()
-        }
-    },
-}
-
-IdentifierTypeParams: (Vec<Expression>, (usize, usize)) = {
-    <start: @L> "{" "}" <end: @R> => {
-        highlight_map.insert(start, vec![start, end - 1]);
-        highlight_map.insert(end - 1, vec![start, end - 1]);
-
-        (vec![], (start + 1, end - 1))
-    },
-
-    <start: @L> "{" <arg: Expr> "}" <end: @R> => {
-        highlight_map.insert(start, vec![start, end - 1]);
-        highlight_map.insert(end - 1, vec![start, end - 1]);
-
-        (vec![*arg], (start + 1, end - 1))
-    },
-
-    <start: @L> "{" <args: OpenTuple> "}" <end: @R> => {
-        highlight_map.insert(start, vec![start, end - 1]);
-        highlight_map.insert(end - 1, vec![start, end - 1]);
-
-        match *args {
-            Expression::OpenTuple{inner, ..} => (inner, (start + 1, end - 1)),
-            _ => panic!()
-        }
-    }
-}
-
 
 FnCallParams: Vec<Expression> = {
     <start: @L> "(" ")" <end: @R> => {
@@ -345,78 +263,128 @@ FnCallParams: Vec<Expression> = {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);
 
-        match *args {
-            Expression::OpenTuple{inner, ..} => inner,
+        match args.data {
+            E::OpenTuple(inner) => inner,
             _ => panic!()
         }
     }
 }
 
+Array: Box<Expression> = {
+    <start: @L> "[" <inner: Expr> "]" <end: @R> => {
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
+
+        inner
+    },
+
+    <start: @L> "[" <inner: OpenTuple> "]" <end: @R> => {
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
+
+        match inner.data {
+            E::OpenTuple(inner) => Expression::fresh(
+                start,
+                E::Tuple(inner),
+                end
+            ),
+            _ => panic!()
+        }
+    },
+}
+
 OpenTuple: Box<Expression> = {
     <start: @L> <lhs: Expr> "," <rhs: Expr> <end: @R> => {
-        match *lhs {
-             Expression::OpenTuple{mut inner, ..} => {
+        match lhs.data {
+             E::OpenTuple(mut inner) => {
                 inner.push(*rhs);
-                Box::new(Expression::OpenTuple{ start, inner, end })
+                Expression::fresh(start, E::OpenTuple(inner), end)
              }
-             _ => Box::new(Expression::OpenTuple{
-                start,
-                inner: vec![
-                    *lhs,
-                    *rhs
-                ],
-                end
-            })
+             _ => Expression::fresh(start, E::OpenTuple(vec![*lhs, *rhs]), end)
         }
     },
     <start: @L> <lhs: OpenTuple> "," <rhs: Expr> <end: @R> => {
-        match *lhs {
-             Expression::OpenTuple{mut inner, ..} => {
+        match lhs.data {
+             E::OpenTuple(mut inner) => {
                 inner.push(*rhs);
-                Box::new(Expression::OpenTuple{ start, inner, end })
+                Expression::fresh(start, E::OpenTuple(inner), end)
              }
-             _ => Box::new(Expression::OpenTuple{
-                start,
-                inner: vec![
-                    *lhs,
-                    *rhs
-                ],
-                end
-            })
+             _ => Expression::fresh(start, E::OpenTuple(vec![*lhs, *rhs]), end)
+        }
+    }
+}
+
+IdentifierTypeParams: Vec<Expression> = {
+    <start: @L> "{" "}" <end: @R> => {
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
+
+        vec![]
+    },
+
+    <start: @L> "{" <arg: Expr> "}" <end: @R> => {
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
+
+        let curr_type_tokens: Vec<usize> = (arg.start..arg.end).collect();
+        type_tokens.extend(curr_type_tokens);
+
+        vec![*arg]
+    },
+
+    <start: @L> "{" <args: OpenTuple> "}" <end: @R> => {
+        highlight_map.insert(start, vec![start, end - 1]);
+        highlight_map.insert(end - 1, vec![start, end - 1]);
+
+        match args.data {
+            E::OpenTuple(inner) => {
+                for expr in &inner {
+                    let curr_type_tokens: Vec<usize> = (expr.start..expr.end).collect();
+                    type_tokens.extend(curr_type_tokens);        
+                }
+                inner
+            }
+            _ => panic!()
         }
     }
 }
 
 Term: Box<Expression> = {
-    <start: @L> <val: "true"> <end: @R> => Box::new(Expression::Bool{start, val: true, end}),
-    <start: @L> <val: "false"> <end: @R> => Box::new(Expression::Bool{start, val: false, end}),
-    <start: @L> <val: "float"> <end: @R> => Box::new(Expression::F64{<>}),
-    <start: @L> <val: "int"> <end: @R> => Box::new(Expression::I64{<>}),
-    <start: @L> <name: "identifier"> <type_args: IdentifierTypeParams?> <end: @R> => Box::new(Expression::Identifier{<>}),
-    <start: @L> "(" ")" <end: @R> => {
-        Box::new(Expression::Tuple{ start, inner: vec![], end })
-    },
-    <start: @L> "(" <inner: Expr> ")" <end: @R> => {
+    <start: @L> "true" <end: @R> =>         Expression::fresh(start, E::Bool(true), end),
+    <start: @L> "false" <end: @R> =>        Expression::fresh(start, E::Bool(false), end),
+    <start: @L> <val: "float"> <end: @R> => Expression::fresh(start, E::F64(val), end),
+    <start: @L> <val: "int"> <end: @R> =>   Expression::fresh(start, E::I64(val, Ind::constant(val)), end),
+
+    <start: @L> <name: "identifier"> <type_args: IdentifierTypeParams?> <end: @R>
+        => Expression::fresh(start, E::Ident(name, type_args.map(|type_args|
+            type_args.iter().map(|type_arg| match expr_to_pos_type(type_arg) {
+                Ok(t) => t,
+                Err(error) => {
+                    errors.push(error);
+                    Positioned::new(type_arg.start, Type::Unknown, type_arg.end)
+                }
+            }).collect()
+        )), end),
+    
+    <start: @L> "(" ")" <end: @R> => Expression::fresh(start, E::Tuple(vec![]), end),
+
+    <start: @L> "(" <mut inner: Expr> ")" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);
-        match *inner {
-            Expression::Bool{val, ..} => Box::new(Expression::Bool{ start, val, end }),
-            Expression::F64{val, ..} => Box::new(Expression::F64{ start, val, end }),
-            Expression::I64{val, ..} => Box::new(Expression::I64{ start, val, end }),
-            Expression::Identifier{name, type_args, ..} => Box::new(Expression::Identifier{ start, name, type_args, end }),
-            Expression::BinaryOp{lhs, op, rhs, ..} => Box::new(Expression::BinaryOp{ start, lhs, op, rhs, end }),
-            Expression::UnaryOp{op, inner, ..} => Box::new(Expression::UnaryOp{ start, op, inner, end }),
-            Expression::FnCall{caller, args, ..} => Box::new(Expression::FnCall{ start, caller, args, end }),
-            Expression::OpenTuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
-            Expression::Accessor{lhs, rhs, ..} => Box::new(Expression::Accessor{ start, lhs, rhs, end }),
-            Expression::Tuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
-        }
+
+        inner.start = start;
+        inner.end = end;
+        inner
     },
     <start: @L> "(" <inner: OpenTuple> ")" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);
-        match *inner {
-            Expression::OpenTuple{inner, ..} => Box::new(Expression::Tuple{ start, inner, end }),
+        match inner.data {
+            E::OpenTuple(inner) => Expression::fresh(
+                start,
+                E::Tuple(inner),
+                end
+            ),
             _ => panic!()
         }
     }

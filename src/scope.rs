@@ -1,15 +1,14 @@
 use std::collections::HashMap;
 
-pub struct Frame<T>(pub Vec<HashMap<String, T>>);
-pub type Stack<T> = Vec<Frame<T>>;
+pub struct Scope<T>(Vec<HashMap<String, T>>);
 
-impl<T> std::default::Default for Frame<T> {
+impl<T> std::default::Default for Scope<T> {
     fn default() -> Self {
-        Frame::<T>(vec![])
+        Scope::<T>(vec![])
     }
 }
 
-impl<T> Frame<T> {
+impl<T> Scope<T> {
     pub fn get(&self, key: &str) -> Option<&T> {
         for scope in self.0.iter().rev() {
             if let Some(t) = scope.get(key) {
@@ -41,11 +40,11 @@ impl<T> Frame<T> {
         }
     }
 
-    pub fn push_scope(&mut self) {
+    pub fn push(&mut self) {
         self.0.push(HashMap::default());
     }
 
-    pub fn pop_scope(&mut self) {
+    pub fn pop(&mut self) {
         self.0.pop();
     }
 

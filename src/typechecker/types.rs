@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::cmp::Ordering;
 use std::fmt;
 
 use super::ind::Ind;
@@ -147,15 +148,11 @@ impl Type {
         match self {
             Type::Unknown => Some(Substitutions::new()),
             Type::ForAll(self_i) => match other {
-                Type::ForAll(other_i) => {
-                    if self_i > other_i {
-                        Some(Substitutions(vec![(*self_i, other.clone())]))
-                    } else if self_i < other_i {
-                        Some(Substitutions(vec![(*other_i, self.clone())]))
-                    } else {
-                        Some(Substitutions(vec![]))
-                    }
-                }
+                Type::ForAll(other_i) => match self_i.cmp(other_i) {
+                    Ordering::Greater => Some(Substitutions(vec![(*self_i, other.clone())])),
+                    Ordering::Less => Some(Substitutions(vec![(*other_i, self.clone())])),
+                    Ordering::Equal => Some(Substitutions(vec![])),
+                },
                 _ => Some(Substitutions(vec![(*self_i, other.clone())])),
             },
             _ => match other {

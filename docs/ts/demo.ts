@@ -55,6 +55,8 @@ document.body.onload = () => {
             const updateEditor = () => {
                 const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n'))) as types.ParserOutput;
 
+                console.log(parsed);
+
                 parsed.typeTokens = new Set(parsed.typeTokens as unknown as number[]);
 
                 let hl_map: Map<number, number[]> = new Map();
@@ -62,12 +64,6 @@ document.body.onload = () => {
                     hl_map.set(Number.parseInt(key), (parsed.highlightMap as unknown as {[k: string]: number[]})[key]);
                 });
                 parsed.highlightMap = hl_map;
-
-                let ann_map: Map<number, string> = new Map();
-                Object.keys(parsed.annotations as unknown as {[k: string]: string}).forEach(key => {
-                    ann_map.set(Number.parseInt(key), (parsed.annotations as unknown as {[k: string]: string})[key]);
-                });
-                parsed.annotations = ann_map;
                 
                 editor.updateEditorWithCode(editorElem, editorLinesElem, codeLines.code, parsed);  
                 editor.updateEditorWithErrors(parsed.errors, editorElem);

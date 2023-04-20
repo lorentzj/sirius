@@ -1,4 +1,3 @@
-use crate::flow;
 use crate::interpreter;
 use crate::parser;
 use crate::stdlib::stdlib;
@@ -12,41 +11,25 @@ extern crate console_error_panic_hook;
 pub fn parse(code: String) -> String {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-    let mut parsed = parser::parse(&code);
+    let mut state = parser::parse(&code);
 
-    if parsed.errors.is_empty() {
-        let (typed_ast, mut typecheck) = typechecker::typecheck(&parsed.ast, &stdlib());
-        parsed.errors.append(&mut typecheck);
-        parsed
-            .annotations
-            .extend(typechecker::type_annotations(&typed_ast));
+    typechecker::typecheck(&mut state, &stdlib());
 
-        let mut flowcheck = flow::check_flow(&parsed.ast);
-        parsed.errors.append(&mut flowcheck);
-    }
-
-    serde_json::to_string(&parsed).unwrap()
+    serde_json::to_string(&state).unwrap()
 }
 
 #[wasm_bindgen]
 pub fn interpret(code: String) -> String {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-    let mut parsed = parser::parse(&code);
+    let mut state = parser::parse(&code);
     let stdlib = stdlib();
 
-    if parsed.errors.is_empty() {
-        let (typed_ast, mut typecheck) = typechecker::typecheck(&parsed.ast, &stdlib);
-        parsed.errors.append(&mut typecheck);
-        parsed
-            .annotations
-            .extend(typechecker::type_annotations(&typed_ast));
+    typechecker::typecheck(&mut state, &stdlib);
 
-        let mut flowcheck = flow::check_flow(&parsed.ast);
-        parsed.errors.append(&mut flowcheck);
-
-        let output = if parsed.errors.is_empty() {
-            interpreter::interpret(typed_ast, &stdlib)
+    if state.errors.is_empty() {
+        let output = if state.errors.is_empty() {
+            interpreter::interpret(state.ast, &stdlib)
         } else {
             interpreter::InterpreterOutput {
                 stdout: "".into(),
