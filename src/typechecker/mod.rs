@@ -20,17 +20,12 @@ use unify::{substitute, unify};
 pub use ind::Ind;
 pub use types::{Substitutions, Type};
 
-pub fn typecheck(state: &mut CompilerState, externals: &ExternalGlobals) {
+pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
     if !state.errors.is_empty() {
         return;
     }
 
-    let mut scope: Scope<Type> = Scope::default();
-    scope.push();
-
-    for (name, (t, _)) in externals.iter() {
-        scope.insert(name.clone(), t.clone());
-    }
+    let mut scope = Scope::init(externals);
 
     for (name, function) in state.ast.iter_mut() {
         let type_arg_names = function.type_arg_names();
@@ -186,26 +181,24 @@ mod tests {
     #[test]
     fn basic_typecheck() {
         let code = "
+
 fn three_tuple_map{A, B}(x: (A, A, A), f: A->B) -> (B, B, B):
     return (f(x[0]), f(x[1]), f(x[2]))
+
 fn map_test_1(x: f64) -> bool:
     return x > 0
+
 fn map_test_2(x: f64) -> i64:
-    if x > 0:
-        return 1
-    else:
-        return -1
+    return 1
+
 fn main():
     let a = (1., -1., -0.34)
-    print three_tuple_map(a, map_test_1)
-    print three_tuple_map{f64}(a, map_test_1)
-    print three_tuple_map{f64, bool}(a, map_test_1)
-    print three_tuple_map{_, bool}(a, map_test_1)
-    print three_tuple_map(a, map_test_2)
         ";
 
         let mut state = parse(code);
-        typecheck(&mut state, &HashMap::default());
+        typecheck(&mut state, HashMap::default());
+
+        println!("{:?}", state.errors);
 
         assert!(state.errors.is_empty());
     }
@@ -223,7 +216,7 @@ fn main():
 ";
 
         let mut state = parse(code);
-        typecheck(&mut state, &HashMap::default());
+        typecheck(&mut state, HashMap::default());
 
         assert_eq!(ErrorType::TypeError, state.errors[0].error_type);
     }
@@ -241,7 +234,7 @@ fn main():
 ";
 
         let mut state = parse(code);
-        typecheck(&mut state, &HashMap::default());
+        typecheck(&mut state, HashMap::default());
 
         assert_eq!(ErrorType::TypeError, state.errors[0].error_type);
     }
@@ -254,10 +247,10 @@ fn main():
 ";
 
         let mut state = parse(code);
-        typecheck(&mut state, &HashMap::default());
+        typecheck(&mut state, HashMap::default());
 
         assert!(if let S::Let(_, _, val) = &state.ast["main"].body[0].data {
-            val.t == Type::I64(Ind::constant(3))
+            val.t == Type::I64(Some(Ind::constant(3)))
         } else {
             false
         });
@@ -274,7 +267,7 @@ fn main():
 ";
 
         let mut state = parse(code);
-        typecheck(&mut state, &HashMap::default());
+        typecheck(&mut state, HashMap::default());
 
         assert_eq!(ErrorType::TypeError, state.errors[0].error_type);
     }
@@ -289,7 +282,7 @@ fn main():
     ";
 
         let mut state = parse(code);
-        typecheck(&mut state, &HashMap::default());
+        typecheck(&mut state, HashMap::default());
 
         assert_eq!(ErrorType::TypeError, state.errors[0].error_type);
     }

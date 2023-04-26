@@ -2,14 +2,14 @@ use super::ExternalFunctionPointer;
 use crate::parser::Statement;
 
 #[derive(Clone)]
-pub enum Value {
+pub enum Value<'a> {
     F64(f64),
     I64(i64),
     Bool(bool),
-    Tuple(Vec<Value>),
-    Array(usize, Vec<Value>),
-    Function(Vec<String>, Vec<Statement>),
-    ExternalFunction(ExternalFunctionPointer),
+    Tuple(Vec<Value<'a>>),
+    Array(usize, Vec<Value<'a>>),
+    Function(Vec<String>, &'a [Statement]),
+    ExternalFunction(ExternalFunctionPointer<'a>),
 }
 
 pub fn print_value(value: Value) -> String {

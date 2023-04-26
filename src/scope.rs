@@ -9,9 +9,24 @@ impl<T> std::default::Default for Scope<T> {
 }
 
 impl<T> Scope<T> {
+    pub fn init(globals: HashMap<String, T>) -> Self {
+        let mut v = Self(vec![]);
+        v.0.push(globals);
+        v
+    }
+
     pub fn get(&self, key: &str) -> Option<&T> {
         for scope in self.0.iter().rev() {
             if let Some(t) = scope.get(key) {
+                return Some(t);
+            }
+        }
+        None
+    }
+
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut T> {
+        for scope in self.0.iter_mut().rev() {
+            if let Some(t) = scope.get_mut(key) {
                 return Some(t);
             }
         }
@@ -55,5 +70,13 @@ impl<T> Scope<T> {
             }
         }
         false
+    }
+
+    pub fn apply_transform(&mut self, f: fn(&mut T)) {
+        for scope in self.0.iter_mut() {
+            for val in scope.values_mut() {
+                f(val);
+            }
+        }
     }
 }

@@ -54,7 +54,7 @@ document.body.onload = () => {
 
             const updateEditor = () => {
                 const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n'))) as types.ParserOutput;
-
+                console.log(parsed);
                 parsed.typeTokens = new Set(parsed.typeTokens as unknown as number[]);
 
                 let hl_map: Map<number, number[]> = new Map();

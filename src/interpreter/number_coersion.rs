@@ -41,7 +41,7 @@ fn coerce_to_int(lhs: &Value, rhs: &Value) -> (i64, i64) {
     }
 }
 
-pub fn arith_coerce(lhs: Value, op: &Op, rhs: Value) -> Value {
+pub fn arith_coerce<'a>(lhs: Value<'a>, op: &Op, rhs: Value<'a>) -> Value<'a> {
     if let Some((lhs, rhs)) = coerce_to_float(&lhs, &rhs) {
         match &op {
             Op::Add => Value::F64(lhs + rhs),

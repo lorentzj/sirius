@@ -1,7 +1,7 @@
 use super::equality::equality_check;
 use super::number_coersion::{arith_coerce, is_arith};
-use super::types::Substitutions;
 use super::types::Type;
+use super::types::{demote_dirty, Substitutions};
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
 use crate::parser::{Expression, Statement, UnaryOp, E, S};
@@ -23,8 +23,8 @@ fn unify_expression(
             match &lhs.t {
                 Type::Tuple(lhs_members) => match &rhs.t {
                     Type::I64(Some(ind)) => match ind.constant_val() {
-                        Some((sign, val)) => {
-                            if val >= lhs_members.len() || sign {
+                        Some(val) => {
+                            if val as usize >= lhs_members.len() || val < 0 {
                                 Err(Error::new(
                                     ErrorType::TypeError,
                                     format!("index out of bounds of {}-tuple", lhs_members.len()),
@@ -33,17 +33,17 @@ fn unify_expression(
                                 ))
                             } else {
                                 let mut subs = lhs_subs;
-                                subs.extend(rhs.start, rhs_subs, rhs.end)?;
-                                match expression.t.unify(&lhs_members[val]) {
+                                subs.extend(rhs.start, rhs_subs, rhs.end, false)?;
+                                match expression.t.unify(&lhs_members[val as usize], false) {
                                     Some(s) => {
-                                        subs.extend(lhs.start, s, lhs.end)?;
+                                        subs.extend(lhs.start, s, lhs.end, false)?;
                                         Ok(subs)
                                     }
                                     None => Err(Error::new(
                                         ErrorType::TypeError,
                                         format!(
                                             "cannot unify types \"{:?}\" and \"{:?}\"",
-                                            expression.t, &lhs_members[val]
+                                            expression.t, &lhs_members[val as usize]
                                         ),
                                         expression.start,
                                         expression.end,
@@ -66,7 +66,7 @@ fn unify_expression(
                     )),
                     Type::ForAll(_) => {
                         let mut subs = lhs_subs;
-                        subs.extend(expression.start, rhs_subs, expression.end)?;
+                        subs.extend(expression.start, rhs_subs, expression.end, false)?;
                         Ok(subs)
                     }
                     t => Err(Error::new(
@@ -80,7 +80,7 @@ fn unify_expression(
                     Type::I64(Some(ind)) => match ind.constant_val() {
                         Some(_) => {
                             let mut subs = lhs_subs;
-                            subs.extend(expression.start, rhs_subs, expression.end)?;
+                            subs.extend(expression.start, rhs_subs, expression.end, false)?;
                             Ok(subs)
                         }
                         None => Err(Error::new(
@@ -115,7 +115,7 @@ fn unify_expression(
         E::Ident(name, _) => match context.get(name) {
             Some(var_t) => match var_t {
                 Type::Function(_, _, _) => Ok(Substitutions::new()),
-                _ => match expression.t.unify(var_t) {
+                _ => match expression.t.unify(var_t, false) {
                     Some(subs) => Ok(subs),
                     None => Err(Error::new(
                         ErrorType::TypeError,
@@ -136,8 +136,8 @@ fn unify_expression(
             if inner.t.forall_vars().is_empty() {
                 match op {
                     UnaryOp::ArithNeg => match &inner.t {
-                        Type::F64 => match Type::F64.unify(&expression.t) {
-                            Some(s) => subs.extend(expression.start, s, expression.end)?,
+                        Type::F64 => match Type::F64.unify(&expression.t, false) {
+                            Some(s) => subs.extend(expression.start, s, expression.end, false)?,
                             None => {
                                 return Err(Error::new(
                                     ErrorType::TypeError,
@@ -151,8 +151,8 @@ fn unify_expression(
                                 ))
                             }
                         },
-                        Type::I64(_) => match Type::I64(None).unify(&expression.t) {
-                            Some(s) => subs.extend(expression.start, s, expression.end)?,
+                        Type::I64(_) => match Type::I64(None).unify(&expression.t, false) {
+                            Some(s) => subs.extend(expression.start, s, expression.end, false)?,
                             None => {
                                 return Err(Error::new(
                                     ErrorType::TypeError,
@@ -176,8 +176,8 @@ fn unify_expression(
                         }
                     },
                     UnaryOp::BoolNeg => match &inner.t {
-                        Type::Bool => match Type::Bool.unify(&expression.t) {
-                            Some(s) => subs.extend(expression.start, s, expression.end)?,
+                        Type::Bool => match Type::Bool.unify(&expression.t, false) {
+                            Some(s) => subs.extend(expression.start, s, expression.end, false)?,
                             None => {
                                 return Err(Error::new(
                                     ErrorType::TypeError,
@@ -221,13 +221,14 @@ fn unify_expression(
                     expression.start,
                     unify_expression(e, context, curr_forall_var)?,
                     expression.end,
+                    false,
                 )?;
             }
 
             let tuple_t = Type::Tuple(inner_types);
 
-            match expression.t.unify(&tuple_t) {
-                Some(s) => subs.extend(expression.start, s, expression.end)?,
+            match expression.t.unify(&tuple_t, false) {
+                Some(s) => subs.extend(expression.start, s, expression.end, false)?,
                 None => {
                     return Err(Error::new(
                         ErrorType::TypeError,
@@ -248,15 +249,15 @@ fn unify_expression(
             let rhs_subs = unify_expression(rhs, context, curr_forall_var)?;
 
             let mut subs = lhs_subs;
-            subs.extend(rhs.start, rhs_subs, rhs.end)?;
+            subs.extend(rhs.start, rhs_subs, rhs.end, false)?;
 
             if lhs.t.forall_vars().is_empty() && rhs.t.forall_vars().is_empty() {
                 if is_arith(op) {
                     let arith_result =
                         arith_coerce(expression.start, &lhs.t, op, &rhs.t, expression.end)?;
 
-                    match expression.t.unify(&arith_result) {
-                        Some(s) => subs.extend(expression.start, s, expression.end)?,
+                    match expression.t.unify(&arith_result, false) {
+                        Some(s) => subs.extend(expression.start, s, expression.end, false)?,
                         None => {
                             return Err(Error::new(
                                 ErrorType::TypeError,
@@ -272,8 +273,10 @@ fn unify_expression(
                 } else {
                     match op {
                         Op::Equal | Op::NotEqual => match equality_check(&lhs.t, &rhs.t) {
-                            Ok(_) => match expression.t.unify(&Type::Bool) {
-                                Some(s) => subs.extend(expression.start, s, expression.end)?,
+                            Ok(_) => match expression.t.unify(&Type::Bool, false) {
+                                Some(s) => {
+                                    subs.extend(expression.start, s, expression.end, false)?
+                                }
                                 None => {
                                     return Err(Error::new(
                                         ErrorType::TypeError,
@@ -327,8 +330,10 @@ fn unify_expression(
                                     expression.end,
                                 ));
                             } else {
-                                match expression.t.unify(&Type::Bool) {
-                                    Some(s) => subs.extend(expression.start, s, expression.end)?,
+                                match expression.t.unify(&Type::Bool, false) {
+                                    Some(s) => {
+                                        subs.extend(expression.start, s, expression.end, false)?
+                                    }
                                     None => {
                                         return Err(Error::new(
                                             ErrorType::TypeError,
@@ -367,6 +372,7 @@ fn unify_expression(
                     expression.start,
                     unify_expression(e, context, curr_forall_var)?,
                     expression.end,
+                    false,
                 )?;
             }
 
@@ -385,9 +391,9 @@ fn unify_expression(
                         ));
                     } else {
                         for (given_arg, expected_arg) in arg_types.iter().zip(i) {
-                            match given_arg.unify(expected_arg) {
+                            match given_arg.unify(expected_arg, true) {
                                 Some(s) => {
-                                    subs.extend(expression.start, s, expression.end)?;
+                                    subs.extend(expression.start, s, expression.end, false)?;
                                 },
                                 None => {
                                     return Err(Error::new(
@@ -401,8 +407,8 @@ fn unify_expression(
                         }
                     }
 
-                    match expression.t.unify(o.as_ref()) {
-                        Some(s) => subs.extend(expression.start, s, expression.end)?,
+                    match o.unify(&expression.t, true) {
+                        Some(s) => subs.extend(expression.start, s, expression.end, false)?,
                         None => {
                             return Err(Error::new(
                                 ErrorType::TypeError,
@@ -443,16 +449,16 @@ pub fn unify(
     for statement in block {
         match &statement.data {
             S::Print(val) => match unify_expression(val, context, curr_forall_var) {
-                Ok(s) => match subs.extend(val.start, s, val.end) {
+                Ok(s) => match subs.extend(val.start, s, val.end, false) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 },
                 Err(error) => errors.push(error),
             },
-            S::Assign(place, val) => match context.get(&place.inner) {
+            S::Assign(place, val) => match context.get_mut(&place.inner) {
                 Some(var_t) => {
-                    match var_t.unify(&val.t) {
-                        Some(s) => match subs.extend(val.start, s, val.end) {
+                    match var_t.unify_assign(&val.t) {
+                        Some(s) => match subs.extend(val.start, s, val.end, false) {
                             Ok(()) => (),
                             Err(error) => errors.push(error),
                         },
@@ -465,7 +471,7 @@ pub fn unify(
                     }
 
                     match unify_expression(val, context, curr_forall_var) {
-                        Ok(s) => match subs.extend(val.start, s, val.end) {
+                        Ok(s) => match subs.extend(val.start, s, val.end, false) {
                             Ok(()) => (),
                             Err(error) => errors.push(error),
                         },
@@ -476,47 +482,43 @@ pub fn unify(
             },
             S::Let(name, ann, val) => {
                 match unify_expression(val, context, curr_forall_var) {
-                    Ok(s) => match subs.extend(val.start, s, val.end) {
+                    Ok(s) => match subs.extend(val.start, s, val.end, false) {
                         Ok(()) => (),
                         Err(error) => errors.push(error),
                     },
                     Err(error) => errors.push(error),
                 }
 
-                context.insert(name.inner.clone(), val.t.clone());
-
                 if let Some(ann) = ann {
-                    match val.t.unify(&ann.inner) {
-                        Some(s) => match subs.extend(val.start, s, val.end) {
-                            Ok(()) => (),
-                            Err(error) => errors.push(error),
+                    match val.t.unify_ann(&ann.inner) {
+                        Some(s) => match subs.extend(val.start, s, val.end, false) {
+                            Ok(()) => {
+                                if let Some(mod_t) = val.t.apply_ann(&ann.inner) {
+                                    context.insert(name.inner.clone(), mod_t);
+                                } else {
+                                    context.insert(name.inner.clone(), val.t.clone());
+                                }
+                            }
+                            Err(error) => {
+                                errors.push(error);
+                                context.insert(name.inner.clone(), Type::Unknown);
+                            }
                         },
-                        None => errors.push(Error::new(
-                            ErrorType::TypeError,
-                            format!(
-                                "cannot unify type \"{:?}\" with annotation \"{ann:?}\"",
-                                val.t
-                            ),
-                            val.start,
-                            val.end,
-                        )),
+                        None => {
+                            errors.push(Error::new(
+                                ErrorType::TypeError,
+                                format!(
+                                    "cannot unify type \"{:?}\" with annotation \"{:?}\"",
+                                    val.t, ann.inner
+                                ),
+                                val.start,
+                                val.end,
+                            ));
+                            context.insert(name.inner.clone(), Type::Unknown);
+                        }
                     }
-                }
-
-                match context.get(&name.inner) {
-                    Some(var_t) => match val.t.unify(var_t) {
-                        Some(s) => match subs.extend(val.start, s, val.end) {
-                            Ok(()) => (),
-                            Err(error) => errors.push(error),
-                        },
-                        None => errors.push(Error::new(
-                            ErrorType::TypeError,
-                            format!("cannot unify types \"{:?}\" and \"{var_t:?}\"", val.t),
-                            val.start,
-                            val.end,
-                        )),
-                    },
-                    None => panic!(),
+                } else {
+                    context.insert(name.inner.clone(), val.t.clone());
                 }
             }
             S::Return(val) => match val {
@@ -530,15 +532,15 @@ pub fn unify(
                         ));
                     } else {
                         match unify_expression(val, context, curr_forall_var) {
-                            Ok(s) => match subs.extend(val.start, s, val.end) {
+                            Ok(s) => match subs.extend(val.start, s, val.end, false) {
                                 Ok(()) => (),
                                 Err(error) => errors.push(error),
                             },
                             Err(error) => errors.push(error),
                         }
 
-                        match val.t.unify(return_type) {
-                            Some(s) => match subs.extend(val.start, s, val.end) {
+                        match val.t.unify(return_type, true) {
+                            Some(s) => match subs.extend(val.start, s, val.end, false) {
                                 Ok(()) => (),
                                 Err(error) => errors.push(error),
                             },
@@ -568,12 +570,12 @@ pub fn unify(
             S::If(cond, true_inner, false_inner) => {
                 match unify_expression(cond, context, curr_forall_var) {
                     Ok(s) => {
-                        match subs.extend(cond.start, s, cond.end) {
+                        match subs.extend(cond.start, s, cond.end, false) {
                             Ok(()) => (),
                             Err(error) => errors.push(error),
                         };
-                        match cond.t.unify(&Type::Bool) {
-                            Some(s) => match subs.extend(cond.start, s, cond.end) {
+                        match cond.t.unify(&Type::Bool, false) {
+                            Some(s) => match subs.extend(cond.start, s, cond.end, false) {
                                 Ok(()) => (),
                                 Err(error) => errors.push(error),
                             },
@@ -598,6 +600,7 @@ pub fn unify(
                     subs,
                 );
                 context.pop();
+                context.apply_transform(demote_dirty);
 
                 if let Some(false_inner) = false_inner {
                     context.push();
@@ -610,17 +613,18 @@ pub fn unify(
                         subs,
                     );
                     context.pop();
+                    context.apply_transform(demote_dirty);
                 }
             }
             S::For(iterator, from, to, inner) => {
                 match unify_expression(from, context, curr_forall_var) {
                     Ok(s) => {
-                        match subs.extend(from.start, s, from.end) {
+                        match subs.extend(from.start, s, from.end, false) {
                             Ok(()) => (),
                             Err(error) => errors.push(error),
                         };
-                        match from.t.unify(&Type::I64(None)) {
-                            Some(s) => match subs.extend(from.start, s, from.end) {
+                        match from.t.unify(&Type::I64(None), true) {
+                            Some(s) => match subs.extend(from.start, s, from.end, true) {
                                 Ok(()) => (),
                                 Err(error) => errors.push(error),
                             },
@@ -637,14 +641,14 @@ pub fn unify(
 
                 match unify_expression(to, context, curr_forall_var) {
                     Ok(s) => {
-                        match subs.extend(to.start, s, to.end) {
+                        match subs.extend(to.start, s, to.end, false) {
                             Ok(()) => (),
                             Err(error) => errors.push(error),
                         };
-                        match to.t.unify(&Type::I64(None)) {
-                            Some(s) => match subs.extend(to.start, s, to.end) {
+                        match to.t.unify(&Type::I64(None), true) {
+                            Some(s) => match subs.extend(to.start, s, to.end, true) {
                                 Ok(()) => (),
-                                Err(error) => errors.push(error),
+                                Err(error) => errors.push(error)
                             },
                             None => errors.push(Error::new(
                                 ErrorType::TypeError,
@@ -661,6 +665,7 @@ pub fn unify(
                 context.insert(iterator.inner.clone(), Type::I64(None));
                 unify(inner, context, curr_forall_var, return_type, errors, subs);
                 context.pop();
+                context.apply_transform(demote_dirty);
             }
         }
     }

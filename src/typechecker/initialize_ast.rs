@@ -58,6 +58,41 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> 
             Ok(Type::Function(vec![], args, Box::new(return_type)))
         }
 
+        E::BinaryOp(lhs, Op::Add, rhs) => {
+            let lhs = annotation_type(lhs)?;
+            let rhs = annotation_type(rhs)?;
+
+            if let (Type::I64(Some(lhs_ind)), Type::I64(Some(rhs_ind))) = (lhs, rhs) {
+                Ok(Type::I64(Some(lhs_ind + rhs_ind)))
+            } else {
+                Err((annotation.start, annotation.end))
+            }
+        }
+
+        E::BinaryOp(lhs, Op::Sub, rhs) => {
+            let lhs = annotation_type(lhs)?;
+            let rhs = annotation_type(rhs)?;
+
+            if let (Type::I64(Some(lhs_ind)), Type::I64(Some(rhs_ind))) = (lhs, rhs) {
+                Ok(Type::I64(Some(lhs_ind - rhs_ind)))
+            } else {
+                Err((annotation.start, annotation.end))
+            }
+        }
+
+        E::BinaryOp(lhs, Op::Mul, rhs) => {
+            let lhs = annotation_type(lhs)?;
+            let rhs = annotation_type(rhs)?;
+
+            if let (Type::I64(Some(lhs_ind)), Type::I64(Some(rhs_ind))) = (lhs, rhs) {
+                Ok(Type::I64(Some(lhs_ind * rhs_ind)))
+            } else {
+                Err((annotation.start, annotation.end))
+            }
+        }
+
+        E::I64(_, Some(ind)) => Ok(Type::I64(Some(ind.clone()))),
+
         _ => Err((annotation.start, annotation.end)),
     }
 }
@@ -266,7 +301,9 @@ pub fn initialize_statement_types(
             *ann = ann.as_ref().map(|ann| {
                 match populate_annotation(&ann.inner, &mut Some(curr_forall_var), type_vars) {
                     Ok(t) => Positioned::new(ann.start, t, ann.end),
-                    Err(error) => {
+                    Err(mut error) => {
+                        error.start = ann.start;
+                        error.end = ann.end;
                         errors.push(error);
                         Positioned::new(ann.start, Type::Unknown, ann.end)
                     }

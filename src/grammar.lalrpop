@@ -353,7 +353,7 @@ Term: Box<Expression> = {
     <start: @L> "true" <end: @R> =>         Expression::fresh(start, E::Bool(true), end),
     <start: @L> "false" <end: @R> =>        Expression::fresh(start, E::Bool(false), end),
     <start: @L> <val: "float"> <end: @R> => Expression::fresh(start, E::F64(val), end),
-    <start: @L> <val: "int"> <end: @R> =>   Expression::fresh(start, E::I64(val, Ind::constant(val)), end),
+    <start: @L> <val: "int"> <end: @R> =>   Expression::fresh(start, E::I64(val, Some(Ind::constant(val))), end),
 
     <start: @L> <name: "identifier"> <type_args: IdentifierTypeParams?> <end: @R>
         => Expression::fresh(start, E::Ident(name, type_args.map(|type_args|

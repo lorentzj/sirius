@@ -13,7 +13,7 @@ pub fn parse(code: String) -> String {
 
     let mut state = parser::parse(&code);
 
-    typechecker::typecheck(&mut state, &stdlib());
+    typechecker::typecheck(&mut state, stdlib());
 
     serde_json::to_string(&state).unwrap()
 }
@@ -25,11 +25,11 @@ pub fn interpret(code: String) -> String {
     let mut state = parser::parse(&code);
     let stdlib = stdlib();
 
-    typechecker::typecheck(&mut state, &stdlib);
+    typechecker::typecheck(&mut state, stdlib);
 
     if state.errors.is_empty() {
         let output = if state.errors.is_empty() {
-            interpreter::interpret(state.ast, &stdlib)
+            interpreter::interpret(state.ast)
         } else {
             interpreter::InterpreterOutput {
                 stdout: "".into(),

@@ -3,29 +3,29 @@ use crate::lexer::Op;
 use crate::parser::UnaryOp;
 use crate::parser::{Expression, Statement, AST, E, S};
 use crate::scope::Scope;
-use crate::stdlib::ExternalGlobals;
 use std::collections::HashMap;
 
 use serde::Serialize;
 
 mod number_coersion;
+mod stdlib_impl;
 mod value;
 
-pub type ExternalFunctionPointer = fn(&[Value]) -> Option<Value>;
+pub type ExternalFunctionPointer<'a> = fn(Vec<Value<'a>>) -> Option<Value<'a>>;
 
 use value::print_value;
 pub use value::Value;
 
 #[derive(Serialize)]
-pub struct InterpreterOutput {
+pub struct InterpreterOutput<'a> {
     pub stdout: String,
     pub error: Option<Error>,
 
     #[serde(skip_serializing)]
-    pub value: Option<Value>,
+    pub value: Option<Value<'a>>,
 }
 
-fn execute_bin_op(lhs: Value, rhs: Value, op: &Op) -> Value {
+fn execute_bin_op<'a>(lhs: Value<'a>, rhs: Value<'a>, op: &Op) -> Value<'a> {
     match &op {
         Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp | Op::Greater | Op::Less => {
             number_coersion::arith_coerce(lhs, op, rhs)
@@ -93,12 +93,12 @@ fn execute_bin_op(lhs: Value, rhs: Value, op: &Op) -> Value {
     }
 }
 
-pub fn interpret_expression(
+pub fn interpret_expression<'a>(
     expression: &Expression,
-    scope: &mut Scope<Value>,
-    globals: &HashMap<String, Value>,
-    output: &mut InterpreterOutput,
-) -> Value {
+    scope: &mut Scope<Value<'a>>,
+    globals: &HashMap<String, Value<'a>>,
+    output: &mut InterpreterOutput<'a>,
+) -> Value<'a> {
     match &expression.data {
         E::F64(val) => Value::F64(*val),
         E::I64(val, _) => Value::I64(*val),
@@ -168,7 +168,7 @@ pub fn interpret_expression(
                     inner_scope.insert(arg_name.clone(), arg_value);
                 }
 
-                interpret_block(&body, &mut inner_scope, globals, output);
+                interpret_block(body, &mut inner_scope, globals, output);
 
                 output.value.as_ref().unwrap().clone()
             }
@@ -177,7 +177,7 @@ pub fn interpret_expression(
                     .iter()
                     .map(|arg| interpret_expression(arg, scope, globals, output))
                     .collect();
-                function_pointer(&arg_values).unwrap()
+                function_pointer(arg_values).unwrap()
             }
             _ => panic!(),
         },
@@ -186,11 +186,11 @@ pub fn interpret_expression(
     }
 }
 
-fn interpret_block(
-    block: &[Statement],
-    scope: &mut Scope<Value>,
-    globals: &HashMap<String, Value>,
-    output: &mut InterpreterOutput,
+fn interpret_block<'a>(
+    block: &'a [Statement],
+    scope: &mut Scope<Value<'a>>,
+    globals: &HashMap<String, Value<'a>>,
+    output: &mut InterpreterOutput<'a>,
 ) -> bool {
     scope.push();
 
@@ -267,36 +267,42 @@ fn interpret_block(
     true
 }
 
-pub fn interpret(ast: AST, externals: &ExternalGlobals) -> InterpreterOutput {
+pub fn interpret(ast: AST) -> InterpreterOutput<'static> {
     let mut output = InterpreterOutput {
         stdout: String::new(),
         value: None,
         error: None,
     };
 
-    let mut globals = HashMap::<String, Value>::default();
+    let mut globals = stdlib_impl::stdlib();
 
-    for (name, (_, val)) in externals {
-        globals.insert(name.clone(), val.clone());
-    }
-
-    for (name, function) in ast.into_iter() {
-        globals.insert(name, Value::Function(function.arg_names(), function.body));
+    for (name, function) in ast.iter() {
+        globals.insert(
+            name.clone(),
+            Value::Function(function.arg_names(), &function.body),
+        );
     }
 
     let main_code = if let Some(Value::Function(_, body)) = globals.get("main") {
-        body.clone()
+        body
     } else {
-        output.error = Some(Error::new(
-            ErrorType::RuntimeError,
-            "no entry point; define function \"main\"".into(),
-            0,
-            0,
-        ));
-        return output;
+        return InterpreterOutput {
+            stdout: String::new(),
+            value: None,
+            error: Some(Error::new(
+                ErrorType::RuntimeError,
+                "no entry point; define function \"main\"".into(),
+                0,
+                0,
+            )),
+        };
     };
 
-    interpret_block(&main_code, &mut Scope::default(), &globals, &mut output);
+    interpret_block(main_code, &mut Scope::default(), &globals, &mut output);
 
-    output
+    InterpreterOutput {
+        stdout: output.stdout,
+        value: None,
+        error: None,
+    }
 }

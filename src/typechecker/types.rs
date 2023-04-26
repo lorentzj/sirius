@@ -24,12 +24,18 @@ type Substitution = (usize, Type);
 pub struct Substitutions(Vec<Substitution>);
 
 impl Substitutions {
-    pub fn push(&mut self, start: usize, sub: Substitution, end: usize) -> Result<(), Error> {
+    pub fn push(
+        &mut self,
+        start: usize,
+        sub: Substitution,
+        end: usize,
+        allow_demote_left: bool,
+    ) -> Result<(), Error> {
         let (sub_i, sub_t) = sub;
 
         for (curr_sub_i, curr_sub_t) in self.0.iter() {
             if *curr_sub_i == sub_i {
-                match curr_sub_t.unify(&sub_t) {
+                match curr_sub_t.unify(&sub_t, allow_demote_left) {
                     Some(_) => return Ok(()),
                     None => {
                         return Err(Error::new(
@@ -48,9 +54,15 @@ impl Substitutions {
         Ok(())
     }
 
-    pub fn extend(&mut self, start: usize, subs: Substitutions, end: usize) -> Result<(), Error> {
+    pub fn extend(
+        &mut self,
+        start: usize,
+        subs: Substitutions,
+        end: usize,
+        allow_demote_left: bool,
+    ) -> Result<(), Error> {
         for sub in subs.0 {
-            self.push(start, sub, end)?;
+            self.push(start, sub, end, allow_demote_left)?;
         }
 
         Ok(())
@@ -144,7 +156,7 @@ impl Type {
         }
     }
 
-    pub fn unify(&self, other: &Type) -> Option<Substitutions> {
+    pub fn unify(&self, other: &Type, allow_demote_left: bool) -> Option<Substitutions> {
         match self {
             Type::Unknown => Some(Substitutions::new()),
             Type::ForAll(self_i) => match other {
@@ -178,8 +190,8 @@ impl Type {
                         None
                     }
                 }
-                Type::TypeVar(l_name) => {
-                    if let Type::TypeVar(r_name) = self {
+                Type::TypeVar(r_name) => {
+                    if let Type::TypeVar(l_name) = self {
                         if l_name == r_name {
                             Some(Substitutions::new())
                         } else {
@@ -197,11 +209,12 @@ impl Type {
                             None
                         }
                     }
-                    Type::I64(None) => Some(Substitutions::new()),
                     _ => None,
                 },
                 Type::I64(None) => {
-                    if matches!(self, Type::I64(_)) {
+                    if matches!(self, Type::I64(None))
+                        || (matches!(self, Type::I64(_)) && allow_demote_left)
+                    {
                         Some(Substitutions::new())
                     } else {
                         None
@@ -215,7 +228,15 @@ impl Type {
                         } else {
                             let mut subs = Substitutions::new();
                             for (l_type, r_type) in l_types.iter().zip(r_types) {
-                                if subs.extend(0, Type::unify(l_type, r_type)?, 0).is_err() {
+                                if subs
+                                    .extend(
+                                        0,
+                                        Type::unify(l_type, r_type, allow_demote_left)?,
+                                        0,
+                                        allow_demote_left,
+                                    )
+                                    .is_err()
+                                {
                                     return None;
                                 }
                             }
@@ -233,12 +254,28 @@ impl Type {
                         } else {
                             let mut subs = Substitutions::new();
                             for (l_type, r_type) in l_i.iter().zip(r_i) {
-                                if subs.extend(0, Type::unify(l_type, r_type)?, 0).is_err() {
+                                if subs
+                                    .extend(
+                                        0,
+                                        Type::unify(l_type, r_type, allow_demote_left)?,
+                                        0,
+                                        allow_demote_left,
+                                    )
+                                    .is_err()
+                                {
                                     return None;
                                 }
                             }
 
-                            if subs.extend(0, Type::unify(l_o, r_o)?, 0).is_err() {
+                            if subs
+                                .extend(
+                                    0,
+                                    Type::unify(l_o, r_o, allow_demote_left)?,
+                                    0,
+                                    allow_demote_left,
+                                )
+                                .is_err()
+                            {
                                 None
                             } else {
                                 Some(subs)
@@ -249,6 +286,114 @@ impl Type {
                     }
                 }
             },
+        }
+    }
+
+    pub fn unify_assign(&mut self, other: &Type) -> Option<Substitutions> {
+        match self {
+            Type::Tuple(l_types) => match other {
+                Type::Tuple(r_types) => {
+                    if l_types.len() != r_types.len() {
+                        None
+                    } else {
+                        let mut subs = Substitutions::new();
+                        for (l_type, r_type) in l_types.iter_mut().zip(r_types) {
+                            if subs
+                                .extend(0, l_type.unify_assign(r_type)?, 0, false)
+                                .is_err()
+                            {
+                                return None;
+                            }
+                        }
+
+                        Some(subs)
+                    }
+                }
+                _ => self.unify(other, false),
+            },
+            Type::I64(Some(lhs_ind)) => match other {
+                Type::I64(Some(rhs_ind)) => {
+                    if lhs_ind != rhs_ind {
+                        if lhs_ind.strict {
+                            None
+                        } else {
+                            *lhs_ind = rhs_ind.clone();
+                            lhs_ind.dirty = true;
+                            Some(Substitutions::new())
+                        }
+                    } else {
+                        Some(Substitutions::new())
+                    }
+                }
+                _ => self.unify(other, false),
+            },
+            _ => self.unify(other, false),
+        }
+    }
+
+    pub fn unify_ann(&self, ann: &Type) -> Option<Substitutions> {
+        match self {
+            Type::Tuple(l_types) => match ann {
+                Type::Tuple(r_types) => {
+                    if l_types.len() != r_types.len() {
+                        None
+                    } else {
+                        let mut subs = Substitutions::new();
+                        for (l_type, r_type) in l_types.iter().zip(r_types) {
+                            if subs.extend(0, l_type.unify_ann(r_type)?, 0, false).is_err() {
+                                return None;
+                            }
+                        }
+
+                        Some(subs)
+                    }
+                }
+                _ => self.unify(ann, false),
+            },
+            Type::I64(Some(lhs_ind)) => match ann {
+                Type::I64(Some(rhs_ind)) => {
+                    if lhs_ind == rhs_ind {
+                        Some(Substitutions::new())
+                    } else {
+                        None
+                    }
+                }
+                Type::I64(None) => Some(Substitutions::new()),
+                _ => self.unify(ann, false),
+            },
+            _ => self.unify(ann, false),
+        }
+    }
+
+    pub fn apply_ann(&self, ann: &Type) -> Option<Type> {
+        let new = self.clone();
+        match new {
+            Type::Tuple(mut l_types) => match ann {
+                Type::Tuple(r_types) => {
+                    if l_types.len() != r_types.len() {
+                        None
+                    } else {
+                        for (l_type, r_type) in l_types.iter_mut().zip(r_types) {
+                            *l_type = l_type.apply_ann(r_type)?;
+                        }
+
+                        Some(Type::Tuple(l_types))
+                    }
+                }
+                _ => None,
+            },
+            Type::I64(Some(mut lhs_ind)) => match ann {
+                Type::I64(Some(rhs_ind)) => {
+                    if &lhs_ind == rhs_ind {
+                        lhs_ind.strict = true;
+                        Some(Type::I64(Some(lhs_ind)))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            },
+            _ => None,
         }
     }
 }
@@ -340,6 +485,22 @@ impl fmt::Debug for Type {
     }
 }
 
+pub fn demote_dirty(t: &mut Type) {
+    match t {
+        Type::I64(Some(ind)) => {
+            if ind.dirty {
+                *t = Type::I64(None)
+            }
+        }
+        Type::Tuple(ts) => {
+            for t in ts {
+                demote_dirty(t)
+            }
+        }
+        _ => (),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::usize_name;
@@ -368,7 +529,7 @@ mod tests {
         assert_eq!(format!("{:?}", Type::F64), "f64");
         assert_eq!(format!("{:?}", Type::I64(None)), "i64");
         assert_eq!(
-            format!("{:?}", Type::I64(Some(Ind::constant(1).unwrap()))),
+            format!("{:?}", Type::I64(Some(Ind::constant(1)))),
             "i64(ind=1)"
         );
         assert_eq!(format!("{:?}", Type::TypeVar("T".to_string())), "T");

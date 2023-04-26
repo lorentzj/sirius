@@ -43,6 +43,7 @@ document.body.onload = () => {
             output_area.initializeOutputArea(displayErrorsElem, displayLogElem, errorElem, logElem);
             const updateEditor = () => {
                 const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n')));
+                console.log(parsed);
                 parsed.typeTokens = new Set(parsed.typeTokens);
                 let hl_map = new Map();
                 Object.keys(parsed.highlightMap).forEach(key => {
