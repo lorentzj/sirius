@@ -89,7 +89,13 @@ fn execute_bin_op<'a>(lhs: Value<'a>, rhs: Value<'a>, op: &Op) -> Value<'a> {
         Op::Tick => panic!(),
         Op::Not => panic!(),
         Op::Apply => panic!(),
-        Op::Dot => panic!(),
+        Op::Dot => match lhs {
+            Value::Tuple(v) => match rhs {
+                Value::I64(i) => v[i as usize].clone(),
+                _ => panic!(),
+            },
+            _ => panic!(),
+        },
     }
 }
 
@@ -128,18 +134,8 @@ pub fn interpret_expression<'a>(
 
         E::UnaryOp(UnaryOp::Tick, _) => panic!(),
 
-        E::Accessor(lhs, rhs) => {
-            let (lhs, rhs) = (
-                interpret_expression(lhs, scope, globals, output),
-                interpret_expression(rhs, scope, globals, output),
-            );
-            match lhs {
-                Value::Tuple(v) => match rhs {
-                    Value::I64(i) => v[i as usize].clone(),
-                    _ => panic!(),
-                },
-                _ => panic!(),
-            }
+        E::Accessor(_, _) => {
+            panic!()
         }
 
         E::Ident(name, _) => match scope.get(name) {

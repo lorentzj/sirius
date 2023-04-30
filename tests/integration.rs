@@ -46,7 +46,7 @@ fn main():
     if a == b:
         print true
 
-    if a[2][1] == b[0] + 3:
+    if a.2.1 == b.0 + 3:
         print true"
         .into();
 
@@ -124,10 +124,4 @@ fn main():
     for token in output.tokens[50..53].iter() {
         println!("{:?}", token);
     }
-
-    // let output = wasm::interpret(code);
-    // assert_eq!(
-    //     output,
-    //     "{\"stdout\":\"true\\n(1, 2)\\ntrue\\n1\\n2\\n3\\n\",\"error\":null}"
-    // );
 }

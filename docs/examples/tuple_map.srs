@@ -1,5 +1,5 @@
 fn three_tuple_map{A, B}(x: (A, A, A), f: A->B) -> (B, B, B):
-    return (f(x[0]), f(x[1]), f(x[2]))
+    return (f(x.0), f(x.1), f(x.2))
 
 fn map_test_1(x: f64) -> bool:
     return x > 0

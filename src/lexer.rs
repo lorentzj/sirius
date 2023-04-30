@@ -128,63 +128,6 @@ impl fmt::Debug for Tok {
     }
 }
 
-fn parse_substring(s: &str) -> Result<Tok, String> {
-    return if s == "let" {
-        Ok(Tok::Keyword(Keyword::Let))
-    } else if s == "print" {
-        Ok(Tok::Keyword(Keyword::Print))
-    } else if s == "if" {
-        Ok(Tok::Keyword(Keyword::If))
-    } else if s == "else" {
-        Ok(Tok::Keyword(Keyword::Else))
-    } else if s == "true" {
-        Ok(Tok::Keyword(Keyword::True))
-    } else if s == "false" {
-        Ok(Tok::Keyword(Keyword::False))
-    } else if s == "fn" {
-        Ok(Tok::Keyword(Keyword::Fn))
-    } else if s == "return" {
-        Ok(Tok::Keyword(Keyword::Return))
-    } else if s == "for" {
-        Ok(Tok::Keyword(Keyword::For))
-    } else if s == "from" {
-        Ok(Tok::Keyword(Keyword::From))
-    } else if s == "to" {
-        Ok(Tok::Keyword(Keyword::To))
-    } else if s == "yield" {
-        Ok(Tok::Keyword(Keyword::Yield))
-    } else {
-        match s.chars().next() {
-            Some('0'..='9') => {
-                if s.contains('.') {
-                    let parsed_number = String::from_iter(s.chars()).parse::<f64>();
-                    match parsed_number {
-                        Ok(n) => {
-                            if n.is_infinite() {
-                                Err("number overflowed f64".into())
-                            } else {
-                                Ok(Tok::Float(n))
-                            }
-                        }
-                        Err(msg) => Err(msg.to_string()),
-                    }
-                } else {
-                    let parsed_number = String::from_iter(s.chars()).parse::<i64>();
-                    match parsed_number {
-                        Ok(n) => Ok(Tok::Int(n)),
-                        Err(msg) => Err(msg.to_string()),
-                    }
-                }
-            }
-            _ => match s {
-                "let" => Ok(Tok::Keyword(Keyword::Let)),
-                "print" => Ok(Tok::Keyword(Keyword::Print)),
-                _ => Ok(Tok::Identifier(s.into())),
-            },
-        }
-    };
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Token {
     pub data: Tok,
@@ -204,22 +147,93 @@ impl Token {
     }
 }
 
-// fn only_whitespace_line(code: &str, from: usize) -> bool {
-//     let mut i = from + 1;
-//     while i < code.len() {
-//         if code.chars().nth(i).unwrap() == '\n' {
-//             return true;
-//         }
+fn parse_keyword(s: &str) -> Option<Tok> {
+    match s {
+        "let" => Some(Tok::Keyword(Keyword::Let)),
+        "print" => Some(Tok::Keyword(Keyword::Print)),
+        "if" => Some(Tok::Keyword(Keyword::If)),
+        "else" => Some(Tok::Keyword(Keyword::Else)),
+        "true" => Some(Tok::Keyword(Keyword::True)),
+        "false" => Some(Tok::Keyword(Keyword::False)),
+        "fn" => Some(Tok::Keyword(Keyword::Fn)),
+        "return" => Some(Tok::Keyword(Keyword::Return)),
+        "for" => Some(Tok::Keyword(Keyword::For)),
+        "from" => Some(Tok::Keyword(Keyword::From)),
+        "to" => Some(Tok::Keyword(Keyword::To)),
+        "yield" => Some(Tok::Keyword(Keyword::Yield)),
+        _ => None,
+    }
+}
 
-//         if code.chars().nth(i).unwrap() != ' ' {
-//             return false;
-//         }
-
-//         i += 1;
-//     }
-
-//     true
-// }
+fn lex_substring_alpha_num_dec(s: &str, line: usize, start: usize, end: usize) -> Vec<Token> {
+    match parse_keyword(s) {
+        Some(tok) => vec![Token::new(tok, line, start, end)],
+        None => {
+            if s == "." {
+                vec![Token::new(Tok::Op(Op::Dot), line, start, end)]
+            } else {
+                match s.chars().next() {
+                    Some('0'..='9') => {
+                        if s.contains('.') {
+                            let parsed_number = String::from_iter(s.chars()).parse::<f64>();
+                            match parsed_number {
+                                Ok(n) => {
+                                    if n.is_infinite() {
+                                        vec![Token::new(
+                                            Tok::Error("number overflowed f64".into()),
+                                            line,
+                                            start,
+                                            end,
+                                        )]
+                                    } else {
+                                        vec![Token::new(Tok::Float(n), line, start, end)]
+                                    }
+                                }
+                                Err(msg) => {
+                                    vec![Token::new(Tok::Error(msg.to_string()), line, start, end)]
+                                }
+                            }
+                        } else {
+                            let parsed_number = String::from_iter(s.chars()).parse::<i64>();
+                            match parsed_number {
+                                Ok(n) => vec![Token::new(Tok::Int(n), line, start, end)],
+                                Err(msg) => {
+                                    vec![Token::new(Tok::Error(msg.to_string()), line, start, end)]
+                                }
+                            }
+                        }
+                    }
+                    None => vec![],
+                    _ => {
+                        if s.contains('.') {
+                            let mut new_start = start;
+                            let mut res = vec![];
+                            for sub in s.split('.') {
+                                res.extend(lex_substring_alpha_num_dec(
+                                    sub,
+                                    line,
+                                    new_start,
+                                    new_start + sub.len(),
+                                ));
+                                new_start += sub.len() + 1;
+                                res.push(Token::new(
+                                    Tok::Op(Op::Dot),
+                                    line,
+                                    new_start - 1,
+                                    new_start,
+                                ));
+                            }
+                            res.pop();
+                            res
+                        } else {
+                            vec![Token::new(Tok::Identifier(s.to_string()), line, start, end)]
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 pub fn tokenize(code: &str) -> Vec<Token> {
     let mut tokens: Vec<Token> = vec![];
@@ -230,11 +244,10 @@ pub fn tokenize(code: &str) -> Vec<Token> {
     let mut col = 0;
 
     let mut curr_substring_start: Option<usize> = None;
-    let mut curr_substring_all_digits = true;
 
     for (i, char) in code.char_indices() {
         match char {
-            '0'..='9' | 'A'..='Z' | 'a'..='z' | '\u{0370}'..='\u{03FF}' | '_' => {
+            '0'..='9' | 'A'..='Z' | 'a'..='z' | '\u{0370}'..='\u{03FF}' | '_' | '.' => {
                 if let Some(spaces) = indent_spaces {
                     if spaces % 4 == 0 {
                         let curr_indent_level = spaces / 4;
@@ -263,30 +276,20 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                 indent_spaces = None;
                 if curr_substring_start.is_none() {
                     curr_substring_start = Some(i);
-                    curr_substring_all_digits &= char.is_ascii_digit();
                 }
 
                 col += 1;
             }
             _ => {
                 if let Some(curr_ss) = curr_substring_start {
-                    if char == '.' && curr_substring_all_digits {
-                        col += 1;
-                        continue;
-                    }
+                    tokens.extend(lex_substring_alpha_num_dec(
+                        &code[curr_ss..i],
+                        line,
+                        col - (i - curr_ss),
+                        col,
+                    ));
 
-                    curr_substring_all_digits = true;
                     curr_substring_start = None;
-
-                    match parse_substring(&code[curr_ss..i]) {
-                        Ok(token_type) => {
-                            tokens.push(Token::new(token_type, line, col + curr_ss - i, col))
-                        }
-
-                        Err(msg) => {
-                            tokens.push(Token::new(Tok::Error(msg), line, col + curr_ss - i, col));
-                        }
-                    }
                 }
 
                 if char == '\n' {
@@ -424,22 +427,13 @@ pub fn tokenize(code: &str) -> Vec<Token> {
         }
     }
 
-    if let Some(curr_substring_start) = curr_substring_start {
-        match parse_substring(&code[curr_substring_start..]) {
-            Ok(token_type) => tokens.push(Token::new(
-                token_type,
-                line,
-                col + curr_substring_start - code.len(),
-                col,
-            )),
-
-            Err(msg) => tokens.push(Token::new(
-                Tok::Error(msg),
-                line,
-                col + curr_substring_start - code.len(),
-                col,
-            )),
-        }
+    if let Some(curr_ss) = curr_substring_start {
+        tokens.extend(lex_substring_alpha_num_dec(
+            &code[curr_ss..code.len()],
+            line,
+            col - (code.len() - curr_ss),
+            col,
+        ));
     }
 
     if prev_indent_level > 0 {
@@ -590,9 +584,7 @@ d e f
             Token::new(Tok::NewLine, 9, 0, 0),
         ];
 
-        for (a, b) in tokens.iter().zip(expected_tokens) {
-            assert_eq!(a, &b);
-        }
+        assert_eq!(tokens, expected_tokens);
     }
 
     #[test]
@@ -606,8 +598,52 @@ d e f
     ";
         let tokens = tokenize(test_str);
 
-        for token in tokens {
-            println!("{token:?}");
-        }
+        let expected_tokens = vec![
+            Token::new(Tok::NewLine, 1, 0, 0),
+            Token::new(Tok::Indent, 1, 0, 0),
+            Token::new(Tok::Identifier("a".into()), 1, 4, 5),
+            Token::new(Tok::Identifier("b".into()), 1, 6, 7),
+            Token::new(Tok::Identifier("c".into()), 1, 8, 9),
+            Token::new(Tok::OpenParen, 1, 9, 10),
+            Token::new(Tok::Identifier("d".into()), 1, 10, 11),
+            Token::new(Tok::CloseParen, 1, 11, 12),
+            Token::new(Tok::NewLine, 2, 0, 0),
+            Token::new(Tok::Indent, 2, 0, 0),
+            Token::new(Tok::Identifier("e".into()), 2, 8, 9),
+            Token::new(Tok::Identifier("f".into()), 2, 10, 11),
+            Token::new(Tok::OpenCurly, 2, 12, 13),
+            Token::new(Tok::Identifier("g".into()), 3, 12, 13),
+            Token::new(Tok::Identifier("h".into()), 3, 14, 15),
+            Token::new(Tok::Identifier("i".into()), 3, 16, 17),
+            Token::new(Tok::CloseCurly, 4, 8, 9),
+            Token::new(Tok::NewLine, 5, 0, 0),
+            Token::new(Tok::Dedent, 5, 0, 0),
+            Token::new(Tok::Identifier("j".into()), 5, 4, 5),
+            Token::new(Tok::NewLine, 6, 0, 0),
+            Token::new(Tok::NewLine, 6, 4, 4),
+            Token::new(Tok::Dedent, 6, 4, 4),
+        ];
+
+        assert_eq!(tokens, expected_tokens);
+    }
+
+    #[test]
+    fn repeated_dot_op() {
+        let test_str = "aa.bb.1.2 . 3".to_string();
+        let tokens = tokenize(&test_str);
+
+        let expected_tokens = vec![
+            Token::new(Tok::Identifier("aa".into()), 0, 0, 2),
+            Token::new(Tok::Op(Op::Dot), 0, 2, 3),
+            Token::new(Tok::Identifier("bb".into()), 0, 3, 5),
+            Token::new(Tok::Op(Op::Dot), 0, 5, 6),
+            Token::new(Tok::Int(1), 0, 6, 7),
+            Token::new(Tok::Op(Op::Dot), 0, 7, 8),
+            Token::new(Tok::Int(2), 0, 8, 9),
+            Token::new(Tok::Op(Op::Dot), 0, 10, 11),
+            Token::new(Tok::Int(3), 0, 12, 13),
+        ];
+
+        assert_eq!(tokens, expected_tokens);
     }
 }

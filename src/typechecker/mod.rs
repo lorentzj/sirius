@@ -181,24 +181,26 @@ mod tests {
     #[test]
     fn basic_typecheck() {
         let code = "
-
 fn three_tuple_map{A, B}(x: (A, A, A), f: A->B) -> (B, B, B):
-    return (f(x[0]), f(x[1]), f(x[2]))
-
+    return (f(x.0), f(x.1), f(x.2))
 fn map_test_1(x: f64) -> bool:
     return x > 0
-
 fn map_test_2(x: f64) -> i64:
-    return 1
-
+    if x > 0:
+        return 1
+    else:
+        return -1
 fn main():
     let a = (1., -1., -0.34)
+    print three_tuple_map(a, map_test_1)
+    print three_tuple_map{f64}(a, map_test_1)
+    print three_tuple_map{f64, bool}(a, map_test_1)
+    print three_tuple_map{_, bool}(a, map_test_1)
+    print three_tuple_map(a, map_test_2)
         ";
 
         let mut state = parse(code);
         typecheck(&mut state, HashMap::default());
-
-        println!("{:?}", state.errors);
 
         assert!(state.errors.is_empty());
     }
@@ -225,7 +227,7 @@ fn main():
     fn error_param_generic() {
         let code = "
 fn three_tuple_map{A, B}(x: (A, A, A), f: A->B) -> (B, B, B):
-    return (f(x[0]), f(x[1]), f(x[2]))
+    return (f(x.0), f(x.1), f(x.2))
 fn map_test(x: i64) -> bool:
     return x > 0
 fn main():
@@ -262,7 +264,7 @@ fn main():
 fn dbl{A}(a: A) -> (A, A):
     return (a, a)
 fn main():
-    let x = dbl{(_, bool)}((5, true))[0][1] || 1
+    let x = dbl{(_, bool)}((5, true)).0.1 || 1
     print x
 ";
 
