@@ -9,7 +9,7 @@ pub fn check_fn_args(function: &Function) -> Vec<Error> {
     for type_arg in function.type_args.iter() {
         if type_arg_names.contains(&type_arg.inner) {
             errors.push(Error::new(
-                ErrorType::NameError,
+                ErrorType::Name,
                 format!("duplicate type argument name \"{}\"", type_arg.inner),
                 type_arg.start,
                 type_arg.end,
@@ -23,7 +23,7 @@ pub fn check_fn_args(function: &Function) -> Vec<Error> {
     for (arg, _) in function.args.iter() {
         if arg_names.contains(&arg.inner) {
             errors.push(Error::new(
-                ErrorType::NameError,
+                ErrorType::Name,
                 format!("duplicate argument name \"{}\"", arg.inner),
                 arg.start,
                 arg.end,
@@ -32,7 +32,7 @@ pub fn check_fn_args(function: &Function) -> Vec<Error> {
 
         if type_arg_names.contains(&arg.inner) {
             errors.push(Error::new(
-                ErrorType::NameError,
+                ErrorType::Name,
                 format!("duplicate argument/type argument name \"{}\"", arg.inner),
                 arg.start,
                 arg.end,
@@ -45,7 +45,7 @@ pub fn check_fn_args(function: &Function) -> Vec<Error> {
     if function.name == "main" {
         if !function.type_args.is_empty() {
             errors.push(Error::new(
-                ErrorType::TypeError,
+                ErrorType::Type,
                 format!(
                     "function \"main\" must have type \"{:?}\"",
                     Type::Function(vec![], vec![], Box::new(Type::Void))
@@ -57,7 +57,7 @@ pub fn check_fn_args(function: &Function) -> Vec<Error> {
 
         if !function.args.is_empty() {
             errors.push(Error::new(
-                ErrorType::TypeError,
+                ErrorType::Type,
                 format!(
                     "function \"main\" must have type \"{:?}\"",
                     Type::Function(vec![], vec![], Box::new(Type::Void))
@@ -69,7 +69,7 @@ pub fn check_fn_args(function: &Function) -> Vec<Error> {
 
         if function.return_type.inner != Type::Void {
             errors.push(Error::new(
-                ErrorType::TypeError,
+                ErrorType::Type,
                 format!(
                     "function \"main\" must have type \"{:?}\"",
                     Type::Function(vec![], vec![], Box::new(Type::Void))

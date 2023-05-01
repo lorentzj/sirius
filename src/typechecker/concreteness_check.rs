@@ -6,7 +6,7 @@ fn check_expr_for_foralls(expression: &Expression) -> Vec<Error> {
 
     if !expression.t.forall_vars().is_empty() {
         errors.push(Error::new(
-            ErrorType::TypeError,
+            ErrorType::Type,
             format!(
                 "type \"{:?}\" is not concrete; try adding annotations or type arguments",
                 expression.t

@@ -99,6 +99,7 @@ pub enum Tok {
     Assign,
     Semicolon,
     Colon,
+    Comment,
     Error(String),
 }
 
@@ -123,6 +124,7 @@ impl fmt::Debug for Tok {
             Tok::Semicolon => write!(f, ";"),
             Tok::Colon => write!(f, ":"),
             Tok::Pound => write!(f, "#"),
+            Tok::Comment => write!(f, "comment"),
             Tok::Error(m) => write!(f, "error({m})"),
         }
     }
@@ -239,6 +241,7 @@ pub fn tokenize(code: &str) -> Vec<Token> {
     let mut tokens: Vec<Token> = vec![];
     let mut bracket_level = (0, 0, 0);
     let mut indent_spaces: Option<usize> = None;
+    let mut commenting = false;
     let mut prev_indent_level = 0;
     let mut line = 0;
     let mut col = 0;
@@ -246,6 +249,23 @@ pub fn tokenize(code: &str) -> Vec<Token> {
     let mut curr_substring_start: Option<usize> = None;
 
     for (i, char) in code.char_indices() {
+        if commenting {
+            if char == '\n' {
+                commenting = false;
+            } else {
+                if let Some(Token {
+                    data: Tok::Comment,
+                    end,
+                    ..
+                }) = tokens.last_mut()
+                {
+                    *end += 1;
+                }
+                col += 1;
+                continue;
+            }
+        }
+
         match char {
             '0'..='9' | 'A'..='Z' | 'a'..='z' | '\u{0370}'..='\u{03FF}' | '_' | '.' => {
                 if let Some(spaces) = indent_spaces {
@@ -376,7 +396,20 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                     '\'' => Token::new(Tok::Op(Op::Tick), line, col - 1, col),
                     '^' => Token::new(Tok::Op(Op::Exp), line, col - 1, col),
                     '*' => Token::new(Tok::Op(Op::Mul), line, col - 1, col),
-                    '/' => Token::new(Tok::Op(Op::Div), line, col - 1, col),
+                    '/' => {
+                        if let Some(Token {
+                            data: Tok::Op(Op::Div),
+                            start,
+                            ..
+                        }) = tokens.last()
+                        {
+                            should_pop = true;
+                            commenting = true;
+                            Token::new(Tok::Comment, line, *start, col)
+                        } else {
+                            Token::new(Tok::Op(Op::Div), line, col - 1, col)
+                        }
+                    }
                     '+' => Token::new(Tok::Op(Op::Add), line, col - 1, col),
                     '-' => Token::new(Tok::Op(Op::Sub), line, col - 1, col),
                     '&' => Token::new(Tok::Op(Op::And), line, col - 1, col),

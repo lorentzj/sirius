@@ -5,11 +5,14 @@
 #[macro_use]
 extern crate lalrpop_util;
 
-pub mod error;
-pub mod interpreter;
-pub mod lexer;
-pub mod parser;
-pub mod scope;
+mod error;
+mod lexer;
+mod scope;
+
 pub mod stdlib;
+
+pub mod interpreter;
+pub mod parser;
 pub mod typechecker;
+
 pub mod wasm;

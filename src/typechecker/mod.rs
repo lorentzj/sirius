@@ -220,7 +220,7 @@ fn main():
         let mut state = parse(code);
         typecheck(&mut state, HashMap::default());
 
-        assert_eq!(ErrorType::TypeError, state.errors[0].error_type);
+        assert_eq!(ErrorType::Type, state.errors[0].error_type);
     }
 
     #[test]
@@ -238,7 +238,7 @@ fn main():
         let mut state = parse(code);
         typecheck(&mut state, HashMap::default());
 
-        assert_eq!(ErrorType::TypeError, state.errors[0].error_type);
+        assert_eq!(ErrorType::Type, state.errors[0].error_type);
     }
 
     #[test]
@@ -271,7 +271,7 @@ fn main():
         let mut state = parse(code);
         typecheck(&mut state, HashMap::default());
 
-        assert_eq!(ErrorType::TypeError, state.errors[0].error_type);
+        assert_eq!(ErrorType::Type, state.errors[0].error_type);
     }
 
     #[test]
@@ -286,6 +286,6 @@ fn main():
         let mut state = parse(code);
         typecheck(&mut state, HashMap::default());
 
-        assert_eq!(ErrorType::TypeError, state.errors[0].error_type);
+        assert_eq!(ErrorType::Type, state.errors[0].error_type);
     }
 }

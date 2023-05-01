@@ -114,7 +114,7 @@ pub fn populate_annotation(
                 Ok(Type::ForAll(*curr_forall_var - 1))
             } else {
                 Err(Error::new(
-                    ErrorType::TypeError,
+                    ErrorType::Type,
                     "cannot use wildcard here".into(),
                     0,
                     0,
@@ -126,7 +126,7 @@ pub fn populate_annotation(
                 Ok(Type::TypeVar(name.clone()))
             } else {
                 Err(Error::new(
-                    ErrorType::TypeError,
+                    ErrorType::Type,
                     format!("type \"{name}\" not found in context"),
                     0,
                     0,
@@ -220,7 +220,7 @@ fn initialize_expression_types(
                         if let Some(type_args) = type_args {
                             if function_type_vars.len() < type_args.len() {
                                 errors.push(Error::new(
-                                    ErrorType::TypeError,
+                                    ErrorType::Type,
                                     format!(
                                         "expected {} maximum type arguments; found {}",
                                         function_type_vars.len(),
@@ -259,7 +259,7 @@ fn initialize_expression_types(
                     _ => {
                         if type_args.is_some() {
                             errors.push(Error::new(
-                                ErrorType::TypeError,
+                                ErrorType::Type,
                                 "type arguments only allowed for functions".into(),
                                 expression.start,
                                 expression.end,
@@ -273,7 +273,7 @@ fn initialize_expression_types(
             }
             None => {
                 errors.push(Error::new(
-                    ErrorType::UnboundIdentifierError,
+                    ErrorType::UnboundIdentifier,
                     format!("identifier \"{name}\" not found in scope"),
                     expression.start,
                     expression.end,
@@ -317,14 +317,14 @@ pub fn initialize_statement_types(
 
             if context.get(&place.inner).is_none() {
                 errors.push(Error::new(
-                    ErrorType::UnboundIdentifierError,
+                    ErrorType::UnboundIdentifier,
                     format!("identifier \"{}\" not found in scope", place.inner),
                     place.start,
                     place.end,
                 ));
             } else if context.is_global(&place.inner) {
                 errors.push(Error::new(
-                    ErrorType::MutationError,
+                    ErrorType::Mutation,
                     format!("\"{}\" is global and cannot be mutated", place.inner),
                     place.start,
                     place.end,

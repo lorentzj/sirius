@@ -51,7 +51,7 @@ export function updateErrorELement(displayErrorsElem, errorElem, errors, tokens)
         }
         errorPositionElement.classList.add('error_position');
         const errorTypeElement = document.createElement('span');
-        errorTypeElement.innerText = error.error_type;
+        errorTypeElement.innerText = error.error_type + 'Error';
         errorTypeElement.classList.add('error_type');
         const errorMessageElement = parseErrorMessage(error.message);
         errorRowSummaryElem.appendChild(errorPositionElement);

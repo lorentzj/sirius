@@ -189,6 +189,10 @@ span.token.highlight {
     background-color: rgb(81, 81, 80);
 }
 
+span.token.comment {
+    color: rgb(176, 176, 176);
+}
+
 span.token.const {
     color: rgb(137, 197, 253);
 }

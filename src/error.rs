@@ -2,14 +2,14 @@ use serde::Serialize;
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum ErrorType {
-    ParseError,
-    TypeError,
-    NameError,
-    UnboundIdentifierError,
-    MutationError,
-    FlowError,
-    RuntimeError,
-    NotImplementedError,
+    Syntax,
+    Type,
+    Name,
+    UnboundIdentifier,
+    Flow,
+    Mutation,
+    Runtime,
+    NotImplemented,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize)]

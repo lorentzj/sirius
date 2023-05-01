@@ -29,7 +29,7 @@ pub fn check_flow(ast: &AST) -> Vec<Error> {
             && !check_block_flow_returns(&function.body)
         {
             errors.push(Error::new(
-                ErrorType::FlowError,
+                ErrorType::Flow,
                 format!("function \"{}\" may not always return value", function.name),
                 function.return_type.start,
                 function.return_type.end,

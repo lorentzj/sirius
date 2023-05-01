@@ -286,7 +286,7 @@ pub fn interpret(ast: AST) -> InterpreterOutput<'static> {
             stdout: String::new(),
             value: None,
             error: Some(Error::new(
-                ErrorType::RuntimeError,
+                ErrorType::Runtime,
                 "no entry point; define function \"main\"".into(),
                 0,
                 0,

@@ -17,7 +17,7 @@ fn unify_expression(
         E::F64(_) => Ok(Substitutions::new()),
         E::I64(_, _) => Ok(Substitutions::new()),
         E::Accessor(_, _) => Err(Error::new(
-            ErrorType::NotImplementedError,
+            ErrorType::NotImplemented,
             "array access not implemented yet".into(),
             expression.start,
             expression.end,
@@ -28,7 +28,7 @@ fn unify_expression(
                 _ => match expression.t.unify(var_t) {
                     Some(subs) => Ok(subs),
                     None => Err(Error::new(
-                        ErrorType::TypeError,
+                        ErrorType::Type,
                         format!(
                             "cannot unify types \"{:?}\" and \"{var_t:?}\"",
                             expression.t
@@ -50,7 +50,7 @@ fn unify_expression(
                             Some(s) => subs.extend(expression.start, s, expression.end)?,
                             None => {
                                 return Err(Error::new(
-                                    ErrorType::TypeError,
+                                    ErrorType::Type,
                                     format!(
                                         "cannot unify types \"{:?}\" and \"{:?}\"",
                                         expression.t,
@@ -65,7 +65,7 @@ fn unify_expression(
                             Some(s) => subs.extend(expression.start, s, expression.end)?,
                             None => {
                                 return Err(Error::new(
-                                    ErrorType::TypeError,
+                                    ErrorType::Type,
                                     format!(
                                         "cannot unify types \"{:?}\" and \"{:?}\"",
                                         expression.t,
@@ -78,7 +78,7 @@ fn unify_expression(
                         },
                         t => {
                             return Err(Error::new(
-                                ErrorType::TypeError,
+                                ErrorType::Type,
                                 format!("cannot apply arithmetic negation to type \"{t:?}\""),
                                 expression.start,
                                 expression.end,
@@ -90,7 +90,7 @@ fn unify_expression(
                             Some(s) => subs.extend(expression.start, s, expression.end)?,
                             None => {
                                 return Err(Error::new(
-                                    ErrorType::TypeError,
+                                    ErrorType::Type,
                                     format!(
                                         "cannot unify types \"{:?}\" and \"{:?}\"",
                                         expression.t,
@@ -103,7 +103,7 @@ fn unify_expression(
                         },
                         t => {
                             return Err(Error::new(
-                                ErrorType::TypeError,
+                                ErrorType::Type,
                                 format!("cannot apply boolean negation to type \"{t:?}\""),
                                 expression.start,
                                 expression.end,
@@ -112,7 +112,7 @@ fn unify_expression(
                     },
                     UnaryOp::Tick => {
                         return Err(Error::new(
-                            ErrorType::NotImplementedError,
+                            ErrorType::NotImplemented,
                             "tick operator not implemented yet".into(),
                             expression.start,
                             expression.end,
@@ -140,7 +140,7 @@ fn unify_expression(
                 Some(s) => subs.extend(expression.start, s, expression.end)?,
                 None => {
                     return Err(Error::new(
-                        ErrorType::TypeError,
+                        ErrorType::Type,
                         format!(
                             "cannot unify types \"{:?}\" and \"{tuple_t:?}\"",
                             expression.t
@@ -169,7 +169,7 @@ fn unify_expression(
                         Some(s) => subs.extend(expression.start, s, expression.end)?,
                         None => {
                             return Err(Error::new(
-                                ErrorType::TypeError,
+                                ErrorType::Type,
                                 format!(
                                     "cannot unify types \"{:?}\" and \"{arith_result:?}\"",
                                     expression.t
@@ -186,7 +186,7 @@ fn unify_expression(
                                 Some(s) => subs.extend(expression.start, s, expression.end)?,
                                 None => {
                                     return Err(Error::new(
-                                        ErrorType::TypeError,
+                                        ErrorType::Type,
                                         format!(
                                             "cannot unify types \"{:?}\" and \"{:?}\"",
                                             expression.t,
@@ -199,7 +199,7 @@ fn unify_expression(
                             },
                             Err(msg) => {
                                 return Err(Error::new(
-                                    ErrorType::TypeError,
+                                    ErrorType::Type,
                                     msg,
                                     expression.start,
                                     expression.end,
@@ -214,7 +214,7 @@ fn unify_expression(
                                         E::I64(val, _) => {
                                             if val < 0 || val as usize > lhs_inner.len() {
                                                 return Err(Error::new(
-                                                    ErrorType::TypeError,
+                                                    ErrorType::Type,
                                                     format!(
                                                         "\"{val}\" out of bounds of \"{}\"-tuple",
                                                         lhs_inner.len()
@@ -226,7 +226,7 @@ fn unify_expression(
                                                 match lhs_inner[val as usize].unify(&expression.t) {
                                                     Some(s) => subs.extend(expression.start, s, expression.end)?,
                                                     None => return Err(Error::new(
-                                                        ErrorType::TypeError,
+                                                        ErrorType::Type,
                                                         format!(
                                                             "cannot unify types \"{:?}\" and \"{:?}\"",
                                                             expression.t,
@@ -240,7 +240,7 @@ fn unify_expression(
                                         }
                                         _ => {
                                             return Err(Error::new(
-                                                ErrorType::TypeError,
+                                                ErrorType::Type,
                                                 "tuple members must be literal integers".into(),
                                                 expression.start,
                                                 expression.end,
@@ -251,7 +251,7 @@ fn unify_expression(
                                 Type::ForAll(_) => (),
                                 _ => {
                                     return Err(Error::new(
-                                        ErrorType::TypeError,
+                                        ErrorType::Type,
                                         format!("cannot access member of \"{:?}\"", lhs.t),
                                         expression.start,
                                         expression.end,
@@ -262,7 +262,7 @@ fn unify_expression(
                         Op::And | Op::Or => {
                             if lhs.t != Type::Bool {
                                 return Err(Error::new(
-                                    ErrorType::TypeError,
+                                    ErrorType::Type,
                                     format!(
                                         "cannot apply boolean operator to type \"{:?}\"",
                                         lhs.t
@@ -272,7 +272,7 @@ fn unify_expression(
                                 ));
                             } else if rhs.t != Type::Bool {
                                 return Err(Error::new(
-                                    ErrorType::TypeError,
+                                    ErrorType::Type,
                                     format!(
                                         "cannot apply boolean operator to type \"{:?}\"",
                                         rhs.t
@@ -285,7 +285,7 @@ fn unify_expression(
                                     Some(s) => subs.extend(expression.start, s, expression.end)?,
                                     None => {
                                         return Err(Error::new(
-                                            ErrorType::TypeError,
+                                            ErrorType::Type,
                                             format!(
                                                 "cannot unify types \"{:?}\" and \"{:?}\"",
                                                 expression.t,
@@ -300,7 +300,7 @@ fn unify_expression(
                         }
                         Op::Apply => {
                             return Err(Error::new(
-                                ErrorType::TypeError,
+                                ErrorType::Type,
                                 "cannot use function operator in expression".into(),
                                 expression.start,
                                 expression.end,
@@ -328,7 +328,7 @@ fn unify_expression(
                 Type::Function(type_vars, i, o) => {
                     if i.len() != arg_types.len() {
                         return Err(Error::new(
-                            ErrorType::TypeError,
+                            ErrorType::Type,
                             format!(
                                 "expected {} arguments to function; found {}",
                                 i.len(),
@@ -345,7 +345,7 @@ fn unify_expression(
                                 },
                                 None => {
                                     return Err(Error::new(
-                                        ErrorType::TypeError,
+                                        ErrorType::Type,
                                         format!("cannot unify types \"{given_arg:?}\" and \"{expected_arg:?}\""),
                                         expression.start,
                                         expression.end,
@@ -359,7 +359,7 @@ fn unify_expression(
                         Some(s) => subs.extend(expression.start, s, expression.end)?,
                         None => {
                             return Err(Error::new(
-                                ErrorType::TypeError,
+                                ErrorType::Type,
                                 format!("cannot unify types \"{:?}\" and \"{o:?}\"", expression.t),
                                 expression.start,
                                 expression.end,
@@ -372,7 +372,7 @@ fn unify_expression(
                 Type::ForAll(_) => (),
                 t => {
                     return Err(Error::new(
-                        ErrorType::TypeError,
+                        ErrorType::Type,
                         format!("cannot call type \"{t:?}\" as function"),
                         expression.start,
                         expression.end,
@@ -411,7 +411,7 @@ pub fn unify(
                             Err(error) => errors.push(error),
                         },
                         None => errors.push(Error::new(
-                            ErrorType::TypeError,
+                            ErrorType::Type,
                             format!("cannot unify types \"{var_t:?}\" and \"{:?}\"", val.t),
                             statement.start,
                             statement.end,
@@ -448,7 +448,7 @@ pub fn unify(
                         },
                         None => {
                             errors.push(Error::new(
-                                ErrorType::TypeError,
+                                ErrorType::Type,
                                 format!(
                                     "cannot unify type \"{:?}\" with annotation \"{:?}\"",
                                     val.t, ann.inner
@@ -467,7 +467,7 @@ pub fn unify(
                 Some(val) => {
                     if return_type == &Type::Void {
                         errors.push(Error::new(
-                            ErrorType::TypeError,
+                            ErrorType::Type,
                             "cannot return value from void function".into(),
                             statement.start,
                             statement.end,
@@ -487,7 +487,7 @@ pub fn unify(
                                 Err(error) => errors.push(error),
                             },
                             None => errors.push(Error::new(
-                                ErrorType::TypeError,
+                                ErrorType::Type,
                                 format!(
                                     "cannot unify type \"{:?}\" with return type \"{return_type:?}\"",
                                     val.t
@@ -501,7 +501,7 @@ pub fn unify(
                 None => {
                     if return_type != &Type::Void {
                         errors.push(Error::new(
-                            ErrorType::TypeError,
+                            ErrorType::Type,
                             "cannot return void from non-void function".into(),
                             statement.start,
                             statement.end,
@@ -522,7 +522,7 @@ pub fn unify(
                                 Err(error) => errors.push(error),
                             },
                             None => errors.push(Error::new(
-                                ErrorType::TypeError,
+                                ErrorType::Type,
                                 "condition must be boolean type".into(),
                                 cond.start,
                                 cond.end,
@@ -569,7 +569,7 @@ pub fn unify(
                                 Err(error) => errors.push(error),
                             },
                             None => errors.push(Error::new(
-                                ErrorType::TypeError,
+                                ErrorType::Type,
                                 "iteration start must be integer type".into(),
                                 from.start,
                                 from.end,
@@ -591,7 +591,7 @@ pub fn unify(
                                 Err(error) => errors.push(error),
                             },
                             None => errors.push(Error::new(
-                                ErrorType::TypeError,
+                                ErrorType::Type,
                                 "iteration end must be integer type".into(),
                                 to.start,
                                 to.end,

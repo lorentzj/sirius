@@ -41,7 +41,7 @@ fn expr_to_pos_type(e: &Expression) -> Result<Positioned<Type>, Error> {
     match annotation_type(e) {
         Ok(t) => Ok(Positioned::new(e.start, t, e.end)),
         Err((start, end)) => Err(Error::new(
-            ErrorType::ParseError,
+            ErrorType::Syntax,
             "illegal expression in annotation".to_string(),
             start,
             end,
@@ -229,6 +229,15 @@ pub fn parse(code: &str) -> CompilerState {
         tokens
             .iter()
             .enumerate()
+            .filter(|(_, token)| {
+                !matches!(
+                    token,
+                    Token {
+                        data: Tok::Comment,
+                        ..
+                    }
+                )
+            })
             .map(|(i, token)| Ok((i, token.data.clone(), i + 1))),
     ) {
         Ok(ast) => CompilerState {
@@ -241,20 +250,20 @@ pub fn parse(code: &str) -> CompilerState {
         Err(err) => {
             let error = match err {
                 ParseError::InvalidToken { location } => Error::new(
-                    ErrorType::ParseError,
+                    ErrorType::Syntax,
                     "invalid token".into(),
                     location,
                     location + 1,
                 ),
                 ParseError::UnrecognizedEOF { location, .. } => Error::new(
-                    ErrorType::ParseError,
+                    ErrorType::Syntax,
                     "unexpected EOF".into(),
                     location - 1,
                     location,
                 ),
                 ParseError::UnrecognizedToken { token, .. } | ParseError::ExtraToken { token } => {
                     Error::new(
-                        ErrorType::ParseError,
+                        ErrorType::Syntax,
                         match token.1 {
                             Tok::Identifier(n) => format!("unexpected identifier \"{n}\""),
                             Tok::Op(op) => format!("unexpected operator \"{op:?}\""),

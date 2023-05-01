@@ -33,7 +33,7 @@ impl Substitutions {
                     Some(_) => return Ok(()),
                     None => {
                         return Err(Error::new(
-                            ErrorType::TypeError,
+                            ErrorType::Type,
                             format!("cannot unify types \"{curr_sub_t:?}\" and \"{sub_t:?}\""),
                             start,
                             end,

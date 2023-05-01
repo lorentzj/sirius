@@ -230,12 +230,12 @@ export function updateEditorWithErrors(errors, editorElem) {
             const tokenElem = editorElem.querySelector(tokenSelector);
             if (tokenElem !== null) {
                 tokenElem.classList.add('error');
-                tokenElem.title = `${error.error_type}: ${error.message}`;
+                tokenElem.title = `${error.error_type}Error: ${error.message}`;
                 if (tokenId + 1 < error.end) {
                     const nextElem = tokenElem.nextElementSibling;
                     if (nextElem !== null) {
                         nextElem.classList.add('error');
-                        nextElem.title = `${error.error_type}: ${error.message}`;
+                        nextElem.title = `${error.error_type}Error: ${error.message}`;
                     }
                 }
             }

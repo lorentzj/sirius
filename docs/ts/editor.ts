@@ -253,12 +253,12 @@ export function updateEditorWithErrors(errors: types.Error[], editorElem: HTMLEl
             const tokenElem = editorElem.querySelector(tokenSelector);
             if(tokenElem !== null) {
                 tokenElem.classList.add('error');
-                (tokenElem as HTMLElement).title = `${error.error_type}: ${error.message}`;
+                (tokenElem as HTMLElement).title = `${error.error_type}Error: ${error.message}`;
                 if(tokenId + 1 < error.end) {
                     const nextElem = tokenElem.nextElementSibling;
                     if(nextElem !== null) {
                         nextElem.classList.add('error');
-                        (nextElem as HTMLElement).title = `${error.error_type}: ${error.message}`;        
+                        (nextElem as HTMLElement).title = `${error.error_type}Error: ${error.message}`;        
                     }
                 }
             }
@@ -291,6 +291,7 @@ function createCodeSpan(token: types.Token | null, i: number | null, isType: boo
         } else {
             span.classList.add((token.data as string).toLowerCase());
         }
+
         if(isType) {
             span.classList.add('type');
         }
