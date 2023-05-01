@@ -11,7 +11,7 @@
             <section>
                 <h1>✷✶✦ Sirius ✦✶✷</h1>
 
-                <p>Sirius is an array-oriented programming language for expressing algorithms with strong safety guarantees. Its core design principle is ease-of-use: Sirius programs are easy to read, write, and maintain.</p>
+                <p>Sirius is an array-oriented programming language for expressing algorithms with strong safety guarantees.</p>
 
                 <p>These docs and the language itself are under construction. <span class = "asp">Anything written in this style is aspirational and not fully implemented.</span> Sirius in a nutshell:
                     <ul>
@@ -100,9 +100,9 @@
                         </tr>
                         <tr>
                             <td>1</td>
-                            <td>Access</td>
+                            <td>Member Access</td>
                             <td>Binary</td>
-                            <td><code><span class = "code token identifier">a</span><span class = "code token opensqbracket">[</span><span class = "code token identifier">b</span><span class = "code token closesqbracket">]</span></code></td>
+                            <td><code><span class = "code token identifier">a</span><span class = "code token operator">.</span><span class = "code token identifier">b</span></code></td>
                         </tr>
                         <tr>
                             <td>2</td>
@@ -293,8 +293,13 @@
                     <p><em>Potential new language features must overcome a bias towards simplicity.</em></p>
                     <p>The language takes inspiration from Futhark, as well as working with arrays in Python using the likes of Numpy and PyTorch, and  array languages like APL.</p>
                     <p>Sirius is currently an experiment in the ergonomics of typeful array programming. The only existing backend is a slow interpreter for testing purposes. After the frontend becomes somewhat stable, the project will shift in focus to a new backend.</p>
-                    <p>SPIR-V is the current aspirational target for the fast backend -- in which case Sirius would become a GPGPU kernel language, suitable for machine learning, image processing, scientific computing, and any application requiring high parallelism and strong static safety guarantees. It could fill a GPU programming niche more accessibile than CUDA, more safe than PyTorch, and performing well enough for most applications.</p>
-                    <p>The type information in the AST about array sizes should make optimizations like vectorization easier than usual.</p>
+                    <p>Shader SPIR-V is the current aspirational target for the fast backend, making Sirius a GPGPU kernel language, suitable for machine learning, image processing, HPC, scientific computing, or any application requiring high parallelism and strong static safety guarantees.</p>
+                    <p>The type information about array sizes and accesses cost developer time, but have substantial advantages:</p>
+                    <ul>
+                        <li>Function contracts will be more precise, moving more data validation from dynamic checks to automatic type checks.</li>
+                        <li>Vectorization, loop unrolling, and access check elision all will be easier with the additional information in the AST.</li>
+                        <li>Memory footprint and algorithmic complexity can be calculated as a simple function of input sizes for subroutines, or even whole programs, depending on the use of existential types and recursion.</li>
+                    </ul>
                     <p>An example function using generic <code><span class = "code token type">ind</span></code> types and a possible C compilation:</p>
 
 <code class = "block"><span class = "code token keyword">fn</span><span class = "code"> </span><span class = "code token identifier">concat</span><span class = "code token opencurly">{</span><span class = "code token identifier type">T</span><span class = "code token operator type">,</span> <span class = "code token identifier type">#M</span><span class = "code token operator type">,</span><span class = "code"> </span><span class = "code token identifier type">#N</span><span class = "code token closecurly">}</span><span class = "code token openparen">(</span><span class = "code token identifier">a</span><span class = "code token colon">:</span><span class = "code"> </span><span class = "code token identifier type">T</span><span class = "code token opensqbracket type">[</span><span class = "code token identifier type">M</span><span class = "code token closesqbracket type">]</span><span class = "code token operator">,</span> <span class = "code token identifier">b</span><span class = "code token colon">:</span><span class = "code"> </span><span class = "code token identifier type">T</span><span class = "code token opensqbracket type">[</span><span class = "code token identifier type">N</span><span class = "code token closesqbracket type">]</span><span class = "code token closeparen">)</span> <span class = "code token operator">-&gt;</span><span class = "code"> </span><span class = "code token identifier type">T</span><span class = "code token opensqbracket type">[</span><span class = "code token identifier type">M</span> <span class = "code token operator type">+</span> <span class = "code token identifier type">N</span><span class = "code token closesqbracket type">]</span><span class = "code token colon">:</span>
@@ -306,9 +311,13 @@
     ...
 }
 </code>
+    <p>The language will include <code><span class = "code token type">ind</span></code> constraints and existential <code><span class = "code token type">ind</span></code>s as well:</p>
+<code class = "block"><span class = "code token keyword">fn</span><span class = "code"> </span><span class = "code token identifier">filter</span><span class = "code token opencurly">{</span><span class = "code token identifier type">T</span><span class = "code token operator type">,</span> <span class = "code token identifier type">#M</span> <span class = "code token operator type">=></span><span class = "code"> </span><span class = "code token identifier type">#N</span> <span class = "code token operator type">|</span> <span class = "code token identifier type">N</span> <span class = "code token operator type">&lt;=</span> <span class = "code token identifier type">M</span><span class = "code token closecurly">}</span><span class = "code token openparen">(</span><span class = "code token identifier">x</span><span class = "code token colon">:</span><span class = "code"> </span><span class = "code token identifier type">T</span><span class = "code token opensqbracket type">[</span><span class = "code token identifier type">M</span><span class = "code token closesqbracket type">]</span><span class = "code token operator">,</span> <span class = "code token identifier">f</span><span class = "code token colon">:</span><span class = "code"> </span><span class = "code token identifier type">T</span><span class = "code token operator type">-></span><span class = "code token identifier type">bool</span><span class = "code token closeparen">)</span> <span class = "code token operator">-&gt;</span><span class = "code"> </span><span class = "code token identifier type">T</span><span class = "code token opensqbracket type">[</span><span class = "code token identifier type">N</span><span class = "code token closesqbracket type">]</span><span class = "code token colon">:</span>
+    ...               
+</code>
 
-                <p>The philosophical goal of Sirius' type system is balance between powerful constructs for strong safety guarantees and ergonomic constructs for easy adoption. <span class = "asp">To this end, the language is focused on array programming and features a lightweight form of dependent types.</span></p>
-            </section>
+    <p>The <code><span class = "code token type">ind</span></code> types are multivariable integer polynomials, and so closed under addition, subtraction, and multiplication. The constraints produced by the typechecker will be checked with an SMT solver like Z3. This satisfaction problem is undecidable in general, but in practice is expected to be effective. A mechanism will be provided to override the solver and move an access check to runtime in case the solver cannot prove its safety.</p>
+    </section>
         </article>
     </body>
 </html>
