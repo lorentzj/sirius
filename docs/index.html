@@ -49,10 +49,10 @@
 
             <section id = "syntax">
                 <h2>Syntax</h2>
-                <p>Sirius uses significant whitespace in the style of Python; new lines and indent/dedents separate statements and blocks. The grammar is LR(1); a more precise specification can be found <a href = "https://github.com/lorentzj/sirius/blob/main/src/grammar.lalrpop">in the reference parser</a>.</p>
+                <p>Sirius uses significant whitespace in the style of Python; new lines and indent/dedents separate statements and blocks. The language uses curly brackets for type parameters, <code><span class = "code token keyword">let</span></code>-style declarations, and is otherwise C-like. The grammar is LR(1). A more precise specification can be found <a href = "https://github.com/lorentzj/sirius/blob/main/src/grammar.lalrpop">in the reference parser</a>.</p>
 
                 <p>A Sirius source file is a series of <em>functions</em>:</p>
-                <code class = "block"><span class = "code token keyword">fn</span> <span class = "code token identifier">function_name</span><span class = "code token openparen">(</span><span class = "code token identifier">arg</span><span class = "code token colon">:</span> <em>&lt;arg type annotation&gt;</em><span class = "code token operator">,</span> ...<span class = "code token closeparen">)</span> <span class = "code token operator">-&gt;</span> <em>&lt;return type annotation&gt;</em><span class = "code token colon">:</span>
+                <code class = "block"><span class = "code token keyword">fn</span> <span class = "code token identifier">function_name</span><span class = "code token opencurly">{</span><em>&lt;type parameters&gt;</em><span class = "code token closecurly">}</span><span class = "code token openparen">(</span><span class = "code token identifier">arg</span><span class = "code token colon">:</span> <em>&lt;arg type&gt;</em><span class = "code token operator">,</span> ...<span class = "code token closeparen">)</span> <span class = "code token operator">-&gt;</span> <em>&lt;return type&gt;</em><span class = "code token colon">:</span>
     <em><em>&lt;statements&gt;</em></em>
 </code>
 
@@ -193,7 +193,7 @@
 
                 <p>The tuple operation <code><span class = "code token operator">,</span></code> is a special case; the tuple is not constructed until enclosed in parentheses unless it is the top level of the expression in order to distinguish e.g. <code><span class = "code token openparen">(</span><span class = "code token identifier">a</span><span class = "code token operator">,</span> <span class = "code token identifier">b</span><span class = "code token operator">,</span> <span class = "code token identifier">c</span><span class = "code token closeparen">)</span></code> from <code><span class = "code token openparen">(</span><span class = "code token openparen">(</span><span class = "code token identifier">a</span><span class = "code token operator">,</span> <span class = "code token identifier">b</span><span class = "code token closeparen">)</span><span class = "code token operator">,</span> <span class = "code token identifier">c</span><span class = "code token closeparen">)</span></code>. This behavior is consistent with tuple construction in other languages.</p>
 
-                <p>Identifiers are strings of ascii letters, greek letters, digits, and underscores, beginning with something besides a digit: <code>[A-Za-z_\u{0370}-\u{03FF}][0-9A-Za-z_\u{0370}-\u{03FF}]*</code>. Constants may be numbers, which must begin with a digit and will be parsed as floats if they contain a decimal point, and otherwise will be parsed as integers. Constants may also be the boolean values <code><span class = "code token keyword">true</span></code> and <code><span class = "code token keyword">false</span></code>.</p>
+                <p>Identifiers are strings of ascii letters, greek letters, digits, and underscores, beginning with something besides a digit: <code>[A-Za-z_\u{0370}-\u{03FF}][0-9A-Za-z_\u{0370}-\u{03FF}]*</code>. Type parameters can be passed after identifiers in curly brackets. Constants may be numbers, which must begin with a digit and will be parsed as floats if they contain a decimal point, and otherwise will be parsed as integers. Constants may also be the boolean values <code><span class = "code token keyword">true</span></code> and <code><span class = "code token keyword">false</span></code>.</p>
 
                 <p>Type annotations are constructed from the primitive types using the tuple operator <code><span class = "code token operator type">,</span></code> and the function operator <code><span class = "code token operator type">-&gt;</span></code>. The function operator is binary left-associative and denotes function inputs and outputs, e.g., <code><span class = "code token identifier type">f64</span><span class = "code token operator type">-&gt;</span><span class = "code token identifier type">bool</span></code> or <code><span class = "code token openparen type">(</span><span class = "code token identifier type">f64</span><span class = "code token operator type">,</span> <span class = "code token identifier type">f64</span><span class = "code token closeparen type">)</span><span class = "code token operator type">-&gt;</span><span class = "code token identifier type">i64</span></code>.</p>
                 
@@ -202,7 +202,7 @@
 
             <section id = "type_system">
                 <h2>Type System</h2>
-                <p>There are four primitive types in Sirius: <code><span class = "code token identifier type">f64</span></code> (a 64-bit IEEE 754 floating point number), <code><span class = "code token identifier type">i64</span></code> (a 64-bit signed integer), <code><span class = "code token identifier type">bool</span></code> (a boolean type), and <code><span class = "code token identifier type">void</span></code> (the uninhabited type). <code><span class = "code token identifier type">i64</span></code>s may have a value known at compile time, denoted e.g. <code><span class = "code token identifier type">i64(ind=0)</span></code>. All tuple accesses are statically verified.</p>
+                <p>There are four primitive types in Sirius: <code><span class = "code token identifier type">f64</span></code> (a 64-bit IEEE 754 floating point number), <code><span class = "code token identifier type">i64</span></code> (a 64-bit signed integer), <code><span class = "code token identifier type">bool</span></code> (a boolean type), and <code><span class = "code token identifier type">void</span></code> (the uninhabited type). <code><span class = "code token identifier type">i64</span></code>s may have a value known at compile time, denoted e.g. <code><span class = "code token identifier type">i64(ind=0)</span></code>.</p>
 
                 <p>The <code><span class = "code token keyword">if</span></code> and <code><span class = "code token keyword">for</span></code> statements require their expressions to be <code><span class = "code token identifier type">bool</span></code>s and <code><span class = "code token identifier type">i64</span></code>s respectively.</p>
 
@@ -295,10 +295,11 @@
                     <p><em>Potential new language features must overcome a bias towards simplicity.</em></p>
                     <p>The language takes inspiration from Futhark, as well as working with arrays in Python using the likes of Numpy and PyTorch, and  array languages like APL.</p>
                     <p>Sirius is currently an experiment in the ergonomics of typeful array programming. The only existing backend is a slow interpreter for testing purposes. After the frontend becomes somewhat stable, the project will shift in focus to a new backend.</p>
-                    <p>Shader SPIR-V is the current aspirational target for the fast backend, making Sirius a GPGPU kernel language, suitable for machine learning, image processing, HPC, scientific computing, or any application requiring high parallelism and strong static safety guarantees.</p>
-                    <p>Typechecking array sizes and accesses costs developer time, but have substantial advantages:</p>
+                    <p>Shader SPIR-V is the current aspirational target for the fast backend, making Sirius a GPGPU kernel language, suitable for applications requiring high parallelism and strong safety guarantees.</p>
+                    <p>Typechecking array sizes and accesses costs developer time, but has substantial advantages:</p>
                     <ul>
-                        <li>Function contracts will be more precise, moving more data validation from dynamic checks to automatic type checks.</li>
+                        <li>Function contracts are more precise, moving more data validation from dynamic checks to automatic type checks.</li>
+                        <li>Vectors share a uniform interface with arbitrary-sized arrays</li>
                         <li>Vectorization, loop unrolling, and access check elision all will be easier with the additional information from the typechecker.</li>
                         <li>Algorithmic time and space complexity can be calculated as a simple function of input sizes for subroutines, or even whole programs, depending on the use of existential types and recursion.</li>
                     </ul>
@@ -324,7 +325,9 @@
 
                 <p>There will be three types of constraints: implicit constraints (all array sizes in the function signature most be greater than or equal to zero), explicit constraints, and flow constraints (provided by <code><span class = "code token keyword">for</span></code> loops with static bounds and <code><span class = "code token keyword">if</span></code> statements with static conditions).</p>
 
-                <p>There will be a special <code><span class = "code token identifier">reshape</span></code> function that works similarly to numpy's reshape, only checking that the product of the input array dimensions are preserved. The type system may be flexible enough to write most operations, but if <code><span class = "code token identifier">reshape</span></code> is insufficient, the language may have to add some wildcard for matching multiple array dimensions.</p>
+                <p>The <code><span class = "code token keyword">yield</span></code> keyword will be used to return individual elements to be collected in an array return value.</p>
+
+                <p>There will be a special <code><span class = "code token identifier">reshape</span></code> function that works similarly to numpy's reshape, only checking that the product of the input array dimensions are preserved. The type system may be flexible enough, but if <code><span class = "code token identifier">reshape</span></code> is insufficient, the language may have to add some wildcard for matching multiple array dimensions.</p>
             </section>
         </article>
     </body>
