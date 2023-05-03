@@ -18,6 +18,11 @@ pub enum Type {
     ForAll(usize),
 }
 
+#[derive(Serialize, Clone)]
+pub enum Constraint {
+    Eq(Ind, Ind)
+}
+
 type Substitution = (usize, Type);
 
 #[derive(Debug)]
@@ -249,6 +254,66 @@ impl Type {
                     }
                 }
             },
+        }
+    }
+
+    pub fn apply_ann_exact_values(&mut self, ann: &Type) -> bool {
+        match self {
+            Type::I64(None) => {
+                match ann {
+                    Type::I64(None) => true,
+                    _ => false
+                }
+            },
+            Type::I64(Some(t_ind)) => {
+                match ann {
+                    Type::I64(None) => true,
+                    Type::I64(Some(ann_ind)) => {
+                        if ann_ind == t_ind {
+                            t_ind.strict = true;
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                    _ => false
+                }
+            },
+            Type::Tuple(t_inner) => {
+                match ann {
+                    Type::Tuple(ann_inner) => {
+                        if t_inner.len() != ann_inner.len() {
+                            false
+                        } else {
+                            for (t, ann) in t_inner.iter_mut().zip(ann_inner) {
+                                if !t.apply_ann_exact_values(ann) {
+                                    return false;
+                                }
+                            }
+                            true
+                        }
+                    },
+                    _ => false
+                }
+            },
+            Type::Function(_, t_args, t_ret) => {
+                match ann {
+                    Type::Function(_, ann_args, ann_ret) => {
+                        if t_args.len() != ann_args.len() {
+                            false
+                        } else {
+                            for (t, ann) in t_args.iter_mut().zip(ann_args) {
+                                if !t.apply_ann_exact_values(ann) {
+                                    return false;
+                                }
+                            }
+                            t_ret.apply_ann_exact_values(ann_ret)
+                        }
+                    },
+                    _ => false
+                }
+            },
+            _ => true
         }
     }
 }
