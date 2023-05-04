@@ -26,7 +26,7 @@ pub enum C {
 #[derive(Serialize, Clone, Debug)]
 pub struct Constraint {
     pub start: usize,
-    data: C,
+    pub data: C,
     pub end: usize,
 }
 

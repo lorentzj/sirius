@@ -3,6 +3,7 @@ use crate::scope::Scope;
 use crate::stdlib::ExternalGlobals;
 
 mod concreteness_check;
+mod constraint_check;
 mod equality;
 mod flow;
 mod ind;
@@ -13,6 +14,7 @@ mod types;
 mod unify;
 
 use concreteness_check::concreteness_check;
+use constraint_check::constraint_check;
 use initialize_ast::initialize_statement_types;
 pub use initialize_ast::{annotation_type, populate_annotation};
 use unify::{substitute, unify};
@@ -145,6 +147,8 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
         function.constraints = dedup_constraints;
 
         while !subs.is_empty() && function_errors.is_empty() {
+            // reset constraints - we only want constraints from the last round of unification
+            function.constraints = vec![];
             scope.push();
             substitute(&mut function.body, &mut scope, &subs);
             scope.pop();
@@ -180,6 +184,15 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
         // concreteness check - no unbound type vars should be left in the function body
 
         function_errors.extend(concreteness_check(function));
+
+        if !function_errors.is_empty() {
+            state.errors.extend(function_errors);
+            continue;
+        }
+
+        // constraint check - pass value constraints to solver
+
+        function_errors.extend(constraint_check(function));
 
         if !function_errors.is_empty() {
             state.errors.extend(function_errors);
