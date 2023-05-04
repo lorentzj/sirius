@@ -9,6 +9,7 @@ pub enum ErrorType {
     UnboundIdentifier,
     Flow,
     Mutation,
+    Constraint,
     Runtime,
     NotImplemented,
 }

@@ -8,6 +8,7 @@ import {load_demo_programs} from './demo_programs.js';
 document.body.onload = () => {
     Promise.all([init(), load_demo_programs()]).then(([_, demo_programs]) => {
         const editorElem = document.getElementById('editor');
+        const tooltipElem = document.getElementById('tooltip');
         const editorLinesElem = document.getElementById('editor_line_numbers');
         const buttonElem = document.getElementById('run');
         const displayErrorsElem = document.getElementById('display_errors');
@@ -20,6 +21,7 @@ document.body.onload = () => {
 
         if(
             editorElem           !== null
+            && tooltipElem          !== null
             && editorLinesElem   !== null
             && displayErrorsElem !== null
             && displayLogElem    !== null
@@ -54,7 +56,7 @@ document.body.onload = () => {
 
             const updateEditor = () => {
                 const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n'))) as types.ParserOutput;
-                console.log(parsed);
+
                 parsed.typeTokens = new Set(parsed.typeTokens as unknown as number[]);
 
                 let hl_map: Map<number, number[]> = new Map();
@@ -62,8 +64,20 @@ document.body.onload = () => {
                     hl_map.set(Number.parseInt(key), (parsed.highlightMap as unknown as {[k: string]: number[]})[key]);
                 });
                 parsed.highlightMap = hl_map;
-                
-                editor.updateEditorWithCode(editorElem, editorLinesElem, codeLines.code, parsed);  
+
+                let ast: Map<string, types.Function> = new Map();
+                Object.keys(parsed.ast as unknown as {[k: string]: types.Function}).forEach(key => {
+                    ast.set(key, (parsed.ast as unknown as {[k: string]: types.Function})[key]);
+                });
+                parsed.ast = ast;
+
+                for(let f of ast.values()) {
+                    for(let c of f.constraints) {
+                        console.log(types.constraint_name(c));
+                    }
+                }
+
+                editor.updateEditorWithCode(editorElem, tooltipElem, editorLinesElem, codeLines.code, parsed);  
                 editor.updateEditorWithErrors(parsed.errors, editorElem);
                 editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem);
                 output_area.updateErrorELement(displayErrorsElem, errorElem, parsed.errors, parsed.tokens);

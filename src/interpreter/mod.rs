@@ -166,7 +166,7 @@ pub fn interpret_expression<'a>(
 
                 interpret_block(body, &mut inner_scope, globals, output);
 
-                output.value.as_ref().unwrap().clone()
+                output.value.as_ref().unwrap_or(&Value::Void).clone()
             }
             Value::ExternalFunction(function_pointer) => {
                 let arg_values: Vec<Value> = args

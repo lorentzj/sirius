@@ -3,6 +3,7 @@ use crate::parser::Statement;
 
 #[derive(Clone)]
 pub enum Value<'a> {
+    Void,
     F64(f64),
     I64(i64),
     Bool(bool),
@@ -14,6 +15,7 @@ pub enum Value<'a> {
 
 pub fn print_value(value: Value) -> String {
     match value {
+        Value::Void => "void".into(),
         Value::F64(val) => val.to_string(),
         Value::I64(val) => val.to_string(),
         Value::Bool(val) => val.to_string(),

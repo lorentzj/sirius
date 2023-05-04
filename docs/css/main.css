@@ -149,6 +149,13 @@ tbody td {
     resize: vertical;
 }
 
+#tooltip {
+    display: none;
+    position: absolute;
+    min-width: 200px;
+    background-color: var(--secondary-bg-color);
+}
+
 #editor_line_numbers {
     color: rgb(117, 117, 116);
     flex: none;
@@ -166,7 +173,7 @@ tbody td {
     color: rgb(255, 0, 0);
 }
 
-code, #editor {
+#tooltip, code, #editor {
     padding: 3px;
     caret-color: black;
     font-family: monospace;

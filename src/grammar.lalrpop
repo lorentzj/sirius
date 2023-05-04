@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap};
 
 use crate::lexer::Op;
 use crate::parser::{Function, Statement, E, Expression, UnaryOp, Positioned, expr_to_pos_type};
@@ -46,7 +46,8 @@ pub Fn: Function = {
             type_args: type_args.unwrap_or(vec![]),
             args: args_typed,
             return_type: return_type.unwrap_or(Positioned::new(ret_place, Type::Void, ret_place + 1)),
-            body: inner
+            body: inner,
+            constraints: vec![]
         }
     }
 }

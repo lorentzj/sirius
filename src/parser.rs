@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use lalrpop_util::ParseError;
 use serde::Serialize;
 
-use crate::typechecker::{annotation_type, Ind, Type};
+use crate::typechecker::{annotation_type, Constraint, Ind, Type};
 
 use crate::error::{Error, ErrorType};
 use crate::lexer::{tokenize, Op, Tok, Token};
@@ -188,6 +188,7 @@ pub struct Function {
     pub args: Vec<(Positioned<String>, Positioned<Type>)>,
     pub return_type: Positioned<Type>,
     pub body: Vec<Statement>,
+    pub constraints: Vec<Constraint>,
 }
 
 impl Function {

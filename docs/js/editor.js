@@ -1,3 +1,4 @@
+import * as tooltip from './tooltip.js';
 export function updateCodeLines(editorElem, codeLines, e) {
     e.preventDefault();
     for (const targetRange of e.getTargetRanges()) {
@@ -149,7 +150,7 @@ function codeIndexFromPosition(editorElem, container, offset) {
         }
     }
 }
-export function updateEditorWithCode(editorElem, editorLinesElem, code, parseOutput) {
+export function updateEditorWithCode(editorElem, tooltipElem, editorLinesElem, code, parseOutput) {
     editorElem.innerHTML = '';
     let token_i = 0;
     code.forEach((lineCode, line) => {
@@ -169,7 +170,8 @@ export function updateEditorWithCode(editorElem, editorLinesElem, code, parseOut
             const token_code = lineCode.slice(parseOutput.tokens[token_i].start, parseOutput.tokens[token_i].end);
             if (token_code.length > 0) {
                 const token_code_span = createCodeSpan(parseOutput.tokens[token_i], token_i, parseOutput.typeTokens.has(token_i));
-                setMouseOverHandler(editorElem, token_code_span, token_i, parseOutput.highlightMap);
+                setMouseOverHLHandler(editorElem, token_code_span, token_i, parseOutput.highlightMap);
+                setMouseOverToolTipHandler(tooltipElem, token_code_span, token_i, parseOutput.ast);
                 token_code_span.textContent = token_code;
                 lineElement.appendChild(token_code_span);
             }
@@ -205,7 +207,7 @@ export function updateEditorWithCode(editorElem, editorLinesElem, code, parseOut
     }
     editorLinesElem.replaceChildren(...newEditorLines);
 }
-function setMouseOverHandler(editorElem, codeSpan, tokenId, highlightMap) {
+function setMouseOverHLHandler(editorElem, codeSpan, tokenId, highlightMap) {
     let highlightMatches = [];
     highlightMatches.push(...highlightMap.get(tokenId) || []);
     codeSpan.addEventListener('mouseenter', (_) => {
@@ -222,6 +224,9 @@ function setMouseOverHandler(editorElem, codeSpan, tokenId, highlightMap) {
             tokenElem?.classList.remove('highlight');
         });
     });
+}
+function setMouseOverToolTipHandler(tooltipElem, tokenElem, tokenId, ast) {
+    tooltip.setHandler(tooltipElem, tokenElem, tokenId, ast);
 }
 export function updateEditorWithErrors(errors, editorElem) {
     errors.forEach(error => {

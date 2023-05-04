@@ -1,18 +1,19 @@
 use super::equality::equality_check;
 use super::number_coersion::{arith_coerce, is_arith};
 use super::types::Substitutions;
-use super::types::Type;
+use super::types::{Constraint, Type};
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
 use crate::parser::{Expression, Statement, UnaryOp, E, S};
 use crate::scope::Scope;
 
 fn unify_expression(
-    expression: &Expression,
+    expression: &mut Expression,
     context: &Scope<Type>,
     curr_forall_var: &mut usize,
+    constraints: &mut Vec<Constraint>,
 ) -> Result<Substitutions, Error> {
-    match &expression.data {
+    match &mut expression.data {
         E::Bool(_) => Ok(Substitutions::new()),
         E::F64(_) => Ok(Substitutions::new()),
         E::I64(_, _) => Ok(Substitutions::new()),
@@ -25,8 +26,12 @@ fn unify_expression(
         E::Ident(name, _) => match context.get(name) {
             Some(var_t) => match var_t {
                 Type::Function(_, _, _) => Ok(Substitutions::new()),
-                _ => match expression.t.unify(var_t) {
-                    Some(subs) => Ok(subs),
+                _ => match expression.t.unify_update_vals(var_t) {
+                    Some((subs, mut cs)) => {
+                        Constraint::apply_pos(&mut cs, expression.start, expression.end);
+                        constraints.extend(cs.into_iter());
+                        Ok(subs)
+                    }
                     None => Err(Error::new(
                         ErrorType::Type,
                         format!(
@@ -41,13 +46,17 @@ fn unify_expression(
             None => panic!(),
         },
         E::UnaryOp(op, inner) => {
-            let mut subs = unify_expression(inner, context, curr_forall_var)?;
+            let mut subs = unify_expression(inner, context, curr_forall_var, constraints)?;
 
             if inner.t.forall_vars().is_empty() {
                 match op {
                     UnaryOp::ArithNeg => match &inner.t {
                         Type::F64 => match Type::F64.unify(&expression.t) {
-                            Some(s) => subs.extend(expression.start, s, expression.end)?,
+                            Some((s, mut cs)) => {
+                                cs.extend(subs.extend(expression.start, s, expression.end)?);
+                                Constraint::apply_pos(&mut cs, expression.start, expression.end);
+                                constraints.extend(cs);
+                            }
                             None => {
                                 return Err(Error::new(
                                     ErrorType::Type,
@@ -62,7 +71,11 @@ fn unify_expression(
                             }
                         },
                         Type::I64(_) => match Type::I64(None).unify(&expression.t) {
-                            Some(s) => subs.extend(expression.start, s, expression.end)?,
+                            Some((s, mut cs)) => {
+                                cs.extend(subs.extend(expression.start, s, expression.end)?);
+                                Constraint::apply_pos(&mut cs, expression.start, expression.end);
+                                constraints.extend(cs);
+                            }
                             None => {
                                 return Err(Error::new(
                                     ErrorType::Type,
@@ -87,7 +100,11 @@ fn unify_expression(
                     },
                     UnaryOp::BoolNeg => match &inner.t {
                         Type::Bool => match Type::Bool.unify(&expression.t) {
-                            Some(s) => subs.extend(expression.start, s, expression.end)?,
+                            Some((s, mut cs)) => {
+                                cs.extend(subs.extend(expression.start, s, expression.end)?);
+                                Constraint::apply_pos(&mut cs, expression.start, expression.end);
+                                constraints.extend(cs);
+                            }
                             None => {
                                 return Err(Error::new(
                                     ErrorType::Type,
@@ -127,17 +144,23 @@ fn unify_expression(
             let mut subs = Substitutions::new();
             let inner_types = inner.iter().map(|e| e.t.clone()).collect();
             for e in inner {
-                subs.extend(
+                let mut cs = subs.extend(
                     expression.start,
-                    unify_expression(e, context, curr_forall_var)?,
+                    unify_expression(e, context, curr_forall_var, constraints)?,
                     expression.end,
                 )?;
+                Constraint::apply_pos(&mut cs, expression.start, expression.end);
+                constraints.extend(cs);
             }
 
             let tuple_t = Type::Tuple(inner_types);
 
             match expression.t.unify(&tuple_t) {
-                Some(s) => subs.extend(expression.start, s, expression.end)?,
+                Some((s, mut cs)) => {
+                    cs.extend(subs.extend(expression.start, s, expression.end)?);
+                    Constraint::apply_pos(&mut cs, expression.start, expression.end);
+                    constraints.extend(cs);
+                }
                 None => {
                     return Err(Error::new(
                         ErrorType::Type,
@@ -154,11 +177,13 @@ fn unify_expression(
             Ok(subs)
         }
         E::BinaryOp(lhs, op, rhs) => {
-            let lhs_subs = unify_expression(lhs, context, curr_forall_var)?;
-            let rhs_subs = unify_expression(rhs, context, curr_forall_var)?;
+            let lhs_subs = unify_expression(lhs, context, curr_forall_var, constraints)?;
+            let rhs_subs = unify_expression(rhs, context, curr_forall_var, constraints)?;
 
             let mut subs = lhs_subs;
-            subs.extend(rhs.start, rhs_subs, rhs.end)?;
+            let mut cs = subs.extend(rhs.start, rhs_subs, rhs.end)?;
+            Constraint::apply_pos(&mut cs, rhs.start, rhs.end);
+            constraints.extend(cs);
 
             if lhs.t.forall_vars().is_empty() && rhs.t.forall_vars().is_empty() {
                 if is_arith(op) {
@@ -166,7 +191,11 @@ fn unify_expression(
                         arith_coerce(expression.start, &lhs.t, op, &rhs.t, expression.end)?;
 
                     match expression.t.unify(&arith_result) {
-                        Some(s) => subs.extend(expression.start, s, expression.end)?,
+                        Some((s, mut cs)) => {
+                            cs.extend(subs.extend(expression.start, s, expression.end)?);
+                            Constraint::apply_pos(&mut cs, expression.start, expression.end);
+                            constraints.extend(cs);
+                        }
                         None => {
                             return Err(Error::new(
                                 ErrorType::Type,
@@ -183,7 +212,15 @@ fn unify_expression(
                     match op {
                         Op::Equal | Op::NotEqual => match equality_check(&lhs.t, &rhs.t) {
                             Ok(_) => match expression.t.unify(&Type::Bool) {
-                                Some(s) => subs.extend(expression.start, s, expression.end)?,
+                                Some((s, mut cs)) => {
+                                    cs.extend(subs.extend(expression.start, s, expression.end)?);
+                                    Constraint::apply_pos(
+                                        &mut cs,
+                                        expression.start,
+                                        expression.end,
+                                    );
+                                    constraints.extend(cs);
+                                }
                                 None => {
                                     return Err(Error::new(
                                         ErrorType::Type,
@@ -224,7 +261,11 @@ fn unify_expression(
                                                 ));
                                             } else {
                                                 match lhs_inner[val as usize].unify(&expression.t) {
-                                                    Some(s) => subs.extend(expression.start, s, expression.end)?,
+                                                    Some((s, mut cs)) => {
+                                                        cs.extend(subs.extend(expression.start, s, expression.end)?);
+                                                        Constraint::apply_pos(&mut cs, expression.start, expression.end);
+                                                        constraints.extend(cs);
+                                                    }
                                                     None => return Err(Error::new(
                                                         ErrorType::Type,
                                                         format!(
@@ -282,7 +323,19 @@ fn unify_expression(
                                 ));
                             } else {
                                 match expression.t.unify(&Type::Bool) {
-                                    Some(s) => subs.extend(expression.start, s, expression.end)?,
+                                    Some((s, mut cs)) => {
+                                        cs.extend(subs.extend(
+                                            expression.start,
+                                            s,
+                                            expression.end,
+                                        )?);
+                                        Constraint::apply_pos(
+                                            &mut cs,
+                                            expression.start,
+                                            expression.end,
+                                        );
+                                        constraints.extend(cs);
+                                    }
                                     None => {
                                         return Err(Error::new(
                                             ErrorType::Type,
@@ -314,14 +367,16 @@ fn unify_expression(
             Ok(subs)
         }
         E::FnCall(caller, args) => {
-            let mut subs = unify_expression(caller, context, curr_forall_var)?;
+            let mut subs = unify_expression(caller, context, curr_forall_var, constraints)?;
             let arg_types: Vec<_> = args.iter().map(|e| e.t.clone()).collect();
             for e in args {
-                subs.extend(
+                let mut cs = subs.extend(
                     expression.start,
-                    unify_expression(e, context, curr_forall_var)?,
+                    unify_expression(e, context, curr_forall_var, constraints)?,
                     expression.end,
                 )?;
+                Constraint::apply_pos(&mut cs, expression.start, expression.end);
+                constraints.extend(cs);
             }
 
             match &caller.t {
@@ -340,8 +395,10 @@ fn unify_expression(
                     } else {
                         for (given_arg, expected_arg) in arg_types.iter().zip(i) {
                             match given_arg.unify(expected_arg) {
-                                Some(s) => {
-                                    subs.extend(expression.start, s, expression.end)?;
+                                Some((s, mut cs)) => {
+                                    cs.extend(subs.extend(expression.start, s, expression.end)?);
+                                    Constraint::apply_pos(&mut cs, expression.start, expression.end);
+                                    constraints.extend(cs);
                                 },
                                 None => {
                                     return Err(Error::new(
@@ -356,7 +413,11 @@ fn unify_expression(
                     }
 
                     match o.unify(&expression.t) {
-                        Some(s) => subs.extend(expression.start, s, expression.end)?,
+                        Some((s, mut cs)) => {
+                            cs.extend(subs.extend(expression.start, s, expression.end)?);
+                            Constraint::apply_pos(&mut cs, expression.start, expression.end);
+                            constraints.extend(cs);
+                        }
                         None => {
                             return Err(Error::new(
                                 ErrorType::Type,
@@ -387,40 +448,66 @@ fn unify_expression(
 }
 
 pub fn unify(
-    block: &[Statement],
+    block: &mut [Statement],
     context: &mut Scope<Type>,
     curr_forall_var: &mut usize,
     return_type: &Type,
     errors: &mut Vec<Error>,
     subs: &mut Substitutions,
+    constraints: &mut Vec<Constraint>,
 ) {
     for statement in block {
-        match &statement.data {
-            S::Print(val) => match unify_expression(val, context, curr_forall_var) {
+        match &mut statement.data {
+            S::Print(val) => match unify_expression(val, context, curr_forall_var, constraints) {
                 Ok(s) => match subs.extend(val.start, s, val.end) {
-                    Ok(()) => (),
+                    Ok(mut cs) => {
+                        Constraint::apply_pos(&mut cs, val.start, val.end);
+                        constraints.extend(cs);
+                    }
                     Err(error) => errors.push(error),
                 },
                 Err(error) => errors.push(error),
             },
             S::Assign(place, val) => match context.get_mut(&place.inner) {
                 Some(var_t) => {
-                    match var_t.unify(&val.t) {
-                        Some(s) => match subs.extend(val.start, s, val.end) {
-                            Ok(()) => (),
-                            Err(error) => errors.push(error),
-                        },
-                        None => errors.push(Error::new(
-                            ErrorType::Type,
-                            format!("cannot unify types \"{var_t:?}\" and \"{:?}\"", val.t),
-                            statement.start,
-                            statement.end,
-                        )),
+                    match var_t.unify_assign(&val.t) {
+                        Ok((s, mut cs)) => {
+                            println!(
+                                "Ok Unify-Assign; new value for var {} is {var_t:?}",
+                                place.inner
+                            );
+                            match subs.extend(val.start, s, val.end) {
+                                Ok(css) => cs.extend(css),
+                                Err(error) => errors.push(error),
+                            }
+                            Constraint::apply_pos(&mut cs, val.start, val.end);
+                            constraints.extend(cs);
+                        }
+                        Err(was_strict_error) => {
+                            if was_strict_error {
+                                errors.push(Error::new(
+                                    ErrorType::Type,
+                                    "assignment violates strict value declaration".into(),
+                                    statement.start,
+                                    statement.end,
+                                ));
+                            } else {
+                                errors.push(Error::new(
+                                    ErrorType::Type,
+                                    format!("cannot unify types \"{var_t:?}\" and \"{:?}\"", val.t),
+                                    statement.start,
+                                    statement.end,
+                                ));
+                            }
+                        }
                     }
 
-                    match unify_expression(val, context, curr_forall_var) {
+                    match unify_expression(val, context, curr_forall_var, constraints) {
                         Ok(s) => match subs.extend(val.start, s, val.end) {
-                            Ok(()) => (),
+                            Ok(mut cs) => {
+                                Constraint::apply_pos(&mut cs, val.start, val.end);
+                                constraints.extend(cs);
+                            }
                             Err(error) => errors.push(error),
                         },
                         Err(error) => errors.push(error),
@@ -429,9 +516,12 @@ pub fn unify(
                 None => panic!(),
             },
             S::Let(name, ann, val) => {
-                match unify_expression(val, context, curr_forall_var) {
+                match unify_expression(val, context, curr_forall_var, constraints) {
                     Ok(s) => match subs.extend(val.start, s, val.end) {
-                        Ok(()) => (),
+                        Ok(mut cs) => {
+                            Constraint::apply_pos(&mut cs, val.start, val.end);
+                            constraints.extend(cs);
+                        }
                         Err(error) => errors.push(error),
                     },
                     Err(error) => errors.push(error),
@@ -439,8 +529,27 @@ pub fn unify(
 
                 if let Some(ann) = ann {
                     match val.t.unify(&ann.inner) {
-                        Some(s) => match subs.extend(val.start, s, val.end) {
-                            Ok(()) => context.insert(name.inner.clone(), val.t.clone()),
+                        Some((s, mut cs)) => match subs.extend(val.start, s, val.end) {
+                            Ok(css) => {
+                                cs.extend(css);
+                                Constraint::apply_pos(&mut cs, val.start, val.end);
+                                constraints.extend(cs);
+
+                                if !val.t.apply_ann_exact_values(&ann.inner) {
+                                    errors.push(Error::new(
+                                        ErrorType::Constraint,
+                                        format!(
+                                            "cannot apply exact values of annotation \"{:?}\" to type \"{:?}\"",
+                                            ann.inner,
+                                            val.t,
+                                        ),
+                                        val.start,
+                                        val.end
+                                    ));
+                                }
+
+                                context.insert(name.inner.clone(), val.t.clone())
+                            }
                             Err(error) => {
                                 errors.push(error);
                                 context.insert(name.inner.clone(), Type::Unknown);
@@ -473,19 +582,26 @@ pub fn unify(
                             statement.end,
                         ));
                     } else {
-                        match unify_expression(val, context, curr_forall_var) {
+                        match unify_expression(val, context, curr_forall_var, constraints) {
                             Ok(s) => match subs.extend(val.start, s, val.end) {
-                                Ok(()) => (),
+                                Ok(mut cs) => {
+                                    Constraint::apply_pos(&mut cs, val.start, val.end);
+                                    constraints.extend(cs);
+                                }
                                 Err(error) => errors.push(error),
                             },
                             Err(error) => errors.push(error),
                         }
 
                         match val.t.unify(return_type) {
-                            Some(s) => match subs.extend(val.start, s, val.end) {
-                                Ok(()) => (),
-                                Err(error) => errors.push(error),
-                            },
+                            Some((s, mut cs)) => {
+                                match subs.extend(val.start, s, val.end) {
+                                    Ok(css) => cs.extend(css),
+                                    Err(error) => errors.push(error)
+                                }
+                                Constraint::apply_pos(&mut cs, val.start, val.end);
+                                constraints.extend(cs);
+                            }
                             None => errors.push(Error::new(
                                 ErrorType::Type,
                                 format!(
@@ -510,17 +626,24 @@ pub fn unify(
                 }
             },
             S::If(cond, true_inner, false_inner) => {
-                match unify_expression(cond, context, curr_forall_var) {
+                match unify_expression(cond, context, curr_forall_var, constraints) {
                     Ok(s) => {
                         match subs.extend(cond.start, s, cond.end) {
-                            Ok(()) => (),
+                            Ok(mut cs) => {
+                                Constraint::apply_pos(&mut cs, cond.start, cond.end);
+                                constraints.extend(cs);
+                            }
                             Err(error) => errors.push(error),
                         };
                         match cond.t.unify(&Type::Bool) {
-                            Some(s) => match subs.extend(cond.start, s, cond.end) {
-                                Ok(()) => (),
-                                Err(error) => errors.push(error),
-                            },
+                            Some((s, mut cs)) => {
+                                match subs.extend(cond.start, s, cond.end) {
+                                    Ok(css) => cs.extend(css),
+                                    Err(error) => errors.push(error),
+                                }
+                                Constraint::apply_pos(&mut cs, cond.start, cond.end);
+                                constraints.extend(cs);
+                            }
                             None => errors.push(Error::new(
                                 ErrorType::Type,
                                 "condition must be boolean type".into(),
@@ -540,6 +663,7 @@ pub fn unify(
                     return_type,
                     errors,
                     subs,
+                    constraints,
                 );
                 context.pop();
 
@@ -552,22 +676,32 @@ pub fn unify(
                         return_type,
                         errors,
                         subs,
+                        constraints,
                     );
                     context.pop();
                 }
+
+                context.apply_transform(Type::demote_dirty);
             }
             S::For(iterator, from, to, inner) => {
-                match unify_expression(from, context, curr_forall_var) {
+                match unify_expression(from, context, curr_forall_var, constraints) {
                     Ok(s) => {
                         match subs.extend(from.start, s, from.end) {
-                            Ok(()) => (),
+                            Ok(mut cs) => {
+                                Constraint::apply_pos(&mut cs, from.start, from.end);
+                                constraints.extend(cs);
+                            }
                             Err(error) => errors.push(error),
                         };
                         match from.t.unify(&Type::I64(None)) {
-                            Some(s) => match subs.extend(from.start, s, from.end) {
-                                Ok(()) => (),
-                                Err(error) => errors.push(error),
-                            },
+                            Some((s, mut cs)) => {
+                                match subs.extend(from.start, s, from.end) {
+                                    Ok(css) => cs.extend(css),
+                                    Err(error) => errors.push(error),
+                                }
+                                Constraint::apply_pos(&mut cs, from.start, from.end);
+                                constraints.extend(cs);
+                            }
                             None => errors.push(Error::new(
                                 ErrorType::Type,
                                 "iteration start must be integer type".into(),
@@ -579,17 +713,24 @@ pub fn unify(
                     Err(error) => errors.push(error),
                 }
 
-                match unify_expression(to, context, curr_forall_var) {
+                match unify_expression(to, context, curr_forall_var, constraints) {
                     Ok(s) => {
                         match subs.extend(to.start, s, to.end) {
-                            Ok(()) => (),
+                            Ok(mut cs) => {
+                                Constraint::apply_pos(&mut cs, to.start, to.end);
+                                constraints.extend(cs);
+                            }
                             Err(error) => errors.push(error),
                         };
                         match to.t.unify(&Type::I64(None)) {
-                            Some(s) => match subs.extend(to.start, s, to.end) {
-                                Ok(()) => (),
-                                Err(error) => errors.push(error),
-                            },
+                            Some((s, mut cs)) => {
+                                match subs.extend(to.start, s, to.end) {
+                                    Ok(css) => cs.extend(css),
+                                    Err(error) => errors.push(error),
+                                }
+                                Constraint::apply_pos(&mut cs, to.start, to.end);
+                                constraints.extend(cs);
+                            }
                             None => errors.push(Error::new(
                                 ErrorType::Type,
                                 "iteration end must be integer type".into(),
@@ -603,8 +744,18 @@ pub fn unify(
 
                 context.push();
                 context.insert(iterator.inner.clone(), Type::I64(None));
-                unify(inner, context, curr_forall_var, return_type, errors, subs);
+                unify(
+                    inner,
+                    context,
+                    curr_forall_var,
+                    return_type,
+                    errors,
+                    subs,
+                    constraints,
+                );
                 context.pop();
+
+                context.apply_transform(Type::demote_dirty);
             }
         }
     }

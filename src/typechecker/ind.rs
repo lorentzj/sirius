@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ops;
 
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 type Term = (i64, Vec<(String, usize)>);
 
@@ -55,11 +55,20 @@ fn eq_vars(lhs: &Vec<(String, usize)>, rhs: &Vec<(String, usize)>) -> bool {
     true
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone)]
 pub struct Ind {
     terms: Vec<Term>,
     pub dirty: bool,
     pub strict: bool,
+}
+
+impl Serialize for Ind {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(&format!("{self:?}"))
+    }
 }
 
 impl fmt::Debug for Ind {
@@ -244,6 +253,8 @@ impl PartialEq for Ind {
         true
     }
 }
+
+impl Eq for Ind {}
 
 #[cfg(test)]
 mod tests {

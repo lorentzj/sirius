@@ -1,11 +1,13 @@
 import init, * as bindings from '../js/sirius.js';
 import * as editor from './editor.js';
+import * as types from './types.js';
 import * as output_area from './output_area.js';
 import { CodeLines } from './code_lines.js';
 import { load_demo_programs } from './demo_programs.js';
 document.body.onload = () => {
     Promise.all([init(), load_demo_programs()]).then(([_, demo_programs]) => {
         const editorElem = document.getElementById('editor');
+        const tooltipElem = document.getElementById('tooltip');
         const editorLinesElem = document.getElementById('editor_line_numbers');
         const buttonElem = document.getElementById('run');
         const displayErrorsElem = document.getElementById('display_errors');
@@ -15,6 +17,7 @@ document.body.onload = () => {
         const progSelectorElem = document.getElementById('demo_programs');
         let codeLines = new CodeLines();
         if (editorElem !== null
+            && tooltipElem !== null
             && editorLinesElem !== null
             && displayErrorsElem !== null
             && displayLogElem !== null
@@ -43,14 +46,23 @@ document.body.onload = () => {
             output_area.initializeOutputArea(displayErrorsElem, displayLogElem, errorElem, logElem);
             const updateEditor = () => {
                 const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n')));
-                console.log(parsed);
                 parsed.typeTokens = new Set(parsed.typeTokens);
                 let hl_map = new Map();
                 Object.keys(parsed.highlightMap).forEach(key => {
                     hl_map.set(Number.parseInt(key), parsed.highlightMap[key]);
                 });
                 parsed.highlightMap = hl_map;
-                editor.updateEditorWithCode(editorElem, editorLinesElem, codeLines.code, parsed);
+                let ast = new Map();
+                Object.keys(parsed.ast).forEach(key => {
+                    ast.set(key, parsed.ast[key]);
+                });
+                parsed.ast = ast;
+                for (let f of ast.values()) {
+                    for (let c of f.constraints) {
+                        console.log(types.constraint_name(c));
+                    }
+                }
+                editor.updateEditorWithCode(editorElem, tooltipElem, editorLinesElem, codeLines.code, parsed);
                 editor.updateEditorWithErrors(parsed.errors, editorElem);
                 editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem);
                 output_area.updateErrorELement(displayErrorsElem, errorElem, parsed.errors, parsed.tokens);

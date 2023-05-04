@@ -18,7 +18,7 @@ pub use initialize_ast::{annotation_type, populate_annotation};
 use unify::{substitute, unify};
 
 pub use ind::Ind;
-pub use types::{Substitutions, Type};
+pub use types::{Constraint, Substitutions, Type};
 
 pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
     if !state.errors.is_empty() {
@@ -124,15 +124,25 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
         let mut subs = Substitutions::new();
 
         unify(
-            &function.body,
+            &mut function.body,
             &mut scope,
             &mut curr_forall_var,
             &function.return_type.inner,
             &mut function_errors,
             &mut subs,
+            &mut function.constraints,
         );
 
         scope.pop();
+
+        let mut dedup_constraints = vec![];
+        for constraint in &function.constraints {
+            if !dedup_constraints.contains(constraint) {
+                dedup_constraints.push(constraint.clone());
+            }
+        }
+
+        function.constraints = dedup_constraints;
 
         while !subs.is_empty() && function_errors.is_empty() {
             scope.push();
@@ -142,14 +152,24 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
             subs = Substitutions::new();
             scope.push();
             unify(
-                &function.body,
+                &mut function.body,
                 &mut scope,
                 &mut curr_forall_var,
                 &function.return_type.inner,
                 &mut function_errors,
                 &mut subs,
+                &mut function.constraints,
             );
             scope.pop();
+
+            let mut dedup_constraints = vec![];
+            for constraint in &function.constraints {
+                if !dedup_constraints.contains(constraint) {
+                    dedup_constraints.push(constraint.clone());
+                }
+            }
+
+            function.constraints = dedup_constraints;
         }
 
         if !function_errors.is_empty() {
