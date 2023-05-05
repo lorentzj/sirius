@@ -16,7 +16,7 @@ export function initializeOutputArea(displayErrorsElem: HTMLElement, displayLogE
     });
 }
 
-function parseErrorMessage(errorMessage: string): HTMLElement {
+export function parseErrorMessage(errorMessage: string): HTMLElement {
     const messageElement = document.createElement('span');
     const codePattern = /"(.*?)"/sg;
     let match = codePattern.exec(errorMessage);

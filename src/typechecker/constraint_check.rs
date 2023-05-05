@@ -2,6 +2,8 @@ use super::types::C;
 use crate::error::{Error, ErrorType};
 use crate::parser::Function;
 
+//use z3;
+
 pub fn constraint_check(func: &Function) -> Vec<Error> {
     let mut errors = vec![];
 

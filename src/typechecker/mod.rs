@@ -22,12 +22,32 @@ use unify::{substitute, unify};
 pub use ind::Ind;
 pub use types::{Constraint, Substitutions, Type};
 
+pub struct ScopeEntry {
+    t: Type,
+    mutable: bool,
+    decl_site: Option<usize>,
+}
+
 pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
     if !state.errors.is_empty() {
         return;
     }
 
-    let mut scope = Scope::init(externals);
+    let mut scope: Scope<ScopeEntry> = Scope::init(
+        externals
+            .into_iter()
+            .map(|(name, t)| {
+                (
+                    name,
+                    ScopeEntry {
+                        t,
+                        mutable: false,
+                        decl_site: None,
+                    },
+                )
+            })
+            .collect(),
+    );
 
     for (name, function) in state.ast.iter_mut() {
         let type_arg_names = function.type_arg_names();
@@ -60,11 +80,15 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
 
         scope.insert(
             name.clone(),
-            Type::Function(
-                function.type_arg_names(),
-                function.arg_types(),
-                Box::new(function.return_type.inner.clone()),
-            ),
+            ScopeEntry {
+                t: Type::Function(
+                    function.type_arg_names(),
+                    function.arg_types(),
+                    Box::new(function.return_type.inner.clone()),
+                ),
+                mutable: false,
+                decl_site: Some(function.name.start),
+            },
         );
 
         state.errors.extend(name_rules::check_fn_args(function));
@@ -89,12 +113,23 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
         let mut function_errors = vec![];
 
         let mut curr_forall_var = 0;
+        let mut curr_ind_forall_var = 0;
         let type_args = function.type_arg_names();
 
         scope.push();
 
         for (arg, arg_type) in &function.args {
-            scope.insert(arg.inner.clone(), arg_type.inner.clone());
+            let mut arg_type = arg_type.inner.clone();
+            arg_type.promote_inds(&mut curr_ind_forall_var);
+
+            scope.insert(
+                arg.inner.clone(),
+                ScopeEntry {
+                    t: arg_type,
+                    mutable: false,
+                    decl_site: Some(arg.start),
+                },
+            );
         }
 
         scope.push();
@@ -103,9 +138,11 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
             initialize_statement_types(
                 statement,
                 &mut curr_forall_var,
+                &mut curr_ind_forall_var,
                 &mut scope,
                 &mut function_errors,
                 &type_args,
+                &mut state.highlight_map,
             );
         }
 
@@ -117,7 +154,7 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
         }
 
         // begin unification/substitution loop
-        // unification fn walks the statements and prepares a list of substitutions
+        // unification fn walks the statements/exprs and prepares a list of substitutions
         // substitution fn updates the type info in the statements and may make new unifications possible
         // terminate if unification produces no more substitutions or on error
 
@@ -147,8 +184,6 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
         function.constraints = dedup_constraints;
 
         while !subs.is_empty() && function_errors.is_empty() {
-            // reset constraints - we only want constraints from the last round of unification
-            function.constraints = vec![];
             scope.push();
             substitute(&mut function.body, &mut scope, &subs);
             scope.pop();
@@ -175,6 +210,8 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
 
             function.constraints = dedup_constraints;
         }
+
+        scope.pop();
 
         if !function_errors.is_empty() {
             state.errors.extend(function_errors);
@@ -284,11 +321,13 @@ fn main():
         let mut state = parse(code);
         typecheck(&mut state, HashMap::default());
 
-        assert!(if let S::Let(_, _, val) = &state.ast["main"].body[0].data {
-            val.t == Type::I64(Some(Ind::constant(3)))
-        } else {
-            false
-        });
+        assert!(
+            if let S::Let(_, _, _, val) = &state.ast["main"].body[0].data {
+                val.t == Type::I64(Some(Ind::constant(3)))
+            } else {
+                false
+            }
+        );
     }
 
     #[test]

@@ -241,11 +241,7 @@ impl Type {
                 Type::I64(Some(other_i)) => match self {
                     Type::I64(Some(self_i)) => Some((
                         Substitutions::new(),
-                        if self_i.dirty {
-                            vec![]
-                        } else {
-                            vec![Constraint::new_eq(other_i.clone(), self_i.clone())]
-                        },
+                        vec![Constraint::new_eq(other_i.clone(), self_i.clone())],
                     )),
                     _ => None,
                 },
@@ -311,183 +307,41 @@ impl Type {
         }
     }
 
-    pub fn unify_assign(&mut self, new: &Type) -> Result<(Substitutions, Vec<Constraint>), bool> {
-        match self {
-            Type::I64(Some(curr_val)) => {
-                if curr_val.strict {
-                    Err(true)
-                } else {
-                    match new {
-                        Type::I64(Some(new_val)) => {
-                            *curr_val = new_val.clone();
-                            curr_val.dirty = true;
-                            Ok((Substitutions::new(), vec![]))
-                        }
-                        Type::I64(None) => {
-                            *self = Type::I64(None);
-                            Ok((Substitutions::new(), vec![]))
-                        }
-                        Type::ForAll(_) => {
-                            curr_val.dirty = true;
-                            Ok((Substitutions::new(), vec![]))
-                        }
-                        Type::Unknown => Ok((Substitutions::new(), vec![])),
-                        _ => Err(false),
-                    }
-                }
-            }
-            Type::I64(None) => match new {
-                Type::I64(Some(new_val)) => {
-                    let mut curr_val = new_val.clone();
-                    curr_val.dirty = true;
-                    *self = Type::I64(Some(curr_val));
-                    Ok((Substitutions::new(), vec![]))
-                }
-                Type::I64(None) => Ok((Substitutions::new(), vec![])),
-                Type::ForAll(_) => Ok((Substitutions::new(), vec![])),
-                Type::Unknown => Ok((Substitutions::new(), vec![])),
-                _ => Err(false),
-            },
-            Type::Tuple(l_types) => {
-                if let Type::Tuple(r_types) = new {
-                    if l_types.len() != r_types.len() {
-                        Err(false)
-                    } else {
-                        let mut subs = Substitutions::new();
-                        let mut constraints = vec![];
-                        for (l_type, r_type) in l_types.iter_mut().zip(r_types) {
-                            let (inner_subs, inner_constraints) =
-                                Type::unify_assign(l_type, r_type)?;
-                            if subs.extend(0, inner_subs, 0).is_err() {
-                                return Err(false);
-                            }
-                            constraints.extend(inner_constraints);
-                        }
-
-                        Ok((subs, constraints))
-                    }
-                } else {
-                    Err(false)
-                }
-            }
-            _ => match self.unify(new) {
-                Some(s) => Ok(s),
-                None => Err(false),
-            },
+    pub fn new_free_ind(curr_ind_forall_var: &mut usize, universal: bool) -> Type {
+        *curr_ind_forall_var += 1;
+        let mut name = "'".to_string() + &usize_name(*curr_ind_forall_var - 1);
+        if universal {
+            name = name.to_uppercase();
         }
+        Type::I64(Some(Ind::var(&name)))
     }
 
-    pub fn unify_update_vals(&mut self, new: &Type) -> Option<(Substitutions, Vec<Constraint>)> {
-        match self {
-            Type::I64(Some(curr_val)) => match new {
-                Type::I64(Some(new_val)) => {
-                    *curr_val = new_val.clone();
-                    curr_val.dirty = false;
-                    Some((Substitutions::new(), vec![]))
-                }
-                Type::I64(None) => {
-                    *self = Type::I64(None);
-                    Some((Substitutions::new(), vec![]))
-                }
-                Type::ForAll(_) => Some((Substitutions::new(), vec![])),
-                Type::Unknown => Some((Substitutions::new(), vec![])),
-                _ => None,
-            },
-            Type::I64(None) => match new {
-                Type::I64(Some(new_val)) => {
-                    *self = Type::I64(Some(new_val.clone()));
-                    Some((Substitutions::new(), vec![]))
-                }
-                Type::I64(None) => Some((Substitutions::new(), vec![])),
-                Type::ForAll(_) => Some((Substitutions::new(), vec![])),
-                Type::Unknown => Some((Substitutions::new(), vec![])),
-                _ => None,
-            },
-            Type::Tuple(l_types) => {
-                if let Type::Tuple(r_types) = new {
-                    if l_types.len() != r_types.len() {
-                        None
-                    } else {
-                        let mut subs = Substitutions::new();
-                        let mut constraints = vec![];
-                        for (l_type, r_type) in l_types.iter_mut().zip(r_types) {
-                            let (inner_subs, inner_constraints) =
-                                Type::unify_update_vals(l_type, r_type)?;
-                            if subs.extend(0, inner_subs, 0).is_err() {
-                                return None;
-                            }
-                            constraints.extend(inner_constraints);
-                        }
-
-                        Some((subs, constraints))
-                    }
-                } else {
-                    None
-                }
-            }
-            _ => self.unify(new),
-        }
-    }
-
-    pub fn apply_ann_exact_values(&mut self, ann: &Type) -> bool {
-        match self {
-            Type::I64(None) => matches!(ann, Type::I64(None)),
-            Type::I64(Some(t_ind)) => match ann {
-                Type::I64(None) => true,
-                Type::I64(Some(ann_ind)) => {
-                    if ann_ind == t_ind {
-                        t_ind.strict = true;
-                        true
-                    } else {
-                        false
-                    }
-                }
-                _ => false,
-            },
-            Type::Tuple(t_inner) => match ann {
-                Type::Tuple(ann_inner) => {
-                    if t_inner.len() != ann_inner.len() {
-                        false
-                    } else {
-                        for (t, ann) in t_inner.iter_mut().zip(ann_inner) {
-                            if !t.apply_ann_exact_values(ann) {
-                                return false;
-                            }
-                        }
-                        true
-                    }
-                }
-                _ => false,
-            },
-            Type::Function(_, t_args, t_ret) => match ann {
-                Type::Function(_, ann_args, ann_ret) => {
-                    if t_args.len() != ann_args.len() {
-                        false
-                    } else {
-                        for (t, ann) in t_args.iter_mut().zip(ann_args) {
-                            if !t.apply_ann_exact_values(ann) {
-                                return false;
-                            }
-                        }
-                        t_ret.apply_ann_exact_values(ann_ret)
-                    }
-                }
-                _ => false,
-            },
+    pub fn ind_var_is_universal(ind_var_name: &str) -> bool {
+        let mut cs = ind_var_name.chars();
+        match cs.next() {
+            Some('\'') => cs.next().unwrap().is_lowercase(),
             _ => true,
         }
     }
 
-    pub fn demote_dirty(&mut self) {
+    pub fn promote_inds(&mut self, curr_ind_forall_var: &mut usize) {
         match self {
-            Type::I64(Some(t_ind)) => {
-                if t_ind.dirty {
-                    *self = Type::I64(None)
+            Type::I64(None) => *self = Type::new_free_ind(curr_ind_forall_var, true),
+            Type::Tuple(inner) => {
+                for t in inner.iter_mut() {
+                    t.promote_inds(curr_ind_forall_var)
                 }
             }
-            Type::Tuple(t_inner) => {
-                for t in t_inner {
-                    t.demote_dirty()
+            _ => (),
+        }
+    }
+
+    pub fn demote_inds(&mut self) {
+        match self {
+            Type::I64(_) => *self = Type::I64(None),
+            Type::Tuple(inner) => {
+                for t in inner.iter_mut() {
+                    t.demote_inds()
                 }
             }
             _ => (),

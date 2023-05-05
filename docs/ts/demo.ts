@@ -56,7 +56,6 @@ document.body.onload = () => {
 
             const updateEditor = () => {
                 const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n'))) as types.ParserOutput;
-
                 parsed.typeTokens = new Set(parsed.typeTokens as unknown as number[]);
 
                 let hl_map: Map<number, number[]> = new Map();
@@ -71,10 +70,15 @@ document.body.onload = () => {
                 });
                 parsed.ast = ast;
 
-                for(let f of ast.values()) {
-                    for(let c of f.constraints) {
+                console.log(ast);
+
+                for(let fn of parsed.ast) {
+                    console.log('------------------');
+                    console.log(fn[0]);
+                    for(let c of fn[1].constraints) {
                         console.log(types.constraint_name(c));
                     }
+                    console.log('------------------');
                 }
 
                 editor.updateEditorWithCode(editorElem, tooltipElem, editorLinesElem, codeLines.code, parsed);  

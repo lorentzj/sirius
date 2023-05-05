@@ -60,7 +60,7 @@ fn check_stmt_for_foralls(statement: &Statement) -> Vec<Error> {
         S::Assign(_, val) => errors.extend(check_expr_for_foralls(val)),
         S::Return(Some(val)) => errors.extend(check_expr_for_foralls(val)),
         S::Return(None) => (),
-        S::Let(_, _, val) => errors.extend(check_expr_for_foralls(val)),
+        S::Let(_, _, _, val) => errors.extend(check_expr_for_foralls(val)),
         S::If(cond, true_inner, false_inner) => {
             errors.extend(check_expr_for_foralls(cond));
             for stmt in true_inner {
@@ -72,7 +72,7 @@ fn check_stmt_for_foralls(statement: &Statement) -> Vec<Error> {
                 }
             }
         }
-        S::For(_, from, to, inner) => {
+        S::For(_, _, from, to, inner) => {
             errors.extend(check_expr_for_foralls(from));
             errors.extend(check_expr_for_foralls(to));
             for stmt in inner {

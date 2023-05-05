@@ -50,7 +50,9 @@ pub fn arith_coerce<'a>(lhs: Value<'a>, op: &Op, rhs: Value<'a>) -> Value<'a> {
             Op::Div => Value::F64(lhs / rhs),
             Op::Exp => Value::F64(lhs.powf(rhs)),
             Op::Greater => Value::Bool(lhs > rhs),
+            Op::GreaterOrEq => Value::Bool(lhs >= rhs),
             Op::Less => Value::Bool(lhs < rhs),
+            Op::LessOrEq => Value::Bool(lhs <= rhs),
             _ => panic!(),
         }
     } else {
@@ -62,7 +64,9 @@ pub fn arith_coerce<'a>(lhs: Value<'a>, op: &Op, rhs: Value<'a>) -> Value<'a> {
             Op::Div => Value::I64(lhs / rhs),
             Op::Exp => Value::F64((lhs as f64).powf(rhs as f64)),
             Op::Greater => Value::Bool(lhs > rhs),
+            Op::GreaterOrEq => Value::Bool(lhs >= rhs),
             Op::Less => Value::Bool(lhs < rhs),
+            Op::LessOrEq => Value::Bool(lhs <= rhs),
             _ => panic!(),
         }
     }

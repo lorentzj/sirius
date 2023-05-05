@@ -1,160 +1,135 @@
 import * as types from './types.js';
+import {parseErrorMessage} from './output_area.js';
 
-function updateToolTip(tooltipElem: HTMLElement, token: HTMLElement) {
+function updateToolTip(tooltipElem: HTMLElement, tokenElem: HTMLElement) {
     tooltipElem.innerHTML = '';
-    if(token.dataset['type'] !== undefined) {
+    if(tokenElem.dataset['type'] !== undefined) {
         let typeElem = document.createElement('span');
         typeElem.classList.add('code');
         typeElem.classList.add('token');
         typeElem.classList.add('type');        
-        typeElem.innerText = token.dataset['type'];
+        typeElem.innerText = tokenElem.dataset['type'];
 
         tooltipElem.appendChild(typeElem);
     }
+
+    if(tokenElem.dataset['error'] !== undefined) {
+        const errorTypeElem = document.createElement('span');
+        errorTypeElem.innerText = tokenElem.dataset['error'].split(': ')[0] + ': ';
+        errorTypeElem.classList.add('error_type');
+
+        let errorDetailsElem = parseErrorMessage(tokenElem.dataset['error'].split(': ').slice(1,).join(':'));
+
+        let errorMsgElem = document.createElement('div');
+
+        errorMsgElem.appendChild(errorTypeElem);
+        errorMsgElem.appendChild(errorDetailsElem);
+        tooltipElem.appendChild(errorMsgElem);
+    }
 }
 
-export function setHandler(tooltipElem: HTMLElement, tokenElem: HTMLElement, tokenId: number, ast: types.AST) {
-    let type = getIdentType(tokenId, ast);
+export function addTypeInfo(editorElem: HTMLElement, ast: types.AST) {
+    for(let [token, type] of getIdentTypePairs(ast)) {
+        const tokenSelector = `span.token[data-token-id='${token}']`;
+        const tokenElem = editorElem.querySelector(tokenSelector);
+        if(tokenElem !== null) {
+            (tokenElem as HTMLElement).dataset['type'] = type;
+        }
+    }
+}
 
-    if(type !== null) {
-        tokenElem.dataset['type'] = type;
-        tokenElem.addEventListener('mouseenter', () => {
+export function setToolTipHandler(tooltipElem: HTMLElement, tokenElem: HTMLElement) {
+    tokenElem.addEventListener('mouseenter', () => {
+        if(tokenElem.dataset['error'] !== undefined || tokenElem.dataset['type'] !== undefined) {
             updateToolTip(tooltipElem, tokenElem);
             tooltipElem.style.top  =  `${tokenElem.getBoundingClientRect().bottom}px`;
             tooltipElem.style.left =  `${tokenElem.getBoundingClientRect().left}px`;
-            tooltipElem.style.display = 'block';
-        });
-        tokenElem.addEventListener('mouseleave', () => {
-            tooltipElem.style.display = 'none';
-        });
-    }
+            tooltipElem.style.display = 'block';    
+        }
+    });
+
+    tokenElem.addEventListener('mouseleave', () => {
+        tooltipElem.style.display = 'none';
+    });
 }
 
-function getIdentType(tokenId: number, ast: types.AST): string | null {
+function getIdentTypePairs(ast: types.AST): [number, string][] {
+    let r: [number, string][] = [];
     for(let f of ast.values()) {
-        let foundInFn = getIdentTypeInBlock(tokenId, f.body);
-        if(foundInFn !== null) {
-            return foundInFn;
-        }
+        r = r.concat(getIdentTypePairsInBlock(f.body));
     }
 
-    return null;
+    return r;
 }
 
-function getIdentTypeInBlock(tokenId: number, statements: types.Statement[]): string | null {
+function getIdentTypePairsInBlock(statements: types.Statement[]): [number, string][] {
+    let r: [number, string][] = [];
     for(let statement of statements) {
-        if(statement.start <= tokenId && statement.end > tokenId) {
-            if('Let' in statement.data) {
-                let foundInExpr = getIdentTypeInExpr(tokenId, statement.data['Let'][2]);
-                if(foundInExpr !== null) {
-                    return foundInExpr;
-                }
-            } else if('Assign' in statement.data) {
-                let foundInExpr = getIdentTypeInExpr(tokenId, statement.data['Assign'][1]);
-                if(foundInExpr !== null) {
-                    return foundInExpr;
-                }
-            } else if('Print' in statement.data) {
-                let foundInExpr = getIdentTypeInExpr(tokenId, statement.data['Print']);
-                if(foundInExpr !== null) {
-                    return foundInExpr;
-                }
-            } else if('Return' in statement.data && statement.data['Return'] !== null) {
-                let foundInExpr = getIdentTypeInExpr(tokenId, statement.data['Return']);
-                if(foundInExpr !== null) {
-                    return foundInExpr;
-                }
-            } else if('If' in statement.data) {
-                let foundInExpr = getIdentTypeInExpr(tokenId, statement.data['If'][0]);
-                if(foundInExpr !== null) {
-                    return foundInExpr;
-                }
-
-                let foundInTrueBlock = getIdentTypeInBlock(tokenId, statement.data['If'][1]);
-                if(foundInTrueBlock !== null) {
-                    return foundInTrueBlock;
-                }
-
-                if(statement.data['If'][2] !== null) {
-                    let foundInFalseBlock = getIdentTypeInBlock(tokenId, statement.data['If'][2]);
-                    if(foundInFalseBlock !== null) {
-                        return foundInFalseBlock;
-                    }    
-                }                
-            } else if('For' in statement.data) {
-                let foundInFrom = getIdentTypeInExpr(tokenId, statement.data['For'][1]);
-                if(foundInFrom !== null) {
-                    return foundInFrom;
-                }
-
-                let foundInTo = getIdentTypeInExpr(tokenId, statement.data['For'][2]);
-                if(foundInTo !== null) {
-                    return foundInTo;
-                }
-
-                let foundInInnerBlock = getIdentTypeInBlock(tokenId, statement.data['For'][3]);
-                if(foundInInnerBlock !== null) {
-                    return foundInInnerBlock;
-                }
-            }
-            return null;
+        if('Let' in statement.data) {
+            r = r.concat(getIdentTypePairsInExpr(statement.data['Let'][3]));
+        } else if('Assign' in statement.data) {
+            r = r.concat(getIdentTypePairsInExpr(statement.data['Assign'][1]));
+        } else if('Print' in statement.data) {
+            r = r.concat(getIdentTypePairsInExpr(statement.data['Print']));
+        } else if('Return' in statement.data && statement.data['Return'] !== null) {
+            r = r.concat(getIdentTypePairsInExpr(statement.data['Return']));
+        } else if('If' in statement.data) {
+            r = r.concat(getIdentTypePairsInExpr(statement.data['If'][0]));
+            r = r.concat(getIdentTypePairsInBlock(statement.data['If'][1]));
+            if(statement.data['If'][2] !== null) {
+                r = r.concat(getIdentTypePairsInBlock(statement.data['If'][2]));
+            }                
+        } else if('For' in statement.data) {
+            r = r.concat(getIdentTypePairsInExpr(statement.data['For'][2]));
+            r = r.concat(getIdentTypePairsInExpr(statement.data['For'][3]));
+            r = r.concat(getIdentTypePairsInBlock(statement.data['For'][4]));
         }
     }
-    return null;
+
+    return r;
 }
 
-function getIdentTypeInExpr(tokenId: number, expression: types.Expression): string | null {
-    if(expression.start <= tokenId && expression.end > tokenId) {
-        if('F64' in expression.data) {
-            return expression.t;
-        } else if('I64' in expression.data) {
-            return expression.t;
-        } else if('Bool' in expression.data) {
-            return expression.t;
-        } else if('Ident' in expression.data) {
-            return expression.t;
-        } else if('BinaryOp' in expression.data) {
-            let lhs = expression.data['BinaryOp'][0];
-            let rhs = expression.data['BinaryOp'][2];
+function getIdentTypePairsInExpr(expression: types.Expression): [number, string][] {
+    if('F64' in expression.data) {
+        return [[expression.start, expression.t]];
+    } else if('I64' in expression.data) {
+        return [[expression.start, expression.t]];
+    } else if('Bool' in expression.data) {
+        return [[expression.start, expression.t]];
+    } else if('Ident' in expression.data) {
+        return [[expression.start, expression.t]];
+    } else if('BinaryOp' in expression.data) {
+        let lhs = expression.data['BinaryOp'][0];
+        let rhs = expression.data['BinaryOp'][2];
 
-            if(lhs.start <= tokenId && lhs.end > tokenId) {
-                return getIdentTypeInExpr(tokenId, lhs);
-            } else if(rhs.start <= tokenId && rhs.end > tokenId) {
-                return getIdentTypeInExpr(tokenId, rhs);
-            }
-        } else if('UnaryOp' in expression.data) {
-            let inner = expression.data['UnaryOp'][1];
-            if(inner.start <= tokenId && inner.end > tokenId) {
-                return getIdentTypeInExpr(tokenId, inner);
-            }
-        } else if('Tuple' in expression.data) {
-            for(let inner of expression.data['Tuple']) {
-                if(inner.start <= tokenId && inner.end > tokenId) {
-                    return getIdentTypeInExpr(tokenId, inner);
-                }    
-            }
-        } else if('FnCall' in expression.data) {
-            let caller = expression.data['FnCall'][0];
-            if(caller.start <= tokenId && caller.end > tokenId) {
-                return getIdentTypeInExpr(tokenId, caller);
-            }
+        return getIdentTypePairsInExpr(lhs).concat(getIdentTypePairsInExpr(rhs));
 
-            for(let inner of expression.data['FnCall'][1]) {
-                if(inner.start <= tokenId && inner.end > tokenId) {
-                    return getIdentTypeInExpr(tokenId, inner);
-                }    
-            }
-        } else if('Accessor' in expression.data) {
-            let lhs = expression.data['Accessor'][0];
-            let rhs = expression.data['Accessor'][1];
+    } else if('UnaryOp' in expression.data) {
+        let inner = expression.data['UnaryOp'][1];
+        return getIdentTypePairsInExpr(inner);
+    } else if('Tuple' in expression.data) {
+        let r: [number, string][] = [];
 
-            if(lhs.start <= tokenId && lhs.end > tokenId) {
-                return getIdentTypeInExpr(tokenId, lhs);
-            } else if(rhs.start <= tokenId && rhs.end > tokenId) {
-                return getIdentTypeInExpr(tokenId, rhs);
-            }
+        for(let inner of expression.data['Tuple']) {
+            r = r.concat(getIdentTypePairsInExpr(inner));
         }
+        return r;
+    } else if('FnCall' in expression.data) {
+        let caller = expression.data['FnCall'][0];
+
+        let r: [number, string][] = [];
+        r = r.concat(getIdentTypePairsInExpr(caller));
+
+        for(let inner of expression.data['FnCall'][1]) {
+            r = r.concat(getIdentTypePairsInExpr(inner));
+        }
+        return r;
+    } else if('Accessor' in expression.data) {
+        let lhs = expression.data['Accessor'][0];
+        let rhs = expression.data['Accessor'][1];
+
+        return getIdentTypePairsInExpr(lhs).concat(getIdentTypePairsInExpr(rhs));
+    } else {
+        return [];
     }
-    
-    return null;
 }

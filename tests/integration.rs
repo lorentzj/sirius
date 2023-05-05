@@ -1,9 +1,5 @@
 extern crate sirius;
 
-use std::collections::HashMap;
-
-use sirius::parser;
-use sirius::typechecker;
 use sirius::wasm;
 
 #[test]
@@ -118,10 +114,34 @@ fn main():
         print i"
         .into();
 
-    let mut output = parser::parse(code);
-    typechecker::typecheck(&mut output, HashMap::default());
-    println!("{:?}", output.errors);
-    for token in output.tokens[50..53].iter() {
-        println!("{:?}", token);
-    }
+    let output = wasm::interpret(code);
+    assert_eq!(
+        output,
+        "{\"stdout\":\"true\\n(1, 2)\\ntrue\\n1\\n2\\n3\\n\",\"error\":null}"
+    );
 }
+
+// #[test]
+// fn mut_test() {
+//     let code = "
+// fn main():
+//     let i = true
+//     if true:
+//         print i
+//         if i:
+//             let i = (1, 2)
+//             print i
+
+//         print i
+
+//     for i from 1 to 3 + 1:
+//         print i"
+//         .into();
+
+//     let mut output = parser::parse(code);
+//     typechecker::typecheck(&mut output, HashMap::default());
+//     println!("{:?}", output.errors);
+//     for token in output.tokens[50..53].iter() {
+//         println!("{:?}", token);
+//     }
+// }

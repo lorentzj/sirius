@@ -5,7 +5,7 @@ pub fn equality_check(lhs: &Type, rhs: &Type) -> Result<(), String> {
         Err("cannot check function equality".into())
     } else if let Type::Function(_, _, _) = rhs {
         Err("cannot check function equality".into())
-    } else if lhs == rhs {
+    } else if lhs == rhs || lhs == &Type::Unknown || rhs == &Type::Unknown {
         return Ok(());
     } else if matches!(lhs, Type::I64(_)) && matches!(rhs, Type::I64(_)) {
         Ok(())

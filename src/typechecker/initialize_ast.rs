@@ -1,4 +1,7 @@
+use std::collections::HashMap;
+
 use super::types::Type;
+use super::ScopeEntry;
 use crate::error::{Error, ErrorType};
 use crate::scope::Scope;
 
@@ -160,9 +163,11 @@ pub fn populate_annotation(
 fn initialize_expression_types(
     expression: &mut Expression,
     curr_forall_var: &mut usize,
-    context: &Scope<Type>,
+    _curr_ind_forall_var: &mut usize,
+    context: &Scope<ScopeEntry>,
     type_vars: &[String],
     errors: &mut Vec<Error>,
+    highlight_map: &mut HashMap<usize, Vec<usize>>,
 ) {
     match &mut expression.data {
         E::Bool(_) => expression.t = Type::Bool,
@@ -172,43 +177,111 @@ fn initialize_expression_types(
             *curr_forall_var += 1;
             expression.t = Type::ForAll(*curr_forall_var - 1);
 
-            initialize_expression_types(&mut *inner, curr_forall_var, context, type_vars, errors);
+            initialize_expression_types(
+                &mut *inner,
+                curr_forall_var,
+                _curr_ind_forall_var,
+                context,
+                type_vars,
+                errors,
+                highlight_map,
+            );
         }
         E::BinaryOp(lhs, _, rhs) => {
             *curr_forall_var += 1;
             expression.t = Type::ForAll(*curr_forall_var - 1);
 
-            initialize_expression_types(&mut *lhs, curr_forall_var, context, type_vars, errors);
+            initialize_expression_types(
+                &mut *lhs,
+                curr_forall_var,
+                _curr_ind_forall_var,
+                context,
+                type_vars,
+                errors,
+                highlight_map,
+            );
 
-            initialize_expression_types(&mut *rhs, curr_forall_var, context, type_vars, errors);
+            initialize_expression_types(
+                &mut *rhs,
+                curr_forall_var,
+                _curr_ind_forall_var,
+                context,
+                type_vars,
+                errors,
+                highlight_map,
+            );
         }
         E::Accessor(lhs, rhs) => {
             *curr_forall_var += 1;
             expression.t = Type::ForAll(*curr_forall_var - 1);
 
-            initialize_expression_types(&mut *lhs, curr_forall_var, context, type_vars, errors);
+            initialize_expression_types(
+                &mut *lhs,
+                curr_forall_var,
+                _curr_ind_forall_var,
+                context,
+                type_vars,
+                errors,
+                highlight_map,
+            );
 
-            initialize_expression_types(&mut *rhs, curr_forall_var, context, type_vars, errors);
+            initialize_expression_types(
+                &mut *rhs,
+                curr_forall_var,
+                _curr_ind_forall_var,
+                context,
+                type_vars,
+                errors,
+                highlight_map,
+            );
         }
         E::Tuple(inner) => {
             *curr_forall_var += 1;
             expression.t = Type::ForAll(*curr_forall_var - 1);
             for e in inner {
-                initialize_expression_types(e, curr_forall_var, context, type_vars, errors);
+                initialize_expression_types(
+                    e,
+                    curr_forall_var,
+                    _curr_ind_forall_var,
+                    context,
+                    type_vars,
+                    errors,
+                    highlight_map,
+                );
             }
         }
         E::FnCall(caller, args) => {
             *curr_forall_var += 1;
             expression.t = Type::ForAll(*curr_forall_var - 1);
 
-            initialize_expression_types(&mut *caller, curr_forall_var, context, type_vars, errors);
+            initialize_expression_types(
+                &mut *caller,
+                curr_forall_var,
+                _curr_ind_forall_var,
+                context,
+                type_vars,
+                errors,
+                highlight_map,
+            );
 
             for e in args {
-                initialize_expression_types(e, curr_forall_var, context, type_vars, errors);
+                initialize_expression_types(
+                    e,
+                    curr_forall_var,
+                    _curr_ind_forall_var,
+                    context,
+                    type_vars,
+                    errors,
+                    highlight_map,
+                );
             }
         }
         E::Ident(name, type_args) => match context.get(name) {
-            Some(t) => {
+            Some(ScopeEntry { t, decl_site, .. }) => {
+                if let Some(decl_site) = decl_site {
+                    highlight_map.insert(expression.start, vec![expression.start, *decl_site]);
+                }
+
                 expression.t = match t {
                     Type::Function(function_type_vars, _, _) => {
                         let mut subs: Vec<_> = (*curr_forall_var
@@ -288,16 +361,34 @@ fn initialize_expression_types(
 pub fn initialize_statement_types(
     statement: &mut Statement,
     curr_forall_var: &mut usize,
-    context: &mut Scope<Type>,
+    curr_ind_forall_var: &mut usize,
+    context: &mut Scope<ScopeEntry>,
     errors: &mut Vec<Error>,
     type_vars: &[String],
+    highlight_map: &mut HashMap<usize, Vec<usize>>,
 ) {
     match &mut statement.data {
         S::Print(val) => {
-            initialize_expression_types(val, curr_forall_var, context, type_vars, errors);
+            initialize_expression_types(
+                val,
+                curr_forall_var,
+                curr_ind_forall_var,
+                context,
+                type_vars,
+                errors,
+                highlight_map,
+            );
         }
-        S::Let(name, ann, val) => {
-            initialize_expression_types(val, curr_forall_var, context, type_vars, errors);
+        S::Let(name, mutable, ann, val) => {
+            initialize_expression_types(
+                val,
+                curr_forall_var,
+                curr_ind_forall_var,
+                context,
+                type_vars,
+                errors,
+                highlight_map,
+            );
             *ann = ann.as_ref().map(|ann| {
                 match populate_annotation(&ann.inner, &mut Some(curr_forall_var), type_vars) {
                     Ok(t) => Positioned::new(ann.start, t, ann.end),
@@ -310,57 +401,150 @@ pub fn initialize_statement_types(
                 }
             });
 
-            context.insert(name.inner.clone(), val.t.clone());
+            context.insert(
+                name.inner.clone(),
+                ScopeEntry {
+                    t: match val.t {
+                        Type::I64(_) => {
+                            if *mutable {
+                                Type::I64(None)
+                            } else {
+                                val.t.clone()
+                            }
+                        }
+                        _ => val.t.clone(),
+                    },
+                    mutable: *mutable,
+                    decl_site: Some(name.start),
+                },
+            );
         }
         S::Assign(place, val) => {
-            initialize_expression_types(val, curr_forall_var, context, type_vars, errors);
-
-            if context.get(&place.inner).is_none() {
-                errors.push(Error::new(
-                    ErrorType::UnboundIdentifier,
-                    format!("identifier \"{}\" not found in scope", place.inner),
-                    place.start,
-                    place.end,
-                ));
-            } else if context.is_global(&place.inner) {
-                errors.push(Error::new(
-                    ErrorType::Mutation,
-                    format!("\"{}\" is global and cannot be mutated", place.inner),
-                    place.start,
-                    place.end,
-                ));
+            initialize_expression_types(
+                val,
+                curr_forall_var,
+                curr_ind_forall_var,
+                context,
+                type_vars,
+                errors,
+                highlight_map,
+            );
+            match context.get(&place.inner) {
+                Some(ScopeEntry { mutable, .. }) => {
+                    if !mutable {
+                        errors.push(Error::new(
+                            ErrorType::Mutation,
+                            format!("\"{}\" is immutable", place.inner),
+                            place.start,
+                            place.end,
+                        ));
+                    }
+                }
+                None => {
+                    errors.push(Error::new(
+                        ErrorType::UnboundIdentifier,
+                        format!("identifier \"{}\" not found in scope", place.inner),
+                        place.start,
+                        place.end,
+                    ));
+                }
             }
         }
         S::If(cond, true_block, false_block) => {
-            initialize_expression_types(cond, curr_forall_var, context, type_vars, errors);
+            initialize_expression_types(
+                cond,
+                curr_forall_var,
+                curr_ind_forall_var,
+                context,
+                type_vars,
+                errors,
+                highlight_map,
+            );
 
             context.push();
             for stmt in true_block {
-                initialize_statement_types(stmt, curr_forall_var, context, errors, type_vars);
+                initialize_statement_types(
+                    stmt,
+                    curr_forall_var,
+                    curr_ind_forall_var,
+                    context,
+                    errors,
+                    type_vars,
+                    highlight_map,
+                );
             }
             context.pop();
             if let Some(false_block) = false_block {
                 context.push();
                 for stmt in false_block {
-                    initialize_statement_types(stmt, curr_forall_var, context, errors, type_vars);
+                    initialize_statement_types(
+                        stmt,
+                        curr_forall_var,
+                        curr_ind_forall_var,
+                        context,
+                        errors,
+                        type_vars,
+                        highlight_map,
+                    );
                 }
                 context.pop();
             }
         }
-        S::For(iterator, from, to, block) => {
-            initialize_expression_types(from, curr_forall_var, context, type_vars, errors);
-            initialize_expression_types(to, curr_forall_var, context, type_vars, errors);
+        S::For(iterator, iter_type, from, to, block) => {
+            initialize_expression_types(
+                from,
+                curr_forall_var,
+                curr_ind_forall_var,
+                context,
+                type_vars,
+                errors,
+                highlight_map,
+            );
+            initialize_expression_types(
+                to,
+                curr_forall_var,
+                curr_ind_forall_var,
+                context,
+                type_vars,
+                errors,
+                highlight_map,
+            );
+
+            *iter_type = Type::new_free_ind(curr_ind_forall_var, true);
 
             context.push();
-            context.insert(iterator.inner.clone(), Type::I64(None));
+            context.insert(
+                iterator.inner.clone(),
+                ScopeEntry {
+                    t: iter_type.clone(),
+                    mutable: false,
+                    decl_site: Some(iterator.start),
+                },
+            );
             for stmt in block {
-                initialize_statement_types(stmt, curr_forall_var, context, errors, type_vars);
+                initialize_statement_types(
+                    stmt,
+                    curr_forall_var,
+                    curr_ind_forall_var,
+                    context,
+                    errors,
+                    type_vars,
+                    highlight_map,
+                );
             }
             context.pop();
         }
         S::Return(val) => {
             if let Some(val) = val {
-                initialize_expression_types(val, curr_forall_var, context, type_vars, errors);
+                initialize_expression_types(
+                    val,
+                    curr_forall_var,
+                    curr_ind_forall_var,
+                    context,
+                    type_vars,
+                    errors,
+                    highlight_map,
+                );
             }
         }
     }

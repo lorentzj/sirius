@@ -5,7 +5,15 @@ use crate::lexer::Op;
 pub fn is_arith(op: &Op) -> bool {
     matches!(
         op,
-        &Op::Add | &Op::Sub | &Op::Mul | &Op::Div | &Op::Exp | &Op::Greater | &Op::Less
+        &Op::Add
+            | &Op::Sub
+            | &Op::Mul
+            | &Op::Div
+            | &Op::Exp
+            | &Op::Greater
+            | &Op::Less
+            | &Op::GreaterOrEq
+            | &Op::LessOrEq
     )
 }
 
@@ -16,15 +24,9 @@ pub fn arith_coerce(
     rhs: &Type,
     end: usize,
 ) -> Result<Type, Error> {
-    assert!(
-        op == &Op::Add
-            || op == &Op::Sub
-            || op == &Op::Mul
-            || op == &Op::Div
-            || op == &Op::Exp
-            || op == &Op::Greater
-            || op == &Op::Less
-    );
+    if lhs == &Type::Unknown || rhs == &Type::Unknown {
+        return Ok(Type::Unknown);
+    }
 
     let op_type = if op == &Op::Greater || op == &Op::Less {
         "comparison"
@@ -55,12 +57,12 @@ pub fn arith_coerce(
         ))
     } else if lhs == &Type::F64 || rhs == &Type::F64 {
         match op {
-            Op::Greater | Op::Less => Ok(Type::Bool),
+            Op::Greater | Op::Less | Op::GreaterOrEq | Op::LessOrEq => Ok(Type::Bool),
             _ => Ok(Type::F64),
         }
     } else {
         match op {
-            Op::Greater | Op::Less => Ok(Type::Bool),
+            Op::Greater | Op::Less | Op::GreaterOrEq | Op::LessOrEq => Ok(Type::Bool),
             Op::Exp => Ok(Type::F64),
             _ => {
                 if let Type::I64(Some(lval)) = lhs {

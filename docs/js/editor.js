@@ -159,32 +159,32 @@ export function updateEditorWithCode(editorElem, tooltipElem, editorLinesElem, c
         lineElement.dataset['line'] = (line + 1).toString();
         let line_i = 0;
         while (token_i < parseOutput.tokens.length && parseOutput.tokens[token_i].line === line) {
-            const before_token_code = lineCode.slice(line_i, parseOutput.tokens[token_i].start);
-            if (before_token_code.length > 0) {
-                const before_token_code_span = createCodeSpan(null, null, false);
-                before_token_code_span.textContent = before_token_code;
-                before_token_code_span.dataset['charStart'] = line_i.toString();
-                before_token_code_span.dataset['charEnd'] = (line_i + before_token_code.length).toString();
-                lineElement.appendChild(before_token_code_span);
+            const beforeTokenCode = lineCode.slice(line_i, parseOutput.tokens[token_i].start);
+            if (beforeTokenCode.length > 0) {
+                const beforeTokenCodeSpan = createCodeSpan(null, null, false);
+                beforeTokenCodeSpan.textContent = beforeTokenCode;
+                beforeTokenCodeSpan.dataset['charStart'] = line_i.toString();
+                beforeTokenCodeSpan.dataset['charEnd'] = (line_i + beforeTokenCode.length).toString();
+                lineElement.appendChild(beforeTokenCodeSpan);
             }
-            const token_code = lineCode.slice(parseOutput.tokens[token_i].start, parseOutput.tokens[token_i].end);
-            if (token_code.length > 0) {
-                const token_code_span = createCodeSpan(parseOutput.tokens[token_i], token_i, parseOutput.typeTokens.has(token_i));
-                setMouseOverHLHandler(editorElem, token_code_span, token_i, parseOutput.highlightMap);
-                setMouseOverToolTipHandler(tooltipElem, token_code_span, token_i, parseOutput.ast);
-                token_code_span.textContent = token_code;
-                lineElement.appendChild(token_code_span);
+            const tokenCode = lineCode.slice(parseOutput.tokens[token_i].start, parseOutput.tokens[token_i].end);
+            if (tokenCode.length > 0) {
+                const tokenCodeSpan = createCodeSpan(parseOutput.tokens[token_i], token_i, parseOutput.typeTokens.has(token_i));
+                setMouseOverHLHandler(editorElem, tokenCodeSpan, token_i, parseOutput.highlightMap);
+                tokenCodeSpan.textContent = tokenCode;
+                lineElement.appendChild(tokenCodeSpan);
+                tooltip.setToolTipHandler(tooltipElem, tokenCodeSpan);
             }
             line_i = parseOutput.tokens[token_i].end;
             token_i += 1;
         }
-        const after_token_code = lineCode.slice(line_i, undefined);
-        if (after_token_code.length > 0) {
-            const after_token_code_span = createCodeSpan(null, null, false);
-            after_token_code_span.textContent = after_token_code;
-            after_token_code_span.dataset['charStart'] = line_i.toString();
-            after_token_code_span.dataset['charEnd'] = (line_i + after_token_code.length).toString();
-            lineElement.appendChild(after_token_code_span);
+        const afterTokenCode = lineCode.slice(line_i, undefined);
+        if (afterTokenCode.length > 0) {
+            const afterTokenCodeSpan = createCodeSpan(null, null, false);
+            afterTokenCodeSpan.textContent = afterTokenCode;
+            afterTokenCodeSpan.dataset['charStart'] = line_i.toString();
+            afterTokenCodeSpan.dataset['charEnd'] = (line_i + afterTokenCode.length).toString();
+            lineElement.appendChild(afterTokenCodeSpan);
         }
         if (!lineElement.hasChildNodes()) {
             lineElement.appendChild(document.createElement('br'));
@@ -192,6 +192,7 @@ export function updateEditorWithCode(editorElem, tooltipElem, editorLinesElem, c
         }
         editorElem.appendChild(lineElement);
     });
+    tooltip.addTypeInfo(editorElem, parseOutput.ast);
     let errorLines = new Set();
     for (let error of parseOutput.errors) {
         errorLines.add(parseOutput.tokens[error.start].line);
@@ -225,9 +226,6 @@ function setMouseOverHLHandler(editorElem, codeSpan, tokenId, highlightMap) {
         });
     });
 }
-function setMouseOverToolTipHandler(tooltipElem, tokenElem, tokenId, ast) {
-    tooltip.setHandler(tooltipElem, tokenElem, tokenId, ast);
-}
 export function updateEditorWithErrors(errors, editorElem) {
     errors.forEach(error => {
         for (let tokenId = error.start; tokenId < error.end; tokenId++) {
@@ -235,12 +233,12 @@ export function updateEditorWithErrors(errors, editorElem) {
             const tokenElem = editorElem.querySelector(tokenSelector);
             if (tokenElem !== null) {
                 tokenElem.classList.add('error');
-                tokenElem.title = `${error.error_type}Error: ${error.message}`;
+                tokenElem.dataset['error'] = `${error.error_type}Error: ${error.message}`;
                 if (tokenId + 1 < error.end) {
                     const nextElem = tokenElem.nextElementSibling;
                     if (nextElem !== null) {
                         nextElem.classList.add('error');
-                        nextElem.title = `${error.error_type}Error: ${error.message}`;
+                        nextElem.dataset['error'] = `${error.error_type}Error: ${error.message}`;
                     }
                 }
             }

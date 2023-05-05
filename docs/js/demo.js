@@ -57,10 +57,14 @@ document.body.onload = () => {
                     ast.set(key, parsed.ast[key]);
                 });
                 parsed.ast = ast;
-                for (let f of ast.values()) {
-                    for (let c of f.constraints) {
+                console.log(ast);
+                for (let fn of parsed.ast) {
+                    console.log('------------------');
+                    console.log(fn[0]);
+                    for (let c of fn[1].constraints) {
                         console.log(types.constraint_name(c));
                     }
+                    console.log('------------------');
                 }
                 editor.updateEditorWithCode(editorElem, tooltipElem, editorLinesElem, codeLines.code, parsed);
                 editor.updateEditorWithErrors(parsed.errors, editorElem);

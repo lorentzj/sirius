@@ -58,8 +58,6 @@ fn eq_vars(lhs: &Vec<(String, usize)>, rhs: &Vec<(String, usize)>) -> bool {
 #[derive(Clone)]
 pub struct Ind {
     terms: Vec<Term>,
-    pub dirty: bool,
-    pub strict: bool,
 }
 
 impl Serialize for Ind {
@@ -110,16 +108,12 @@ impl Ind {
     pub fn var(var: &str) -> Self {
         Self {
             terms: vec![(1, vec![(var.to_string(), 1)])],
-            dirty: false,
-            strict: false,
         }
     }
 
     pub fn constant(val: i64) -> Self {
         Self {
             terms: vec![(val, vec![])],
-            dirty: false,
-            strict: false,
         }
     }
 
@@ -132,11 +126,7 @@ impl Ind {
             }
         }
 
-        Ind {
-            terms: new_terms,
-            dirty: self.dirty,
-            strict: self.strict,
-        }
+        Ind { terms: new_terms }
     }
 
     pub fn constant_val(&self) -> Option<i64> {
@@ -190,12 +180,7 @@ impl ops::Add<Ind> for Ind {
             }
         }
 
-        Ind {
-            terms: new_terms,
-            dirty: self.dirty || rhs.dirty,
-            strict: false,
-        }
-        .filter_zeros()
+        Ind { terms: new_terms }.filter_zeros()
     }
 }
 
@@ -219,14 +204,11 @@ impl ops::Mul<Ind> for Ind {
                 new = new
                     + Ind {
                         terms: vec![mul_term(&lhs_term, rhs_term)],
-                        dirty: false,
-                        strict: false,
                     };
             }
         }
 
-        new.dirty = self.dirty | rhs.dirty;
-        new
+        new.filter_zeros()
     }
 }
 

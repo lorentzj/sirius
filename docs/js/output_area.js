@@ -12,7 +12,7 @@ export function initializeOutputArea(displayErrorsElem, displayLogElem, errorEle
         logElem.style.display = 'block';
     });
 }
-function parseErrorMessage(errorMessage) {
+export function parseErrorMessage(errorMessage) {
     const messageElement = document.createElement('span');
     const codePattern = /"(.*?)"/sg;
     let match = codePattern.exec(errorMessage);

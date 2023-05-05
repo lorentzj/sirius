@@ -14,7 +14,9 @@ pub enum Op {
     Or,
     Not,
     Greater,
+    GreaterOrEq,
     Less,
+    LessOrEq,
     Equal,
     NotEqual,
     Apply,
@@ -34,8 +36,10 @@ impl fmt::Debug for Op {
             Op::And => write!(f, "&&"),
             Op::Or => write!(f, "||"),
             Op::Not => write!(f, "!"),
+            Op::GreaterOrEq => write!(f, ">="),
             Op::Greater => write!(f, ">"),
             Op::Less => write!(f, "<"),
+            Op::LessOrEq => write!(f, "<="),
             Op::Equal => write!(f, "=="),
             Op::NotEqual => write!(f, "!="),
             Op::Apply => write!(f, "->"),
@@ -58,6 +62,7 @@ pub enum Keyword {
     From,
     To,
     Yield,
+    Mut,
 }
 
 impl fmt::Debug for Keyword {
@@ -75,6 +80,7 @@ impl fmt::Debug for Keyword {
             Keyword::From => write!(f, "from"),
             Keyword::To => write!(f, "to"),
             Keyword::Yield => write!(f, "yield"),
+            Keyword::Mut => write!(f, "mut"),
         }
     }
 }
@@ -163,6 +169,7 @@ fn parse_keyword(s: &str) -> Option<Tok> {
         "from" => Some(Tok::Keyword(Keyword::From)),
         "to" => Some(Tok::Keyword(Keyword::To)),
         "yield" => Some(Tok::Keyword(Keyword::Yield)),
+        "mut" => Some(Tok::Keyword(Keyword::Mut)),
         _ => None,
     }
 }

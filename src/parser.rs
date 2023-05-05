@@ -91,12 +91,23 @@ impl Expression {
 
 #[derive(Serialize, Clone, Debug)]
 pub enum S {
-    Let(Positioned<String>, Option<Positioned<Type>>, Expression),
+    Let(
+        Positioned<String>,
+        bool,
+        Option<Positioned<Type>>,
+        Expression,
+    ),
     Assign(Positioned<String>, Expression),
     Print(Expression),
     Return(Option<Expression>),
     If(Expression, Vec<Statement>, Option<Vec<Statement>>),
-    For(Positioned<String>, Expression, Expression, Vec<Statement>),
+    For(
+        Positioned<String>,
+        Type,
+        Expression,
+        Expression,
+        Vec<Statement>,
+    ),
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -109,6 +120,7 @@ pub struct Statement {
 impl Statement {
     pub fn new_let(
         name: Positioned<String>,
+        mutable: bool,
         annotation: Option<Positioned<Type>>,
         val: Expression,
     ) -> Self {
@@ -116,7 +128,7 @@ impl Statement {
         let end = val.end;
         Statement {
             start,
-            data: S::Let(name, annotation, val),
+            data: S::Let(name, mutable, annotation, val),
             end,
         }
     }
@@ -175,7 +187,7 @@ impl Statement {
     ) -> Self {
         Statement {
             start,
-            data: S::For(iterator, from, to, inner),
+            data: S::For(iterator, Type::I64(None), from, to, inner),
             end,
         }
     }
@@ -183,7 +195,7 @@ impl Statement {
 
 #[derive(Serialize, Debug)]
 pub struct Function {
-    pub name: String,
+    pub name: Positioned<String>,
     pub type_args: Vec<Positioned<String>>,
     pub args: Vec<(Positioned<String>, Positioned<Type>)>,
     pub return_type: Positioned<Type>,

@@ -8,11 +8,11 @@ use crate::error::Error;
 grammar(highlight_map: &mut HashMap<usize, Vec<usize>>, type_tokens: &mut Vec<usize>, errors: &mut Vec<Error>);
 
 pub AST: HashMap<String, Function> = {
-    <fns: Fn*> "newline" * => fns.into_iter().map(|func| (func.name.clone(), func)).collect()
+    <fns: Fn*> "newline" * => fns.into_iter().map(|func| (func.name.inner.clone(), func)).collect()
 }
 
 pub Fn: Function = {
-    "newline" * "fn" <name: "identifier"> <type_args: FnTypeParams?> <args: FnSigParams> <ret_place: @L> <return_type: ("->" Expr)?> ":" "newline" <inner: Block> => {
+    "newline" * "fn" <name_place: @L> <name: "identifier"> <type_args: FnTypeParams?> <args: FnSigParams> <ret_place: @L> <return_type: ("->" Expr)?> ":" "newline" <inner: Block> => {
         if let Some(return_type) = &return_type {
             let curr_type_tokens: Vec<usize> = (return_type.1.start..return_type.1.end).collect();
             type_tokens.extend(curr_type_tokens);    
@@ -42,7 +42,7 @@ pub Fn: Function = {
         }
 
         Function {
-            name,
+            name: Positioned::new(name_place, name, name_place + 1),
             type_args: type_args.unwrap_or(vec![]),
             args: args_typed,
             return_type: return_type.unwrap_or(Positioned::new(ret_place, Type::Void, ret_place + 1)),
@@ -103,7 +103,7 @@ pub Block: Vec<Statement> = {
 }
 
 pub Stmt: Statement = {
-    "newline" * "let" <start: @L> <name: "identifier"> <end: @R> <ann: (":" Expr)?> "=" <val: Expr> "newline" => {
+    "newline" * "let" <m: "mut"?> <start: @L> <name: "identifier"> <end: @R> <ann: (":" Expr)?> "=" <val: Expr> "newline" => {
         if let Some((_, e)) = &ann {
             let curr_type_tokens: Vec<usize> = (e.start..e.end).collect();
             type_tokens.extend(curr_type_tokens);
@@ -119,12 +119,13 @@ pub Stmt: Statement = {
 
         Statement::new_let(
             Positioned::new(start, name, end),
+            m.is_some(),
             ann,
             *val    
         )
     },
 
-    "newline" * "let" <start: @L> <name: "identifier"> <end: @R> <ann: (":" Expr)?> "=" <val: OpenTuple> "newline" => {
+    "newline" * "let" <m: "mut"?> <start: @L> <name: "identifier"> <end: @R> <ann: (":" Expr)?> "=" <val: OpenTuple> "newline" => {
         if let Some((_, e)) = &ann {
             let curr_type_tokens: Vec<usize> = (e.start..e.end).collect();
             type_tokens.extend(curr_type_tokens);
@@ -140,6 +141,7 @@ pub Stmt: Statement = {
         
         Statement::new_let(
             Positioned::new(start, name, end),
+            m.is_some(),
             ann,
             match val.data {
                 E::OpenTuple(inner) => {
@@ -236,6 +238,8 @@ pub Expr: Box<Expression> = {
     #[precedence(level="8")] #[assoc(side="left")]
     <start: @L> <lhs: Expr> ">" <rhs: Expr> <end: @R>         => Expression::fresh(start, E::BinaryOp(lhs, Op::Greater, rhs), end),
     <start: @L> <lhs: Expr> "<" <rhs: Expr> <end: @R>         => Expression::fresh(start, E::BinaryOp(lhs, Op::Less, rhs), end),
+    <start: @L> <lhs: Expr> ">" "=" <rhs: Expr> <end: @R>         => Expression::fresh(start, E::BinaryOp(lhs, Op::GreaterOrEq, rhs), end),
+    <start: @L> <lhs: Expr> "<" "=" <rhs: Expr> <end: @R>         => Expression::fresh(start, E::BinaryOp(lhs, Op::LessOrEq, rhs), end),
     <start: @L> <lhs: Expr> "==" <rhs: Expr> <end: @R>        => Expression::fresh(start, E::BinaryOp(lhs, Op::Equal, rhs), end),
     <start: @L> <lhs: Expr> "!" "=" <rhs: Expr> <end: @R>     => Expression::fresh(start, E::BinaryOp(lhs, Op::NotEqual, rhs), end),
 
@@ -434,6 +438,8 @@ extern {
         "from"       => crate::lexer::Tok::Keyword(crate::lexer::Keyword::From),
         "to"         => crate::lexer::Tok::Keyword(crate::lexer::Keyword::To),
         "return"     => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Return),
+        "yield"      => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Yield),
+        "mut"        => crate::lexer::Tok::Keyword(crate::lexer::Keyword::Mut),
         "="          => crate::lexer::Tok::Assign,
         ";"          => crate::lexer::Tok::Semicolon,
         ":"          => crate::lexer::Tok::Colon,

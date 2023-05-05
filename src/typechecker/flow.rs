@@ -30,7 +30,10 @@ pub fn check_flow(ast: &AST) -> Vec<Error> {
         {
             errors.push(Error::new(
                 ErrorType::Flow,
-                format!("function \"{}\" may not always return value", function.name),
+                format!(
+                    "function \"{}\" may not always return value",
+                    function.name.inner
+                ),
                 function.return_type.start,
                 function.return_type.end,
             ))

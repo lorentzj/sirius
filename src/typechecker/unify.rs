@@ -2,6 +2,7 @@ use super::equality::equality_check;
 use super::number_coersion::{arith_coerce, is_arith};
 use super::types::Substitutions;
 use super::types::{Constraint, Type};
+use super::{Ind, ScopeEntry};
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
 use crate::parser::{Expression, Statement, UnaryOp, E, S};
@@ -9,7 +10,7 @@ use crate::scope::Scope;
 
 fn unify_expression(
     expression: &mut Expression,
-    context: &Scope<Type>,
+    context: &Scope<ScopeEntry>,
     curr_forall_var: &mut usize,
     constraints: &mut Vec<Constraint>,
 ) -> Result<Substitutions, Error> {
@@ -24,24 +25,12 @@ fn unify_expression(
             expression.end,
         )),
         E::Ident(name, _) => match context.get(name) {
-            Some(var_t) => match var_t {
+            Some(ScopeEntry { t: var_t, .. }) => match var_t {
                 Type::Function(_, _, _) => Ok(Substitutions::new()),
-                _ => match expression.t.unify_update_vals(var_t) {
-                    Some((subs, mut cs)) => {
-                        Constraint::apply_pos(&mut cs, expression.start, expression.end);
-                        constraints.extend(cs.into_iter());
-                        Ok(subs)
-                    }
-                    None => Err(Error::new(
-                        ErrorType::Type,
-                        format!(
-                            "cannot unify types \"{:?}\" and \"{var_t:?}\"",
-                            expression.t
-                        ),
-                        expression.start,
-                        expression.end,
-                    )),
-                },
+                _ => {
+                    expression.t = var_t.clone();
+                    Ok(Substitutions::new())
+                }
             },
             None => panic!(),
         },
@@ -70,7 +59,7 @@ fn unify_expression(
                                 ))
                             }
                         },
-                        Type::I64(_) => match Type::I64(None).unify(&expression.t) {
+                        Type::I64(None) => match Type::I64(None).unify(&expression.t) {
                             Some((s, mut cs)) => {
                                 cs.extend(subs.extend(expression.start, s, expression.end)?);
                                 Constraint::apply_pos(&mut cs, expression.start, expression.end);
@@ -89,6 +78,33 @@ fn unify_expression(
                                 ))
                             }
                         },
+                        Type::I64(Some(ind)) => {
+                            let new_ind = ind.clone() * Ind::constant(-1);
+                            match Type::I64(Some(new_ind)).unify(&expression.t) {
+                                Some((s, mut cs)) => {
+                                    cs.extend(subs.extend(expression.start, s, expression.end)?);
+                                    Constraint::apply_pos(
+                                        &mut cs,
+                                        expression.start,
+                                        expression.end,
+                                    );
+                                    constraints.extend(cs);
+                                }
+                                None => {
+                                    return Err(Error::new(
+                                        ErrorType::Type,
+                                        format!(
+                                            "cannot unify types \"{:?}\" and \"{:?}\"",
+                                            expression.t,
+                                            Type::I64(None)
+                                        ),
+                                        expression.start,
+                                        expression.end,
+                                    ))
+                                }
+                            }
+                        }
+                        Type::Unknown => return Ok(subs),
                         t => {
                             return Err(Error::new(
                                 ErrorType::Type,
@@ -118,6 +134,7 @@ fn unify_expression(
                                 ))
                             }
                         },
+                        Type::Unknown => return Ok(subs),
                         t => {
                             return Err(Error::new(
                                 ErrorType::Type,
@@ -368,8 +385,7 @@ fn unify_expression(
         }
         E::FnCall(caller, args) => {
             let mut subs = unify_expression(caller, context, curr_forall_var, constraints)?;
-            let arg_types: Vec<_> = args.iter().map(|e| e.t.clone()).collect();
-            for e in args {
+            for e in args.iter_mut() {
                 let mut cs = subs.extend(
                     expression.start,
                     unify_expression(e, context, curr_forall_var, constraints)?,
@@ -378,6 +394,8 @@ fn unify_expression(
                 Constraint::apply_pos(&mut cs, expression.start, expression.end);
                 constraints.extend(cs);
             }
+
+            let arg_types: Vec<_> = args.iter().map(|e| e.t.clone()).collect();
 
             match &caller.t {
                 Type::Function(type_vars, i, o) => {
@@ -449,7 +467,7 @@ fn unify_expression(
 
 pub fn unify(
     block: &mut [Statement],
-    context: &mut Scope<Type>,
+    context: &mut Scope<ScopeEntry>,
     curr_forall_var: &mut usize,
     return_type: &Type,
     errors: &mut Vec<Error>,
@@ -469,13 +487,11 @@ pub fn unify(
                 Err(error) => errors.push(error),
             },
             S::Assign(place, val) => match context.get_mut(&place.inner) {
-                Some(var_t) => {
-                    match var_t.unify_assign(&val.t) {
-                        Ok((s, mut cs)) => {
-                            println!(
-                                "Ok Unify-Assign; new value for var {} is {var_t:?}",
-                                place.inner
-                            );
+                Some(ScopeEntry { t: var_t, .. }) => {
+                    let mut demoted_val_t = val.t.clone();
+                    demoted_val_t.demote_inds();
+                    match var_t.unify(&demoted_val_t) {
+                        Some((s, mut cs)) => {
                             match subs.extend(val.start, s, val.end) {
                                 Ok(css) => cs.extend(css),
                                 Err(error) => errors.push(error),
@@ -483,22 +499,13 @@ pub fn unify(
                             Constraint::apply_pos(&mut cs, val.start, val.end);
                             constraints.extend(cs);
                         }
-                        Err(was_strict_error) => {
-                            if was_strict_error {
-                                errors.push(Error::new(
-                                    ErrorType::Type,
-                                    "assignment violates strict value declaration".into(),
-                                    statement.start,
-                                    statement.end,
-                                ));
-                            } else {
-                                errors.push(Error::new(
-                                    ErrorType::Type,
-                                    format!("cannot unify types \"{var_t:?}\" and \"{:?}\"", val.t),
-                                    statement.start,
-                                    statement.end,
-                                ));
-                            }
+                        None => {
+                            errors.push(Error::new(
+                                ErrorType::Type,
+                                format!("cannot unify types \"{var_t:?}\" and \"{:?}\"", val.t),
+                                statement.start,
+                                statement.end,
+                            ));
                         }
                     }
 
@@ -515,7 +522,7 @@ pub fn unify(
                 }
                 None => panic!(),
             },
-            S::Let(name, ann, val) => {
+            S::Let(name, mutable, ann, val) => {
                 match unify_expression(val, context, curr_forall_var, constraints) {
                     Ok(s) => match subs.extend(val.start, s, val.end) {
                         Ok(mut cs) => {
@@ -527,6 +534,10 @@ pub fn unify(
                     Err(error) => errors.push(error),
                 }
 
+                if *mutable {
+                    val.t.demote_inds();
+                }
+
                 if let Some(ann) = ann {
                     match val.t.unify(&ann.inner) {
                         Some((s, mut cs)) => match subs.extend(val.start, s, val.end) {
@@ -535,24 +546,25 @@ pub fn unify(
                                 Constraint::apply_pos(&mut cs, val.start, val.end);
                                 constraints.extend(cs);
 
-                                if !val.t.apply_ann_exact_values(&ann.inner) {
-                                    errors.push(Error::new(
-                                        ErrorType::Constraint,
-                                        format!(
-                                            "cannot apply exact values of annotation \"{:?}\" to type \"{:?}\"",
-                                            ann.inner,
-                                            val.t,
-                                        ),
-                                        val.start,
-                                        val.end
-                                    ));
-                                }
-
-                                context.insert(name.inner.clone(), val.t.clone())
+                                context.insert(
+                                    name.inner.clone(),
+                                    ScopeEntry {
+                                        t: val.t.clone(),
+                                        mutable: *mutable,
+                                        decl_site: Some(name.start),
+                                    },
+                                );
                             }
                             Err(error) => {
                                 errors.push(error);
-                                context.insert(name.inner.clone(), Type::Unknown);
+                                context.insert(
+                                    name.inner.clone(),
+                                    ScopeEntry {
+                                        t: Type::Unknown,
+                                        mutable: *mutable,
+                                        decl_site: Some(name.start),
+                                    },
+                                );
                             }
                         },
                         None => {
@@ -565,11 +577,25 @@ pub fn unify(
                                 val.start,
                                 val.end,
                             ));
-                            context.insert(name.inner.clone(), Type::Unknown);
+                            context.insert(
+                                name.inner.clone(),
+                                ScopeEntry {
+                                    t: Type::Unknown,
+                                    mutable: *mutable,
+                                    decl_site: Some(name.start),
+                                },
+                            );
                         }
                     }
                 } else {
-                    context.insert(name.inner.clone(), val.t.clone());
+                    context.insert(
+                        name.inner.clone(),
+                        ScopeEntry {
+                            t: val.t.clone(),
+                            mutable: *mutable,
+                            decl_site: Some(name.start),
+                        },
+                    );
                 }
             }
             S::Return(val) => match val {
@@ -680,10 +706,8 @@ pub fn unify(
                     );
                     context.pop();
                 }
-
-                context.apply_transform(Type::demote_dirty);
             }
-            S::For(iterator, from, to, inner) => {
+            S::For(iterator, iter_type, from, to, inner) => {
                 match unify_expression(from, context, curr_forall_var, constraints) {
                     Ok(s) => {
                         match subs.extend(from.start, s, from.end) {
@@ -743,7 +767,14 @@ pub fn unify(
                 }
 
                 context.push();
-                context.insert(iterator.inner.clone(), Type::I64(None));
+                context.insert(
+                    iterator.inner.clone(),
+                    ScopeEntry {
+                        t: iter_type.clone(),
+                        mutable: false,
+                        decl_site: Some(iterator.start),
+                    },
+                );
                 unify(
                     inner,
                     context,
@@ -754,8 +785,6 @@ pub fn unify(
                     constraints,
                 );
                 context.pop();
-
-                context.apply_transform(Type::demote_dirty);
             }
         }
     }
@@ -796,19 +825,26 @@ fn substitute_expression(expression: &mut Expression, subs: &Substitutions) {
     }
 }
 
-pub fn substitute(block: &mut [Statement], context: &mut Scope<Type>, subs: &Substitutions) {
+pub fn substitute(block: &mut [Statement], context: &mut Scope<ScopeEntry>, subs: &Substitutions) {
     for statement in block.iter_mut() {
         match &mut statement.data {
             S::Print(val) => substitute_expression(val, subs),
             S::Assign(_, val) => substitute_expression(val, subs),
-            S::Let(name, ann, val) => {
+            S::Let(name, mutable, ann, val) => {
                 substitute_expression(val, subs);
                 if let Some(ann) = ann {
                     for sub in subs.iter() {
                         ann.inner = ann.inner.substitute(sub);
                     }
                 }
-                context.insert(name.inner.clone(), val.t.clone());
+                context.insert(
+                    name.inner.clone(),
+                    ScopeEntry {
+                        t: val.t.clone(),
+                        mutable: *mutable,
+                        decl_site: Some(name.start),
+                    },
+                );
             }
             S::If(cond, true_inner, false_inner) => {
                 substitute_expression(cond, subs);
@@ -818,11 +854,18 @@ pub fn substitute(block: &mut [Statement], context: &mut Scope<Type>, subs: &Sub
                     None => (),
                 }
             }
-            S::For(iterator, from, to, inner) => {
+            S::For(iterator, iter_type, from, to, inner) => {
                 substitute_expression(from, subs);
                 substitute_expression(to, subs);
                 context.push();
-                context.insert(iterator.inner.clone(), Type::I64(None));
+                context.insert(
+                    iterator.inner.clone(),
+                    ScopeEntry {
+                        t: iter_type.clone(),
+                        mutable: false,
+                        decl_site: Some(iterator.start),
+                    },
+                );
                 substitute(inner, context, subs);
                 context.pop();
             }

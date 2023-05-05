@@ -42,7 +42,7 @@ pub fn check_fn_args(function: &Function) -> Vec<Error> {
         arg_names.push(arg.inner.clone());
     }
 
-    if function.name == "main" {
+    if function.name.inner == "main" {
         if !function.type_args.is_empty() {
             errors.push(Error::new(
                 ErrorType::Type,

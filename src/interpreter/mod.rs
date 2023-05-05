@@ -27,9 +27,15 @@ pub struct InterpreterOutput<'a> {
 
 fn execute_bin_op<'a>(lhs: Value<'a>, rhs: Value<'a>, op: &Op) -> Value<'a> {
     match &op {
-        Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Exp | Op::Greater | Op::Less => {
-            number_coersion::arith_coerce(lhs, op, rhs)
-        }
+        Op::Add
+        | Op::Sub
+        | Op::Mul
+        | Op::Div
+        | Op::Exp
+        | Op::Greater
+        | Op::Less
+        | Op::GreaterOrEq
+        | Op::LessOrEq => number_coersion::arith_coerce(lhs, op, rhs),
 
         Op::Equal => match (lhs, rhs) {
             (Value::F64(lv), Value::F64(rv)) => Value::Bool(lv == rv),
@@ -192,7 +198,7 @@ fn interpret_block<'a>(
 
     for statement in block {
         match &statement.data {
-            S::Let(name, _, val) => {
+            S::Let(name, _, _, val) => {
                 let val = interpret_expression(val, scope, globals, output);
                 scope.insert(name.inner.clone(), val);
             }
@@ -219,7 +225,7 @@ fn interpret_block<'a>(
                 }
             }
 
-            S::For(iterator, from, to, inner) => {
+            S::For(iterator, _, from, to, inner) => {
                 let mut i_val = match interpret_expression(from, scope, globals, output) {
                     Value::I64(v) => v,
                     _ => panic!(),

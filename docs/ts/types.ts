@@ -61,12 +61,12 @@ export type Expression = {
 };
 
 export type S = 
-    { 'Let': [Positioned<string>, Positioned<string> | null, Expression] }
+    { 'Let': [Positioned<string>, boolean, Positioned<string> | null, Expression] }
     | { 'Assign': [Positioned<string>, Expression] }
     | { 'Print': Expression }
     | { 'Return': Expression | null }
     | { 'If': [Expression, Statement[], Statement[] | null]}
-    | { 'For': [Positioned<string>, Expression, Expression, Statement[]]};
+    | { 'For': [Positioned<string>, string, Expression, Expression, Statement[]]};
 
 export type Statement = Positioned<S>;
 
