@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-
 use super::types::Type;
 use super::ScopeEntry;
 use crate::error::{Error, ErrorType};
 use crate::scope::Scope;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::lexer::Op;
 use crate::parser::{Expression, Positioned, Statement, E, S};
@@ -170,12 +170,12 @@ fn initialize_expression_types(
     highlight_map: &mut HashMap<usize, Vec<usize>>,
 ) {
     match &mut expression.data {
-        E::Bool(_) => expression.t = Type::Bool,
-        E::F64(_) => expression.t = Type::F64,
-        E::I64(_, ind) => expression.t = Type::I64(ind.clone()),
+        E::Bool(_) => expression.t = Rc::new(Type::Bool),
+        E::F64(_) => expression.t = Rc::new(Type::F64),
+        E::I64(_, ind) => expression.t = Rc::new(Type::I64(ind.clone())),
         E::UnaryOp(_, inner) => {
             *curr_forall_var += 1;
-            expression.t = Type::ForAll(*curr_forall_var - 1);
+            expression.t = Rc::new(Type::ForAll(*curr_forall_var - 1));
 
             initialize_expression_types(
                 &mut *inner,
@@ -189,7 +189,7 @@ fn initialize_expression_types(
         }
         E::BinaryOp(lhs, _, rhs) => {
             *curr_forall_var += 1;
-            expression.t = Type::ForAll(*curr_forall_var - 1);
+            expression.t = Rc::new(Type::ForAll(*curr_forall_var - 1));
 
             initialize_expression_types(
                 &mut *lhs,
@@ -213,7 +213,7 @@ fn initialize_expression_types(
         }
         E::Accessor(lhs, rhs) => {
             *curr_forall_var += 1;
-            expression.t = Type::ForAll(*curr_forall_var - 1);
+            expression.t = Rc::new(Type::ForAll(*curr_forall_var - 1));
 
             initialize_expression_types(
                 &mut *lhs,
@@ -237,7 +237,7 @@ fn initialize_expression_types(
         }
         E::Tuple(inner) => {
             *curr_forall_var += 1;
-            expression.t = Type::ForAll(*curr_forall_var - 1);
+            expression.t = Rc::new(Type::ForAll(*curr_forall_var - 1));
             for e in inner {
                 initialize_expression_types(
                     e,
@@ -252,7 +252,7 @@ fn initialize_expression_types(
         }
         E::FnCall(caller, args) => {
             *curr_forall_var += 1;
-            expression.t = Type::ForAll(*curr_forall_var - 1);
+            expression.t = Rc::new(Type::ForAll(*curr_forall_var - 1));
 
             initialize_expression_types(
                 &mut *caller,
@@ -282,7 +282,7 @@ fn initialize_expression_types(
                     highlight_map.insert(expression.start, vec![expression.start, *decl_site]);
                 }
 
-                expression.t = match t {
+                expression.t = match t.as_ref() {
                     Type::Function(function_type_vars, _, _) => {
                         let mut subs: Vec<_> = (*curr_forall_var
                             ..(*curr_forall_var + function_type_vars.len()))
@@ -327,7 +327,7 @@ fn initialize_expression_types(
                             }
                         }
 
-                        t.instantiate_fn(function_type_vars, &subs)
+                        Rc::new(t.instantiate_fn(function_type_vars, &subs))
                     }
                     _ => {
                         if type_args.is_some() {
@@ -337,7 +337,7 @@ fn initialize_expression_types(
                                 expression.start,
                                 expression.end,
                             ));
-                            Type::Unknown
+                            Rc::new(Type::Unknown)
                         } else {
                             t.clone()
                         }
@@ -351,10 +351,10 @@ fn initialize_expression_types(
                     expression.start,
                     expression.end,
                 ));
-                expression.t = Type::Unknown;
+                expression.t = Rc::new(Type::Unknown);
             }
         },
-        E::OpenTuple { .. } => panic!(),
+        E::OpenTuple { .. } => unreachable!(),
     }
 }
 
@@ -379,7 +379,9 @@ pub fn initialize_statement_types(
                 highlight_map,
             );
         }
-        S::Let(name, mutable, ann, val) => {
+        S::Let(name, mutable, ann, val_adj_type, val) => {
+            highlight_map.insert(name.start, vec![name.start]);
+
             initialize_expression_types(
                 val,
                 curr_forall_var,
@@ -391,29 +393,23 @@ pub fn initialize_statement_types(
             );
             *ann = ann.as_ref().map(|ann| {
                 match populate_annotation(&ann.inner, &mut Some(curr_forall_var), type_vars) {
-                    Ok(t) => Positioned::new(ann.start, t, ann.end),
+                    Ok(t) => Positioned::new(ann.start, Rc::new(t), ann.end),
                     Err(mut error) => {
                         error.start = ann.start;
                         error.end = ann.end;
                         errors.push(error);
-                        Positioned::new(ann.start, Type::Unknown, ann.end)
+                        Positioned::new(ann.start, Rc::new(Type::Unknown), ann.end)
                     }
                 }
             });
 
+            *curr_forall_var += 1;
+            *val_adj_type = Rc::new(Type::ForAll(*curr_forall_var - 1));
+
             context.insert(
                 name.inner.clone(),
                 ScopeEntry {
-                    t: match val.t {
-                        Type::I64(_) => {
-                            if *mutable {
-                                Type::I64(None)
-                            } else {
-                                val.t.clone()
-                            }
-                        }
-                        _ => val.t.clone(),
-                    },
+                    t: val_adj_type.clone(),
                     mutable: *mutable,
                     decl_site: Some(name.start),
                 },
@@ -450,7 +446,7 @@ pub fn initialize_statement_types(
                 }
             }
         }
-        S::If(cond, true_block, false_block) => {
+        S::If(cond, _, (true_block, _), false_block) => {
             initialize_expression_types(
                 cond,
                 curr_forall_var,
@@ -474,7 +470,7 @@ pub fn initialize_statement_types(
                 );
             }
             context.pop();
-            if let Some(false_block) = false_block {
+            if let Some((false_block, _)) = false_block {
                 context.push();
                 for stmt in false_block {
                     initialize_statement_types(
@@ -490,7 +486,9 @@ pub fn initialize_statement_types(
                 context.pop();
             }
         }
-        S::For(iterator, iter_type, from, to, block) => {
+        S::For(iterator, iter_type, _, from, to, (block, _)) => {
+            highlight_map.insert(iterator.start, vec![iterator.start]);
+
             initialize_expression_types(
                 from,
                 curr_forall_var,
@@ -516,7 +514,7 @@ pub fn initialize_statement_types(
             context.insert(
                 iterator.inner.clone(),
                 ScopeEntry {
-                    t: iter_type.clone(),
+                    t: Rc::new(iter_type.clone()),
                     mutable: false,
                     decl_site: Some(iterator.start),
                 },

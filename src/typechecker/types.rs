@@ -3,7 +3,6 @@ use std::cmp::Ordering;
 use std::fmt;
 
 use super::ind::Ind;
-use crate::error::{Error, ErrorType};
 
 #[derive(PartialEq, Clone)]
 pub enum Type {
@@ -18,9 +17,12 @@ pub enum Type {
     ForAll(usize),
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Serialize, Clone, PartialEq, Eq, Debug)]
 pub enum C {
-    Eq(Ind, Ind),
+    EqZero(Ind),
+    GtEqZero(Ind),
+    GtZero(Ind),
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -37,10 +39,26 @@ impl PartialEq for Constraint {
 }
 
 impl Constraint {
-    pub fn new_eq(lhs: Ind, rhs: Ind) -> Self {
+    pub fn new_eq_z(v: Ind) -> Self {
         Constraint {
             start: 0,
-            data: C::Eq(lhs, rhs),
+            data: C::EqZero(v),
+            end: 0,
+        }
+    }
+
+    pub fn new_gt_eq_z(v: Ind) -> Self {
+        Constraint {
+            start: 0,
+            data: C::GtEqZero(v),
+            end: 0,
+        }
+    }
+
+    pub fn new_gt_z(v: Ind) -> Self {
+        Constraint {
+            start: 0,
+            data: C::GtZero(v),
             end: 0,
         }
     }
@@ -53,74 +71,7 @@ impl Constraint {
     }
 }
 
-impl Eq for Constraint {}
-
-type Substitution = (usize, Type);
-
-#[derive(Debug)]
-pub struct Substitutions(Vec<Substitution>);
-
-impl Substitutions {
-    pub fn push(
-        &mut self,
-        start: usize,
-        sub: Substitution,
-        end: usize,
-    ) -> Result<Vec<Constraint>, Error> {
-        let (sub_i, sub_t) = sub;
-        for (curr_sub_i, curr_sub_t) in self.0.iter() {
-            if *curr_sub_i == sub_i {
-                match curr_sub_t.unify(&sub_t) {
-                    Some((_, cs)) => return Ok(cs),
-                    None => {
-                        return Err(Error::new(
-                            ErrorType::Type,
-                            format!("cannot unify types \"{curr_sub_t:?}\" and \"{sub_t:?}\""),
-                            start,
-                            end,
-                        ))
-                    }
-                }
-            }
-        }
-
-        self.0.push((sub_i, sub_t));
-
-        Ok(vec![])
-    }
-
-    pub fn extend(
-        &mut self,
-        start: usize,
-        subs: Substitutions,
-        end: usize,
-    ) -> Result<Vec<Constraint>, Error> {
-        let mut constraints = vec![];
-        for sub in subs.0 {
-            constraints.extend(self.push(start, sub, end)?);
-        }
-
-        Ok(constraints)
-    }
-
-    pub fn iter(&self) -> std::slice::Iter<Substitution> {
-        self.0.iter()
-    }
-
-    pub fn new() -> Self {
-        Self(vec![])
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-}
-
-impl Default for Substitutions {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+pub type Substitution = (usize, Type);
 
 impl Type {
     pub fn forall_vars(&self) -> Vec<usize> {
@@ -191,38 +142,44 @@ impl Type {
         }
     }
 
-    pub fn unify(&self, other: &Type) -> Option<(Substitutions, Vec<Constraint>)> {
+    pub fn unify(
+        &self,
+        other: &Type,
+        allow_demote: bool,
+    ) -> Option<(Vec<Substitution>, Vec<Constraint>)> {
+        if self == other {
+            return Some((vec![], vec![]));
+        }
+
         match self {
-            Type::Unknown => Some((Substitutions::new(), vec![])),
+            Type::Unknown => Some((vec![], vec![])),
             Type::ForAll(self_i) => match other {
                 Type::ForAll(other_i) => match self_i.cmp(other_i) {
-                    Ordering::Greater => {
-                        Some((Substitutions(vec![(*self_i, other.clone())]), vec![]))
-                    }
-                    Ordering::Less => Some((Substitutions(vec![(*other_i, self.clone())]), vec![])),
-                    Ordering::Equal => Some((Substitutions::new(), vec![])),
+                    Ordering::Greater => Some((vec![(*self_i, other.clone())], vec![])),
+                    Ordering::Less => Some((vec![(*other_i, self.clone())], vec![])),
+                    Ordering::Equal => Some((vec![], vec![])),
                 },
-                _ => Some((Substitutions(vec![(*self_i, other.clone())]), vec![])),
+                _ => Some((vec![(*self_i, other.clone())], vec![])),
             },
             _ => match other {
-                Type::Unknown => Some((Substitutions::new(), vec![])),
+                Type::Unknown => Some((vec![], vec![])),
                 Type::Void => {
                     if matches!(self, Type::Void) {
-                        Some((Substitutions::new(), vec![]))
+                        Some((vec![], vec![]))
                     } else {
                         None
                     }
                 }
                 Type::Bool => {
                     if matches!(self, Type::Bool) {
-                        Some((Substitutions::new(), vec![]))
+                        Some((vec![], vec![]))
                     } else {
                         None
                     }
                 }
                 Type::F64 => {
                     if matches!(self, Type::F64) {
-                        Some((Substitutions::new(), vec![]))
+                        Some((vec![], vec![]))
                     } else {
                         None
                     }
@@ -230,7 +187,7 @@ impl Type {
                 Type::TypeVar(l_name) => {
                     if let Type::TypeVar(r_name) = self {
                         if l_name == r_name {
-                            Some((Substitutions::new(), vec![]))
+                            Some((vec![], vec![]))
                         } else {
                             None
                         }
@@ -240,31 +197,46 @@ impl Type {
                 }
                 Type::I64(Some(other_i)) => match self {
                     Type::I64(Some(self_i)) => Some((
-                        Substitutions::new(),
-                        vec![Constraint::new_eq(other_i.clone(), self_i.clone())],
+                        vec![],
+                        vec![Constraint::new_eq_z(other_i.clone() - self_i.clone())],
                     )),
                     _ => None,
                 },
-                Type::I64(None) => {
-                    if matches!(self, Type::I64(_)) {
-                        Some((Substitutions::new(), vec![]))
-                    } else {
-                        None
+                Type::I64(None) => match self {
+                    Type::I64(None) => Some((vec![], vec![])),
+                    Type::I64(_) => {
+                        if allow_demote {
+                            Some((vec![], vec![]))
+                        } else {
+                            None
+                        }
                     }
-                }
-                Type::ForAll(i) => Some((Substitutions(vec![(*i, self.clone())]), vec![])),
+                    _ => None,
+                },
+                Type::ForAll(i) => Some((vec![(*i, self.clone())], vec![])),
                 Type::Tuple(l_types) => {
                     if let Type::Tuple(r_types) = self {
                         if l_types.len() != r_types.len() {
                             None
                         } else {
-                            let mut subs = Substitutions::new();
+                            let mut subs: Vec<Substitution> = vec![];
                             let mut constraints = vec![];
                             for (l_type, r_type) in l_types.iter().zip(r_types) {
-                                let (inner_subs, inner_constraints) = Type::unify(l_type, r_type)?;
-                                if subs.extend(0, inner_subs, 0).is_err() {
-                                    return None;
+                                let (mut inner_subs, mut inner_constraints) =
+                                    Type::unify(l_type, r_type, allow_demote)?;
+                                let mut combined_subs = vec![];
+                                for (s_var, s) in &subs {
+                                    for (i_s_var, i_s) in &inner_subs {
+                                        if s_var == i_s_var {
+                                            let (comb_subs, comb_constraints) =
+                                                s.unify(i_s, allow_demote)?;
+                                            combined_subs.extend(comb_subs);
+                                            inner_constraints.extend(comb_constraints);
+                                        }
+                                    }
                                 }
+                                inner_subs.extend(combined_subs);
+                                subs.extend(inner_subs);
                                 constraints.extend(inner_constraints);
                             }
 
@@ -279,25 +251,45 @@ impl Type {
                         if l_i.len() != r_i.len() {
                             None
                         } else {
-                            let mut subs = Substitutions::new();
+                            let mut subs: Vec<Substitution> = vec![];
                             let mut constraints = vec![];
                             for (l_type, r_type) in l_i.iter().zip(r_i) {
-                                let (inner_subs, inner_constraints) = Type::unify(l_type, r_type)?;
-
-                                if subs.extend(0, inner_subs, 0).is_err() {
-                                    return None;
+                                let (mut inner_subs, mut inner_constraints) =
+                                    Type::unify(l_type, r_type, allow_demote)?;
+                                let mut combined_subs = vec![];
+                                for (s_var, s) in &subs {
+                                    for (i_s_var, i_s) in &inner_subs {
+                                        if s_var == i_s_var {
+                                            let (comb_subs, comb_constraints) =
+                                                s.unify(i_s, allow_demote)?;
+                                            combined_subs.extend(comb_subs);
+                                            inner_constraints.extend(comb_constraints);
+                                        }
+                                    }
                                 }
+                                inner_subs.extend(combined_subs);
+                                subs.extend(inner_subs);
                                 constraints.extend(inner_constraints);
                             }
 
-                            let (o_subs, o_constraints) = Type::unify(l_o, r_o)?;
-                            constraints.extend(o_constraints);
+                            let (mut o_subs, mut o_constraints) =
+                                Type::unify(l_o, r_o, allow_demote)?;
+                            let mut combined_subs = vec![];
 
-                            if subs.extend(0, o_subs, 0).is_err() {
-                                None
-                            } else {
-                                Some((subs, constraints))
+                            for (s_var, s) in &subs {
+                                for (o_s_var, o_s) in &o_subs {
+                                    if s_var == o_s_var {
+                                        let (comb_subs, comb_constraints) =
+                                            s.unify(o_s, allow_demote)?;
+                                        combined_subs.extend(comb_subs);
+                                        o_constraints.extend(comb_constraints);
+                                    }
+                                }
                             }
+                            o_subs.extend(combined_subs);
+                            subs.extend(o_subs);
+                            constraints.extend(o_constraints);
+                            Some((subs, constraints))
                         }
                     } else {
                         None
@@ -324,27 +316,32 @@ impl Type {
         }
     }
 
-    pub fn promote_inds(&mut self, curr_ind_forall_var: &mut usize) {
+    pub fn promote_inds(&self, curr_ind_forall_var: &mut usize) -> Type {
         match self {
-            Type::I64(None) => *self = Type::new_free_ind(curr_ind_forall_var, true),
+            Type::I64(None) => Type::new_free_ind(curr_ind_forall_var, true),
             Type::Tuple(inner) => {
-                for t in inner.iter_mut() {
-                    t.promote_inds(curr_ind_forall_var)
+                let mut new_inner = vec![];
+                for t in inner.iter() {
+                    new_inner.push(t.promote_inds(curr_ind_forall_var))
                 }
+                Type::Tuple(new_inner)
             }
-            _ => (),
+            _ => self.clone(),
         }
     }
 
-    pub fn demote_inds(&mut self) {
+    pub fn demote_inds(&self) -> Type {
         match self {
-            Type::I64(_) => *self = Type::I64(None),
+            Type::I64(_) => Type::I64(None),
             Type::Tuple(inner) => {
-                for t in inner.iter_mut() {
-                    t.demote_inds()
+                let mut new_inner = vec![];
+
+                for t in inner.iter() {
+                    new_inner.push(t.demote_inds());
                 }
+                Type::Tuple(new_inner)
             }
-            _ => (),
+            _ => self.clone(),
         }
     }
 }
@@ -529,5 +526,13 @@ mod tests {
             ),
             "forall a, b . (('a, 'a, 'a), 'a->'b)->('b, 'b, 'b)"
         )
+    }
+
+    #[test]
+    fn unify() {
+        let a = Type::ForAll(0);
+        let b = Type::Bool;
+
+        assert_eq!(vec![(0, Type::Bool)], a.unify(&b, false).unwrap().0);
     }
 }

@@ -60,13 +60,15 @@ export type Expression = {
     end: number
 };
 
+export type Block = [Statement[], Constraint[]];
+
 export type S = 
-    { 'Let': [Positioned<string>, boolean, Positioned<string> | null, Expression] }
+    { 'Let': [Positioned<string>, boolean, Positioned<string> | null, string, Expression] }
     | { 'Assign': [Positioned<string>, Expression] }
     | { 'Print': Expression }
     | { 'Return': Expression | null }
-    | { 'If': [Expression, Statement[], Statement[] | null]}
-    | { 'For': [Positioned<string>, string, Expression, Expression, Statement[]]};
+    | { 'If': [Expression, Constraint[], Block, Block | null]}
+    | { 'For': [Positioned<string>, string, Constraint[], Expression, Expression, Block]};
 
 export type Statement = Positioned<S>;
 
@@ -79,8 +81,7 @@ export type Function = {
     type_args: Positioned<string>[],
     args: [Positioned<string>, Positioned<string>][],
     return_type: Positioned<string>,
-    body: Statement[],
-    constraints: Constraint[]
+    body: Block
 };
 
 export type AST = Map<string, Function>;

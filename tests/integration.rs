@@ -24,6 +24,7 @@ fn factorial(x: i64) -> i64:
         return 1
     else:
         return x * factorial(x - 1)
+
 fn main():
     print factorial(5)"
         .into();
@@ -86,9 +87,10 @@ fn double{T}(t: T) -> (T, T):
     return (t, t)
 
 fn main():
-    print double(1)
-    print double((false, true))"
-        .into();
+    print double(1.)
+    print double((false, true))
+"
+    .into();
 
     let output = wasm::interpret(code);
     assert_eq!(
@@ -120,28 +122,3 @@ fn main():
         "{\"stdout\":\"true\\n(1, 2)\\ntrue\\n1\\n2\\n3\\n\",\"error\":null}"
     );
 }
-
-// #[test]
-// fn mut_test() {
-//     let code = "
-// fn main():
-//     let i = true
-//     if true:
-//         print i
-//         if i:
-//             let i = (1, 2)
-//             print i
-
-//         print i
-
-//     for i from 1 to 3 + 1:
-//         print i"
-//         .into();
-
-//     let mut output = parser::parse(code);
-//     typechecker::typecheck(&mut output, HashMap::default());
-//     println!("{:?}", output.errors);
-//     for token in output.tokens[50..53].iter() {
-//         println!("{:?}", token);
-//     }
-// }

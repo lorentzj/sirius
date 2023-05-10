@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-
 use lalrpop_util::ParseError;
 use serde::Serialize;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::typechecker::{annotation_type, Constraint, Ind, Type};
 
@@ -74,7 +74,7 @@ pub enum E {
 pub struct Expression {
     pub start: usize,
     pub data: E,
-    pub t: Type,
+    pub t: Rc<Type>,
     pub end: usize,
 }
 
@@ -83,30 +83,34 @@ impl Expression {
         Box::new(Expression {
             start,
             data,
-            t: Type::ForAll(0),
+            t: Rc::new(Type::ForAll(0)),
             end,
         })
     }
 }
+
+type Block = (Vec<Statement>, Vec<Constraint>);
 
 #[derive(Serialize, Clone, Debug)]
 pub enum S {
     Let(
         Positioned<String>,
         bool,
-        Option<Positioned<Type>>,
+        Option<Positioned<Rc<Type>>>,
+        Rc<Type>,
         Expression,
     ),
     Assign(Positioned<String>, Expression),
     Print(Expression),
     Return(Option<Expression>),
-    If(Expression, Vec<Statement>, Option<Vec<Statement>>),
+    If(Expression, Vec<Constraint>, Block, Option<Block>),
     For(
         Positioned<String>,
         Type,
+        Vec<Constraint>,
         Expression,
         Expression,
-        Vec<Statement>,
+        Block,
     ),
 }
 
@@ -121,14 +125,14 @@ impl Statement {
     pub fn new_let(
         name: Positioned<String>,
         mutable: bool,
-        annotation: Option<Positioned<Type>>,
+        annotation: Option<Positioned<Rc<Type>>>,
         val: Expression,
     ) -> Self {
         let start = name.start - 1;
         let end = val.end;
         Statement {
             start,
-            data: S::Let(name, mutable, annotation, val),
+            data: S::Let(name, mutable, annotation, Rc::new(Type::Unknown), val),
             end,
         }
     }
@@ -172,7 +176,12 @@ impl Statement {
     ) -> Self {
         Statement {
             start,
-            data: S::If(cond, true_block, false_block),
+            data: S::If(
+                cond,
+                vec![],
+                (true_block, vec![]),
+                false_block.map(|false_block| (false_block, vec![])),
+            ),
             end,
         }
     }
@@ -187,7 +196,7 @@ impl Statement {
     ) -> Self {
         Statement {
             start,
-            data: S::For(iterator, Type::I64(None), from, to, inner),
+            data: S::For(iterator, Type::I64(None), vec![], from, to, (inner, vec![])),
             end,
         }
     }
@@ -198,9 +207,8 @@ pub struct Function {
     pub name: Positioned<String>,
     pub type_args: Vec<Positioned<String>>,
     pub args: Vec<(Positioned<String>, Positioned<Type>)>,
-    pub return_type: Positioned<Type>,
-    pub body: Vec<Statement>,
-    pub constraints: Vec<Constraint>,
+    pub return_type: Positioned<Rc<Type>>,
+    pub body: Block,
 }
 
 impl Function {

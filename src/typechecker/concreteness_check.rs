@@ -60,22 +60,35 @@ fn check_stmt_for_foralls(statement: &Statement) -> Vec<Error> {
         S::Assign(_, val) => errors.extend(check_expr_for_foralls(val)),
         S::Return(Some(val)) => errors.extend(check_expr_for_foralls(val)),
         S::Return(None) => (),
-        S::Let(_, _, _, val) => errors.extend(check_expr_for_foralls(val)),
-        S::If(cond, true_inner, false_inner) => {
+        S::Let(_, _, _, val_adj_type, val) => {
+            if !val_adj_type.forall_vars().is_empty() {
+                errors.push(Error::new(
+                    ErrorType::Type,
+                    format!(
+                        "type \"{:?}\" is not concrete; try adding annotations or type arguments",
+                        val_adj_type
+                    ),
+                    val.start,
+                    val.end,
+                ));
+            }
+            errors.extend(check_expr_for_foralls(val))
+        }
+        S::If(cond, _, true_inner, false_inner) => {
             errors.extend(check_expr_for_foralls(cond));
-            for stmt in true_inner {
+            for stmt in &true_inner.0 {
                 errors.extend(check_stmt_for_foralls(stmt));
             }
             if let Some(false_inner) = false_inner {
-                for stmt in false_inner {
+                for stmt in &false_inner.0 {
                     errors.extend(check_stmt_for_foralls(stmt));
                 }
             }
         }
-        S::For(_, _, from, to, inner) => {
+        S::For(_, _, _, from, to, inner) => {
             errors.extend(check_expr_for_foralls(from));
             errors.extend(check_expr_for_foralls(to));
-            for stmt in inner {
+            for stmt in &inner.0 {
                 errors.extend(check_stmt_for_foralls(stmt));
             }
         }
@@ -87,7 +100,7 @@ fn check_stmt_for_foralls(statement: &Statement) -> Vec<Error> {
 pub fn concreteness_check(function: &Function) -> Vec<Error> {
     let mut errors = vec![];
 
-    for statement in &function.body {
+    for statement in &function.body.0 {
         errors.extend(check_stmt_for_foralls(statement))
     }
 

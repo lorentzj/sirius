@@ -7,21 +7,21 @@ fn coerce_to_float(lhs: &Value, rhs: &Value) -> Option<(f64, f64)> {
             Value::F64(rhs) => Some((*lhs, *rhs)),
             Value::I64(rhs) => Some((*lhs, *rhs as f64)),
             Value::Bool(rhs) => Some((*lhs, if *rhs { 1. } else { 0. })),
-            _ => panic!(),
+            _ => unreachable!(),
         },
         Value::I64(lhs) => match rhs {
             Value::F64(rhs) => Some((*lhs as f64, *rhs)),
             Value::I64(_) => None,
             Value::Bool(_) => None,
-            _ => panic!(),
+            _ => unreachable!(),
         },
         Value::Bool(lhs) => match rhs {
             Value::F64(rhs) => Some((if *lhs { 1. } else { 0. }, *rhs)),
             Value::I64(_) => None,
             Value::Bool(_) => None,
-            _ => panic!(),
+            _ => unreachable!(),
         },
-        _ => panic!(),
+        _ => unreachable!(),
     }
 }
 
@@ -30,14 +30,14 @@ fn coerce_to_int(lhs: &Value, rhs: &Value) -> (i64, i64) {
         Value::I64(lhs) => match rhs {
             Value::I64(rhs) => (*lhs, *rhs),
             Value::Bool(rhs) => (*lhs, if *rhs { 1 } else { 0 }),
-            _ => panic!(),
+            _ => unreachable!(),
         },
         Value::Bool(lhs) => match rhs {
             Value::I64(rhs) => (if *lhs { 1 } else { 0 }, *rhs),
             Value::Bool(rhs) => (if *lhs { 1 } else { 0 }, if *rhs { 1 } else { 0 }),
-            _ => panic!(),
+            _ => unreachable!(),
         },
-        _ => panic!(),
+        _ => unreachable!(),
     }
 }
 
@@ -53,7 +53,7 @@ pub fn arith_coerce<'a>(lhs: Value<'a>, op: &Op, rhs: Value<'a>) -> Value<'a> {
             Op::GreaterOrEq => Value::Bool(lhs >= rhs),
             Op::Less => Value::Bool(lhs < rhs),
             Op::LessOrEq => Value::Bool(lhs <= rhs),
-            _ => panic!(),
+            _ => unreachable!(),
         }
     } else {
         let (lhs, rhs) = coerce_to_int(&lhs, &rhs);
@@ -67,7 +67,7 @@ pub fn arith_coerce<'a>(lhs: Value<'a>, op: &Op, rhs: Value<'a>) -> Value<'a> {
             Op::GreaterOrEq => Value::Bool(lhs >= rhs),
             Op::Less => Value::Bool(lhs < rhs),
             Op::LessOrEq => Value::Bool(lhs <= rhs),
-            _ => panic!(),
+            _ => unreachable!(),
         }
     }
 }

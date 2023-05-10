@@ -33,6 +33,7 @@ export function setToolTipHandler(tooltipElem, tokenElem) {
     tokenElem.addEventListener('mouseenter', () => {
         if (tokenElem.dataset['error'] !== undefined || tokenElem.dataset['type'] !== undefined) {
             updateToolTip(tooltipElem, tokenElem);
+            tokenElem.appendChild(tooltipElem);
             tooltipElem.style.top = `${tokenElem.getBoundingClientRect().bottom}px`;
             tooltipElem.style.left = `${tokenElem.getBoundingClientRect().left}px`;
             tooltipElem.style.display = 'block';
@@ -45,7 +46,7 @@ export function setToolTipHandler(tooltipElem, tokenElem) {
 function getIdentTypePairs(ast) {
     let r = [];
     for (let f of ast.values()) {
-        r = r.concat(getIdentTypePairsInBlock(f.body));
+        r = r.concat(getIdentTypePairsInBlock(f.body[0]));
     }
     return r;
 }
@@ -53,7 +54,8 @@ function getIdentTypePairsInBlock(statements) {
     let r = [];
     for (let statement of statements) {
         if ('Let' in statement.data) {
-            r = r.concat(getIdentTypePairsInExpr(statement.data['Let'][3]));
+            r.push([statement.data['Let'][0].start, statement.data['Let'][3]]);
+            r = r.concat(getIdentTypePairsInExpr(statement.data['Let'][4]));
         }
         else if ('Assign' in statement.data) {
             r = r.concat(getIdentTypePairsInExpr(statement.data['Assign'][1]));
@@ -66,30 +68,22 @@ function getIdentTypePairsInBlock(statements) {
         }
         else if ('If' in statement.data) {
             r = r.concat(getIdentTypePairsInExpr(statement.data['If'][0]));
-            r = r.concat(getIdentTypePairsInBlock(statement.data['If'][1]));
-            if (statement.data['If'][2] !== null) {
-                r = r.concat(getIdentTypePairsInBlock(statement.data['If'][2]));
+            r = r.concat(getIdentTypePairsInBlock(statement.data['If'][2][0]));
+            if (statement.data['If'][3] !== null) {
+                r = r.concat(getIdentTypePairsInBlock(statement.data['If'][3][0]));
             }
         }
         else if ('For' in statement.data) {
-            r = r.concat(getIdentTypePairsInExpr(statement.data['For'][2]));
+            r.push([statement.data['For'][0].start, statement.data['For'][1]]);
             r = r.concat(getIdentTypePairsInExpr(statement.data['For'][3]));
-            r = r.concat(getIdentTypePairsInBlock(statement.data['For'][4]));
+            r = r.concat(getIdentTypePairsInExpr(statement.data['For'][4]));
+            r = r.concat(getIdentTypePairsInBlock(statement.data['For'][5][0]));
         }
     }
     return r;
 }
 function getIdentTypePairsInExpr(expression) {
-    if ('F64' in expression.data) {
-        return [[expression.start, expression.t]];
-    }
-    else if ('I64' in expression.data) {
-        return [[expression.start, expression.t]];
-    }
-    else if ('Bool' in expression.data) {
-        return [[expression.start, expression.t]];
-    }
-    else if ('Ident' in expression.data) {
+    if ('Ident' in expression.data) {
         return [[expression.start, expression.t]];
     }
     else if ('BinaryOp' in expression.data) {

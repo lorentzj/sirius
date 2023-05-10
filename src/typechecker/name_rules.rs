@@ -67,7 +67,7 @@ pub fn check_fn_args(function: &Function) -> Vec<Error> {
             ));
         }
 
-        if function.return_type.inner != Type::Void {
+        if function.return_type.inner.as_ref() != &Type::Void {
             errors.push(Error::new(
                 ErrorType::Type,
                 format!(

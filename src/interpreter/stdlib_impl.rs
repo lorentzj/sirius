@@ -6,7 +6,7 @@ fn sin(v: Vec<Value>) -> Option<Value> {
     if let Some(Value::F64(v)) = v.first() {
         Some(Value::F64(v.sin()))
     } else {
-        panic!()
+        unreachable!()
     }
 }
 
@@ -14,7 +14,7 @@ fn cos(v: Vec<Value>) -> Option<Value> {
     if let Some(Value::F64(v)) = v.first() {
         Some(Value::F64(v.cos()))
     } else {
-        panic!()
+        unreachable!()
     }
 }
 
@@ -22,7 +22,7 @@ fn tan(v: Vec<Value>) -> Option<Value> {
     if let Some(Value::F64(v)) = v.first() {
         Some(Value::F64(v.tan()))
     } else {
-        panic!()
+        unreachable!()
     }
 }
 
@@ -30,7 +30,7 @@ fn log10(v: Vec<Value>) -> Option<Value> {
     if let Some(Value::F64(v)) = v.first() {
         Some(Value::F64(v.log10()))
     } else {
-        panic!()
+        unreachable!()
     }
 }
 
@@ -38,7 +38,7 @@ fn ln(v: Vec<Value>) -> Option<Value> {
     if let Some(Value::F64(v)) = v.first() {
         Some(Value::F64(v.ln()))
     } else {
-        panic!()
+        unreachable!()
     }
 }
 

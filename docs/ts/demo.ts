@@ -21,7 +21,7 @@ document.body.onload = () => {
 
         if(
             editorElem           !== null
-            && tooltipElem          !== null
+            && tooltipElem       !== null
             && editorLinesElem   !== null
             && displayErrorsElem !== null
             && displayLogElem    !== null
@@ -55,7 +55,7 @@ document.body.onload = () => {
             output_area.initializeOutputArea(displayErrorsElem, displayLogElem, errorElem, logElem);
 
             const updateEditor = () => {
-                const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n'))) as types.ParserOutput;
+                const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n') + '\n')) as types.ParserOutput;
                 parsed.typeTokens = new Set(parsed.typeTokens as unknown as number[]);
 
                 let hl_map: Map<number, number[]> = new Map();
@@ -70,17 +70,6 @@ document.body.onload = () => {
                 });
                 parsed.ast = ast;
 
-                console.log(ast);
-
-                for(let fn of parsed.ast) {
-                    console.log('------------------');
-                    console.log(fn[0]);
-                    for(let c of fn[1].constraints) {
-                        console.log(types.constraint_name(c));
-                    }
-                    console.log('------------------');
-                }
-
                 editor.updateEditorWithCode(editorElem, tooltipElem, editorLinesElem, codeLines.code, parsed);  
                 editor.updateEditorWithErrors(parsed.errors, editorElem);
                 editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem);
@@ -92,7 +81,7 @@ document.body.onload = () => {
                 const parsed = updateEditor();
 
                 if(parsed.errors.length === 0) {
-                    const interpreted = JSON.parse(bindings.interpret(codeLines.code.join('\n'))) as types.InterpreterOutput;
+                    const interpreted = JSON.parse(bindings.interpret(codeLines.code.join('\n') + '\n')) as types.InterpreterOutput;
                     output_area.updateLogELement(displayLogElem, logElem, interpreted);
                     if(interpreted.error) {
                         editor.updateEditorWithErrors([interpreted.error], editorElem);

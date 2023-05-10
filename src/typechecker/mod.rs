@@ -1,29 +1,35 @@
+use std::rc::Rc;
+
 use crate::parser::{CompilerState, Positioned};
 use crate::scope::Scope;
 use crate::stdlib::ExternalGlobals;
 
+mod add_preconditions;
 mod concreteness_check;
 mod constraint_check;
+mod eq_classes;
 mod equality;
 mod flow;
 mod ind;
 mod initialize_ast;
 mod name_rules;
 mod number_coersion;
+mod substitute;
 mod types;
 mod unify;
 
 use concreteness_check::concreteness_check;
 use constraint_check::constraint_check;
+use eq_classes::EqClasses;
+pub use ind::Ind;
 use initialize_ast::initialize_statement_types;
 pub use initialize_ast::{annotation_type, populate_annotation};
-use unify::{substitute, unify};
-
-pub use ind::Ind;
-pub use types::{Constraint, Substitutions, Type};
+use substitute::substitute;
+pub use types::{Constraint, Substitution, Type};
+use unify::unify;
 
 pub struct ScopeEntry {
-    t: Type,
+    t: Rc<Type>,
     mutable: bool,
     decl_site: Option<usize>,
 }
@@ -40,7 +46,7 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
                 (
                     name,
                     ScopeEntry {
-                        t,
+                        t: Rc::new(t),
                         mutable: false,
                         decl_site: None,
                     },
@@ -65,14 +71,18 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
 
         function.return_type =
             match populate_annotation(&function.return_type.inner, &mut None, &type_arg_names) {
-                Ok(t) => Positioned::new(function.return_type.start, t, function.return_type.end),
+                Ok(t) => Positioned::new(
+                    function.return_type.start,
+                    Rc::new(t),
+                    function.return_type.end,
+                ),
                 Err(mut error) => {
                     error.start = function.return_type.start;
                     error.end = function.return_type.end;
                     state.errors.push(error);
                     Positioned::new(
                         function.return_type.start,
-                        Type::Unknown,
+                        Rc::new(Type::Unknown),
                         function.return_type.end,
                     )
                 }
@@ -81,11 +91,11 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
         scope.insert(
             name.clone(),
             ScopeEntry {
-                t: Type::Function(
+                t: Rc::new(Type::Function(
                     function.type_arg_names(),
                     function.arg_types(),
-                    Box::new(function.return_type.inner.clone()),
-                ),
+                    Box::new(function.return_type.inner.as_ref().clone()),
+                )),
                 mutable: false,
                 decl_site: Some(function.name.start),
             },
@@ -119,13 +129,12 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
         scope.push();
 
         for (arg, arg_type) in &function.args {
-            let mut arg_type = arg_type.inner.clone();
-            arg_type.promote_inds(&mut curr_ind_forall_var);
+            let arg_type = arg_type.inner.promote_inds(&mut curr_ind_forall_var);
 
             scope.insert(
                 arg.inner.clone(),
                 ScopeEntry {
-                    t: arg_type,
+                    t: Rc::new(arg_type),
                     mutable: false,
                     decl_site: Some(arg.start),
                 },
@@ -134,7 +143,7 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
 
         scope.push();
 
-        for statement in function.body.iter_mut() {
+        for statement in function.body.0.iter_mut() {
             initialize_statement_types(
                 statement,
                 &mut curr_forall_var,
@@ -153,62 +162,22 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
             continue;
         }
 
-        // begin unification/substitution loop
-        // unification fn walks the statements/exprs and prepares a list of substitutions
-        // substitution fn updates the type info in the statements and may make new unifications possible
-        // terminate if unification produces no more substitutions or on error
+        let mut to_continue = true;
 
-        scope.push();
+        while to_continue && function_errors.is_empty() {
+            let mut eqc = EqClasses::new();
 
-        let mut subs = Substitutions::new();
-
-        unify(
-            &mut function.body,
-            &mut scope,
-            &mut curr_forall_var,
-            &function.return_type.inner,
-            &mut function_errors,
-            &mut subs,
-            &mut function.constraints,
-        );
-
-        scope.pop();
-
-        let mut dedup_constraints = vec![];
-        for constraint in &function.constraints {
-            if !dedup_constraints.contains(constraint) {
-                dedup_constraints.push(constraint.clone());
-            }
-        }
-
-        function.constraints = dedup_constraints;
-
-        while !subs.is_empty() && function_errors.is_empty() {
-            scope.push();
-            substitute(&mut function.body, &mut scope, &subs);
-            scope.pop();
-
-            subs = Substitutions::new();
-            scope.push();
-            unify(
-                &mut function.body,
+            to_continue = unify(
+                &mut function.body.0,
                 &mut scope,
-                &mut curr_forall_var,
                 &function.return_type.inner,
                 &mut function_errors,
-                &mut subs,
-                &mut function.constraints,
+                &mut curr_ind_forall_var,
+                &mut eqc,
+                &mut function.body.1,
             );
-            scope.pop();
 
-            let mut dedup_constraints = vec![];
-            for constraint in &function.constraints {
-                if !dedup_constraints.contains(constraint) {
-                    dedup_constraints.push(constraint.clone());
-                }
-            }
-
-            function.constraints = dedup_constraints;
+            substitute(&mut function.body.0, &eqc);
         }
 
         scope.pop();
@@ -226,6 +195,9 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
             state.errors.extend(function_errors);
             continue;
         }
+
+        // if and for preconditions
+        add_preconditions::add_preconditions(&mut function.body.0);
 
         // constraint check - pass value constraints to solver
 
@@ -322,8 +294,8 @@ fn main():
         typecheck(&mut state, HashMap::default());
 
         assert!(
-            if let S::Let(_, _, _, val) = &state.ast["main"].body[0].data {
-                val.t == Type::I64(Some(Ind::constant(3)))
+            if let S::Let(_, _, _, _, val) = &state.ast["main"].body.0[0].data {
+                val.t.as_ref() == &Type::I64(Some(Ind::constant(3)))
             } else {
                 false
             }

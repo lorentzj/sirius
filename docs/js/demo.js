@@ -1,6 +1,5 @@
 import init, * as bindings from '../js/sirius.js';
 import * as editor from './editor.js';
-import * as types from './types.js';
 import * as output_area from './output_area.js';
 import { CodeLines } from './code_lines.js';
 import { load_demo_programs } from './demo_programs.js';
@@ -45,7 +44,7 @@ document.body.onload = () => {
             });
             output_area.initializeOutputArea(displayErrorsElem, displayLogElem, errorElem, logElem);
             const updateEditor = () => {
-                const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n')));
+                const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n') + '\n'));
                 parsed.typeTokens = new Set(parsed.typeTokens);
                 let hl_map = new Map();
                 Object.keys(parsed.highlightMap).forEach(key => {
@@ -57,15 +56,6 @@ document.body.onload = () => {
                     ast.set(key, parsed.ast[key]);
                 });
                 parsed.ast = ast;
-                console.log(ast);
-                for (let fn of parsed.ast) {
-                    console.log('------------------');
-                    console.log(fn[0]);
-                    for (let c of fn[1].constraints) {
-                        console.log(types.constraint_name(c));
-                    }
-                    console.log('------------------');
-                }
                 editor.updateEditorWithCode(editorElem, tooltipElem, editorLinesElem, codeLines.code, parsed);
                 editor.updateEditorWithErrors(parsed.errors, editorElem);
                 editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem);
@@ -75,7 +65,7 @@ document.body.onload = () => {
             buttonElem.addEventListener('click', _ => {
                 const parsed = updateEditor();
                 if (parsed.errors.length === 0) {
-                    const interpreted = JSON.parse(bindings.interpret(codeLines.code.join('\n')));
+                    const interpreted = JSON.parse(bindings.interpret(codeLines.code.join('\n') + '\n'));
                     output_area.updateLogELement(displayLogElem, logElem, interpreted);
                     if (interpreted.error) {
                         editor.updateEditorWithErrors([interpreted.error], editorElem);

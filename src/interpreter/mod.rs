@@ -51,7 +51,7 @@ fn execute_bin_op<'a>(lhs: Value<'a>, rhs: Value<'a>, op: &Op) -> Value<'a> {
                 }
                 Value::Bool(true)
             }
-            _ => panic!(),
+            _ => unreachable!(),
         },
 
         Op::NotEqual => match (lhs, rhs) {
@@ -68,7 +68,7 @@ fn execute_bin_op<'a>(lhs: Value<'a>, rhs: Value<'a>, op: &Op) -> Value<'a> {
                 }
                 Value::Bool(false)
             }
-            _ => panic!(),
+            _ => unreachable!(),
         },
 
         Op::And | Op::Or => {
@@ -87,20 +87,20 @@ fn execute_bin_op<'a>(lhs: Value<'a>, rhs: Value<'a>, op: &Op) -> Value<'a> {
             match &op {
                 Op::And => Value::Bool(coerced_lhs_bool && coerced_rhs_bool),
                 Op::Or => Value::Bool(coerced_lhs_bool || coerced_rhs_bool),
-                _ => panic!(),
+                _ => unreachable!(),
             }
         }
 
-        Op::Comma => panic!(),
-        Op::Tick => panic!(),
-        Op::Not => panic!(),
-        Op::Apply => panic!(),
+        Op::Comma => unreachable!(),
+        Op::Tick => unreachable!(),
+        Op::Not => unreachable!(),
+        Op::Apply => unreachable!(),
         Op::Dot => match lhs {
             Value::Tuple(v) => match rhs {
                 Value::I64(i) => v[i as usize].clone(),
-                _ => panic!(),
+                _ => unreachable!(),
             },
-            _ => panic!(),
+            _ => unreachable!(),
         },
     }
 }
@@ -127,28 +127,28 @@ pub fn interpret_expression<'a>(
             match interpret_expression(inner, scope, globals, output) {
                 Value::F64(val) => Value::F64(-val),
                 Value::I64(val) => Value::I64(-val),
-                _ => panic!(),
+                _ => unreachable!(),
             }
         }
 
         E::UnaryOp(UnaryOp::BoolNeg, inner) => {
             match interpret_expression(inner, scope, globals, output) {
                 Value::Bool(val) => Value::Bool(!val),
-                _ => panic!(),
+                _ => unreachable!(),
             }
         }
 
-        E::UnaryOp(UnaryOp::Tick, _) => panic!(),
+        E::UnaryOp(UnaryOp::Tick, _) => unreachable!(),
 
         E::Accessor(_, _) => {
-            panic!()
+            unreachable!()
         }
 
         E::Ident(name, _) => match scope.get(name) {
             Some(val) => val.clone(),
             None => match globals.get(name) {
                 Some(val) => val.clone(),
-                None => panic!(),
+                None => unreachable!(),
             },
         },
 
@@ -181,10 +181,10 @@ pub fn interpret_expression<'a>(
                     .collect();
                 function_pointer(arg_values).unwrap()
             }
-            _ => panic!(),
+            _ => unreachable!(),
         },
 
-        E::OpenTuple(_) => panic!(),
+        E::OpenTuple(_) => unreachable!(),
     }
 }
 
@@ -198,7 +198,7 @@ fn interpret_block<'a>(
 
     for statement in block {
         match &statement.data {
-            S::Let(name, _, _, val) => {
+            S::Let(name, _, _, _, val) => {
                 let val = interpret_expression(val, scope, globals, output);
                 scope.insert(name.inner.clone(), val);
             }
@@ -211,36 +211,36 @@ fn interpret_block<'a>(
                 output.stdout.push_str(&print_value(val));
                 output.stdout.push('\n');
             }
-            S::If(cond, true_inner, false_inner) => {
+            S::If(cond, _, true_inner, false_inner) => {
                 if let Value::Bool(true) = interpret_expression(cond, scope, globals, output) {
-                    if !interpret_block(true_inner, scope, globals, output) {
+                    if !interpret_block(&true_inner.0, scope, globals, output) {
                         scope.pop();
                         return false;
                     }
                 } else if let Some(false_inner) = false_inner {
-                    if !interpret_block(false_inner, scope, globals, output) {
+                    if !interpret_block(&false_inner.0, scope, globals, output) {
                         scope.pop();
                         return false;
                     }
                 }
             }
 
-            S::For(iterator, _, from, to, inner) => {
+            S::For(iterator, _, _, from, to, inner) => {
                 let mut i_val = match interpret_expression(from, scope, globals, output) {
                     Value::I64(v) => v,
-                    _ => panic!(),
+                    _ => unreachable!(),
                 };
 
                 let target = match interpret_expression(to, scope, globals, output) {
                     Value::I64(v) => v,
-                    _ => panic!(),
+                    _ => unreachable!(),
                 };
 
                 scope.push();
                 scope.insert(iterator.inner.clone(), Value::I64(i_val));
 
                 while i_val < target {
-                    if !interpret_block(inner, scope, globals, output) {
+                    if !interpret_block(&inner.0, scope, globals, output) {
                         scope.pop();
                         scope.pop();
                         return false;
@@ -281,7 +281,7 @@ pub fn interpret(ast: AST) -> InterpreterOutput<'static> {
     for (name, function) in ast.iter() {
         globals.insert(
             name.clone(),
-            Value::Function(function.arg_names(), &function.body),
+            Value::Function(function.arg_names(), &function.body.0),
         );
     }
 

@@ -1,4 +1,5 @@
 use std::collections::{HashMap};
+use std::rc::Rc;
 
 use crate::lexer::Op;
 use crate::parser::{Function, Statement, E, Expression, UnaryOp, Positioned, expr_to_pos_type};
@@ -19,10 +20,10 @@ pub Fn: Function = {
         }
 
         let return_type = return_type.map(|r| match expr_to_pos_type(&*r.1) {
-            Ok(t) => t,
+            Ok(t) => Positioned::new(t.start, Rc::new(t.inner), t.end),
             Err(error) => {
                 errors.push(error);
-                Positioned::new(r.1.start, Type::Unknown, r.1.end)
+                Positioned::new(r.1.start, Rc::new(Type::Unknown), r.1.end)
             }
         });
 
@@ -45,9 +46,8 @@ pub Fn: Function = {
             name: Positioned::new(name_place, name, name_place + 1),
             type_args: type_args.unwrap_or(vec![]),
             args: args_typed,
-            return_type: return_type.unwrap_or(Positioned::new(ret_place, Type::Void, ret_place + 1)),
-            body: inner,
-            constraints: vec![]
+            return_type: return_type.unwrap_or(Positioned::new(ret_place, Rc::new(Type::Void), ret_place + 1)),
+            body: (inner, vec![]),
         }
     }
 }
@@ -110,10 +110,10 @@ pub Stmt: Statement = {
         }
         
         let ann = ann.map(|(_, e)| match expr_to_pos_type(&*e) {
-            Ok(t) => t,
+            Ok(t) => Positioned::new(t.start, Rc::new(t.inner), t.end),
             Err(error) => {
                 errors.push(error);
-                Positioned::new(e.start, Type::Unknown, e.end)
+                Positioned::new(e.start, Rc::new(Type::Unknown), e.end)
             }            
         });
 
@@ -132,10 +132,10 @@ pub Stmt: Statement = {
         }
 
         let ann = ann.map(|(_, e)| match expr_to_pos_type(&*e) {
-            Ok(t) => t,
+            Ok(t) => Positioned::new(t.start, Rc::new(t.inner), t.end),
             Err(error) => {
                 errors.push(error);
-                Positioned::new(e.start, Type::Unknown, e.end)
+                Positioned::new(e.start, Rc::new(Type::Unknown), e.end)
             }
         });
         
@@ -147,7 +147,7 @@ pub Stmt: Statement = {
                 E::OpenTuple(inner) => {
                     *Expression::fresh(val.start, E::Tuple(inner), val.end)
                 },
-                _ => panic!()
+                _ => unreachable!()
             }
         )
     },
@@ -163,7 +163,7 @@ pub Stmt: Statement = {
     "newline" * "print" <val: OpenTuple> "newline" => {
         Statement::new_print(match val.data {
             E::OpenTuple(inner) => *Expression::fresh(val.start, E::Tuple(inner), val.end),
-            _ => panic!()
+            _ => unreachable!()
         })
     },
 
@@ -174,7 +174,7 @@ pub Stmt: Statement = {
     "newline" * "return" <val: OpenTuple> "newline" <end: @R> => {
         Statement::new_return(val.start, Some(match val.data {
             E::OpenTuple(inner) => *Expression::fresh(val.start, E::Tuple(inner), val.end),
-            _ => panic!()
+            _ => unreachable!()
         }))
     },
 
@@ -183,23 +183,45 @@ pub Stmt: Statement = {
     },
 
     "newline" * <start: @L> "if" <cond: Expr> ":" "newline" <true_inner: Block> <false_inner: ("else" ":" "newline" Block)?> <end: @R> => {
+        let false_inner = false_inner.map(|(_, _, _, b)| b);
+
+        let calculated_end = if let Some(false_inner) = &false_inner {
+            if let Some(stmt) = false_inner.last() {
+                stmt.end
+            } else {
+                end
+            }
+        } else {
+            if let Some(stmt) = true_inner.last() {
+                stmt.end
+            } else {
+                end
+            }
+        };
+
         Statement::new_if(
             start,
             *cond,
             true_inner,
-            false_inner.map(|(_, _, _, b)| b),
-            end
+            false_inner,
+            calculated_end
         )
     },
 
     "newline" * <start: @L> "for" <start_it: @L> <iterator: "identifier"> <end_it: @L> "from" <from: Expr> "to" <to: Expr> ":" "newline" <inner: Block> <end: @R> => {
+        let calculated_end = if let Some(stmt) = inner.last() {
+            stmt.end
+        } else {
+            end
+        };
+
         Statement::new_for(
             start,
             Positioned::new(start_it, iterator, end_it),
             *from,
             *to,
             inner,
-            end
+            calculated_end
         )
     },
 }
@@ -270,7 +292,7 @@ FnCallParams: Vec<Expression> = {
 
         match args.data {
             E::OpenTuple(inner) => inner,
-            _ => panic!()
+            _ => unreachable!()
         }
     }
 }
@@ -293,7 +315,7 @@ Array: Box<Expression> = {
                 E::Tuple(inner),
                 end
             ),
-            _ => panic!()
+            _ => unreachable!()
         }
     },
 }
@@ -349,7 +371,7 @@ IdentifierTypeParams: Vec<Expression> = {
                 }
                 inner
             }
-            _ => panic!()
+            _ => unreachable!()
         }
     }
 }
@@ -390,7 +412,7 @@ Term: Box<Expression> = {
                 E::Tuple(inner),
                 end
             ),
-            _ => panic!()
+            _ => unreachable!()
         }
     }
 };
