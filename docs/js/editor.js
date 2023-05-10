@@ -273,6 +273,9 @@ function createCodeSpan(token, i, isType) {
         else if (token.data.Error !== undefined) {
             span.classList.add('error');
         }
+        else if (token.data.IndentError !== undefined) {
+            span.classList.add('error');
+        }
         else {
             span.classList.add(token.data.toLowerCase());
         }

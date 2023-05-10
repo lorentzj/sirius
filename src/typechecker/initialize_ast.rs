@@ -391,6 +391,10 @@ pub fn initialize_statement_types(
                 errors,
                 highlight_map,
             );
+
+            *curr_forall_var += 1;
+            *val_adj_type = Rc::new(Type::ForAll(*curr_forall_var - 1));
+
             *ann = ann.as_ref().map(|ann| {
                 match populate_annotation(&ann.inner, &mut Some(curr_forall_var), type_vars) {
                     Ok(t) => Positioned::new(ann.start, Rc::new(t), ann.end),
@@ -402,9 +406,6 @@ pub fn initialize_statement_types(
                     }
                 }
             });
-
-            *curr_forall_var += 1;
-            *val_adj_type = Rc::new(Type::ForAll(*curr_forall_var - 1));
 
             context.insert(
                 name.inner.clone(),

@@ -3,6 +3,7 @@ use std::rc::Rc;
 use super::eq_classes::EqClasses;
 use super::equality::equality_check;
 use super::number_coersion::{arith_coerce, is_arith};
+use super::substitute::substitute;
 use super::types::Type;
 use super::{Constraint, Ind, ScopeEntry};
 use crate::error::{Error, ErrorType};
@@ -297,18 +298,18 @@ pub fn unify(
     return_type: &Rc<Type>,
     errors: &mut Vec<Error>,
     curr_ind_forall_var: &mut usize,
-    eqc: &mut EqClasses,
+    mut eqc: EqClasses,
     constraints: &mut Vec<Constraint>,
 ) -> bool {
     context.push();
-    for statement in block {
+    for statement in &mut *block {
         match &mut statement.data {
-            S::Print(val) => match unify_expression(val, eqc, context) {
+            S::Print(val) => match unify_expression(val, &mut eqc, context) {
                 Ok(()) => (),
                 Err(error) => errors.push(error),
             },
             S::Assign(place, val) => {
-                match unify_expression(val, eqc, context) {
+                match unify_expression(val, &mut eqc, context) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
@@ -319,10 +320,12 @@ pub fn unify(
                 }
             }
             S::Let(name, mutable, ann, val_adj_type, val) => {
-                match unify_expression(val, eqc, context) {
+                match unify_expression(val, &mut eqc, context) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
+
+                eqc.add_single(val.start, val_adj_type, val.end);
 
                 if *mutable {
                     eqc.add_must_demote(val.start, val_adj_type, &val.t, val.end);
@@ -333,8 +336,6 @@ pub fn unify(
                 if let Some(ann) = ann {
                     eqc.add(ann.start, val_adj_type, &ann.inner, ann.end);
                 }
-
-                eqc.add_single(val.start, val_adj_type, val.end);
 
                 context.insert(
                     name.inner.clone(),
@@ -347,7 +348,7 @@ pub fn unify(
             }
             S::Return(val) => {
                 if let Some(val) = val {
-                    match unify_expression(val, eqc, context) {
+                    match unify_expression(val, &mut eqc, context) {
                         Ok(()) => (),
                         Err(error) => errors.push(error),
                     }
@@ -358,7 +359,7 @@ pub fn unify(
                 }
             }
             S::If(cond, _, (true_inner, true_inner_constraints), false_inner) => {
-                match unify_expression(cond, eqc, context) {
+                match unify_expression(cond, &mut eqc, context) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
@@ -371,7 +372,7 @@ pub fn unify(
                     return_type,
                     errors,
                     curr_ind_forall_var,
-                    eqc,
+                    eqc.clone(),
                     true_inner_constraints,
                 );
                 if let Some((false_inner, false_inner_constraints)) = false_inner {
@@ -381,18 +382,18 @@ pub fn unify(
                         return_type,
                         errors,
                         curr_ind_forall_var,
-                        eqc,
+                        eqc.clone(),
                         false_inner_constraints,
                     );
                 }
             }
             S::For(iterator, iter_type, _, from, to, (inner, inner_constraints)) => {
-                match unify_expression(from, eqc, context) {
+                match unify_expression(from, &mut eqc, context) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
 
-                match unify_expression(to, eqc, context) {
+                match unify_expression(to, &mut eqc, context) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
@@ -409,13 +410,14 @@ pub fn unify(
                         decl_site: Some(iterator.start),
                     },
                 );
+
                 unify(
                     inner,
                     context,
                     return_type,
                     errors,
                     curr_ind_forall_var,
-                    eqc,
+                    eqc.clone(),
                     inner_constraints,
                 );
                 context.pop();
@@ -426,6 +428,7 @@ pub fn unify(
 
     match eqc.generate(curr_ind_forall_var) {
         Ok((any_changes, cs)) => {
+            substitute(block, &eqc);
             *constraints = cs;
             any_changes
         }

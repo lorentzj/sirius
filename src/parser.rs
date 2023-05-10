@@ -294,6 +294,7 @@ pub fn parse(code: &str) -> CompilerState {
                             Tok::Indent => "unexpected indent".into(),
                             Tok::Dedent => "unexpected dedent".into(),
                             Tok::Error(m) => m,
+                            Tok::IndentError(m) => m,
                             _ => format!("unexpected token \"{:?}\"", token.1),
                         },
                         token.0,

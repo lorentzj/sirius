@@ -293,6 +293,8 @@ function createCodeSpan(token: types.Token | null, i: number | null, isType: boo
             span.classList.add('keyword');
         } else if((token.data as {Error: string}).Error !== undefined) {
             span.classList.add('error');
+        } else if((token.data as {IndentError: string}).IndentError !== undefined) {
+            span.classList.add('error');
         } else {
             span.classList.add((token.data as string).toLowerCase());
         }

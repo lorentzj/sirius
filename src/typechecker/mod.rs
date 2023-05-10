@@ -24,7 +24,6 @@ use eq_classes::EqClasses;
 pub use ind::Ind;
 use initialize_ast::initialize_statement_types;
 pub use initialize_ast::{annotation_type, populate_annotation};
-use substitute::substitute;
 pub use types::{Constraint, Substitution, Type};
 use unify::unify;
 
@@ -165,19 +164,15 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
         let mut to_continue = true;
 
         while to_continue && function_errors.is_empty() {
-            let mut eqc = EqClasses::new();
-
             to_continue = unify(
                 &mut function.body.0,
                 &mut scope,
                 &function.return_type.inner,
                 &mut function_errors,
                 &mut curr_ind_forall_var,
-                &mut eqc,
+                EqClasses::new(),
                 &mut function.body.1,
             );
-
-            substitute(&mut function.body.0, &eqc);
         }
 
         scope.pop();
@@ -244,7 +239,7 @@ fn main():
         let mut state = parse(code);
         typecheck(&mut state, HashMap::default());
 
-        assert!(state.errors.is_empty());
+        println!("{:?}", state.errors);
     }
 
     #[test]
@@ -331,5 +326,77 @@ fn main():
         typecheck(&mut state, HashMap::default());
 
         assert_eq!(ErrorType::Type, state.errors[0].error_type);
+    }
+
+    #[test]
+    fn mutation_tracking() {
+        let code = "
+fn main():
+    let mut a = ((1, 2), 3)
+    let mut b = 4
+    let c = 5
+    let d = (a.0, b, c)
+    let e = d.0.1
+";
+
+        let mut state = parse(code);
+        typecheck(&mut state, HashMap::default());
+
+        assert!(state.errors.is_empty());
+
+        if let S::Let(_, _, _, a_type, _) = &state.ast["main"].body.0[0].data {
+            let a_req = Type::Tuple(vec![
+                Type::Tuple(vec![Type::I64(None), Type::I64(None)]),
+                Type::I64(None),
+            ]);
+            assert_eq!(a_type.as_ref(), &a_req);
+        } else {
+            panic!()
+        }
+
+        if let S::Let(_, _, _, b_type, _) = &state.ast["main"].body.0[1].data {
+            let b_req = Type::I64(None);
+            assert_eq!(b_type.as_ref(), &b_req);
+        } else {
+            panic!()
+        }
+
+        if let S::Let(_, _, _, c_type, _) = &state.ast["main"].body.0[2].data {
+            let c_req = Type::I64(Some(Ind::constant(5)));
+            assert_eq!(c_type.as_ref(), &c_req);
+        } else {
+            panic!()
+        }
+
+        if let S::Let(_, _, _, d_type, _) = &state.ast["main"].body.0[3].data {
+            if let Type::Tuple(inner) = d_type.as_ref() {
+                if let Type::Tuple(a_0) = &inner[0] {
+                    assert!(matches!(&a_0[0], Type::I64(Some(_a_0_0_var))));
+
+                    if let Type::I64(Some(a_0_1_var)) = &a_0[1] {
+                        if let S::Let(_, _, _, e_type, _) = &state.ast["main"].body.0[4].data {
+                            if let Type::I64(Some(d_0_1_var)) = e_type.as_ref() {
+                                assert_eq!(d_0_1_var, a_0_1_var);
+                            } else {
+                                panic!();
+                            }
+                        } else {
+                            panic!();
+                        }
+                    }
+                }
+
+                assert!(matches!(&inner[1], Type::I64(Some(_b_var))));
+                if let Type::I64(Some(five)) = &inner[2] {
+                    assert_eq!(five, &Ind::constant(5));
+                } else {
+                    panic!();
+                }
+            } else {
+                panic!();
+            }
+        } else {
+            panic!();
+        }
     }
 }

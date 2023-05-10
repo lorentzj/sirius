@@ -13,6 +13,7 @@ pub mod stdlib;
 
 pub mod interpreter;
 pub mod parser;
+pub mod solver;
 pub mod typechecker;
 
 pub mod wasm;

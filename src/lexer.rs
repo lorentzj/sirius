@@ -107,6 +107,7 @@ pub enum Tok {
     Colon,
     Comment,
     Error(String),
+    IndentError(String),
 }
 
 impl fmt::Debug for Tok {
@@ -132,6 +133,7 @@ impl fmt::Debug for Tok {
             Tok::Pound => write!(f, "#"),
             Tok::Comment => write!(f, "comment"),
             Tok::Error(m) => write!(f, "error({m})"),
+            Tok::IndentError(m) => write!(f, "error({m})"),
         }
     }
 }
@@ -291,7 +293,7 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                         prev_indent_level = curr_indent_level;
                     } else {
                         tokens.push(Token::new(
-                            Tok::Error(format!(
+                            Tok::IndentError(format!(
                                 "indent level must be multiple of 4; found {spaces}"
                             )),
                             line,
@@ -340,7 +342,7 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                                 prev_indent_level = curr_indent_level;
                             } else {
                                 tokens.push(Token::new(
-                                    Tok::Error(format!(
+                                    Tok::IndentError(format!(
                                         "indent level must be multiple of 4; found {spaces}"
                                     )),
                                     line,
@@ -355,6 +357,7 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                 }
 
                 let mut should_pop = false;
+                let mut clear_line_whitespace = false;
 
                 let new_token = match char {
                     ' ' => match indent_spaces {
@@ -411,6 +414,7 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                         }) = tokens.last()
                         {
                             should_pop = true;
+                            clear_line_whitespace = true;
                             commenting = true;
                             Token::new(Tok::Comment, line, *start, col)
                         } else {
@@ -460,6 +464,22 @@ pub fn tokenize(code: &str) -> Vec<Token> {
 
                 if should_pop {
                     tokens.pop();
+                }
+
+                if clear_line_whitespace {
+                    while let Some(last) = tokens.last() {
+                        if last.line == line {
+                            match last.data {
+                                Tok::Indent => prev_indent_level -= 1,
+                                Tok::Dedent => prev_indent_level += 1,
+                                Tok::IndentError(_) => (),
+                                _ => break,
+                            }
+                            tokens.pop();
+                        } else {
+                            break;
+                        }
+                    }
                 }
 
                 tokens.push(new_token);

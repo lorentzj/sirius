@@ -12,7 +12,8 @@ export type Tok =
     {Int: number} |
     {Identifier: string} |
     {Keyword: string} |
-    {Error: string};
+    {Error: string} |
+    {IndentError: string};
 
 export type Token = {
     data: Tok,

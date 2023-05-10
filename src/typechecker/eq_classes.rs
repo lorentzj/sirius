@@ -6,6 +6,7 @@ use crate::{
 use std::cmp::Ordering;
 use std::rc::{Rc, Weak};
 
+#[derive(Clone)]
 pub struct EqClasses {
     trees: Vec<(Option<Rc<Type>>, TypeTree)>,
     owned: Vec<Rc<Type>>,
@@ -179,13 +180,24 @@ impl EqClasses {
             } in &self.must_demote
             {
                 if tree.contains(a) {
-                    match tree_repr.unify(&b.demote_inds(), false) {
-                        Some((subs, mut cs)) => {
+                    match tree_repr.unify(&b.demote_inds(), true) {
+                        Some((mut subs, _)) => {
+                            let a_forall_vars = tree_repr.forall_vars();
+                            let b_forall_vars = b.forall_vars();
+                            subs.retain(|sub| {
+                                if a_forall_vars.contains(&sub.0) {
+                                    for var in &sub.1.forall_vars() {
+                                        if b_forall_vars.contains(var) {
+                                            return false;
+                                        }
+                                    }
+                                }
+                                true
+                            });
+
                             if !subs.is_empty() {
                                 any_changes = true;
                             }
-                            Constraint::apply_pos(&mut cs, *start, *end);
-                            constraints.extend(cs);
 
                             for sub in &subs {
                                 tree_repr = tree_repr.substitute(sub);
@@ -230,7 +242,20 @@ impl EqClasses {
             {
                 if tree.contains(a) {
                     match tree_repr.unify(b, true) {
-                        Some((subs, mut cs)) => {
+                        Some((mut subs, mut cs)) => {
+                            let a_forall_vars = tree_repr.forall_vars();
+                            let b_forall_vars = b.forall_vars();
+                            subs.retain(|sub| {
+                                if a_forall_vars.contains(&sub.0) {
+                                    for var in &sub.1.forall_vars() {
+                                        if b_forall_vars.contains(var) {
+                                            return false;
+                                        }
+                                    }
+                                }
+                                true
+                            });
+
                             if !subs.is_empty() {
                                 any_changes = true;
                             }
@@ -276,13 +301,30 @@ impl EqClasses {
             {
                 if tree.contains(a) {
                     let promoted_type = b.promote_inds(curr_ind_forall_var);
-                    match tree_repr.unify(&promoted_type, false) {
-                        Some((subs, mut cs)) => {
+                    match promoted_type.unify(&tree_repr, false) {
+                        Some((mut subs, mut cs)) => {
+                            let a_forall_vars = tree_repr.forall_vars();
+                            let b_forall_vars = b.forall_vars();
+                            subs.retain(|sub| {
+                                if a_forall_vars.contains(&sub.0) {
+                                    for var in &sub.1.forall_vars() {
+                                        if b_forall_vars.contains(var) {
+                                            return false;
+                                        }
+                                    }
+                                }
+                                true
+                            });
+
                             if !subs.is_empty() {
                                 any_changes = true;
                             }
                             Constraint::apply_pos(&mut cs, *start, *end);
                             constraints.extend(cs);
+
+                            for sub in &subs {
+                                tree_repr = tree_repr.substitute(sub);
+                            }
 
                             match all_subs.extend(subs) {
                                 Ok(_) => (),
@@ -340,6 +382,7 @@ impl EqClasses {
     }
 }
 
+#[derive(Clone)]
 struct TypeTree {
     start: usize,
     val: Weak<Type>,
