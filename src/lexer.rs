@@ -249,7 +249,7 @@ fn lex_substring_alpha_num_dec(s: &str, line: usize, start: usize, end: usize) -
 pub fn tokenize(code: &str) -> Vec<Token> {
     let mut tokens: Vec<Token> = vec![];
     let mut bracket_level = (0, 0, 0);
-    let mut indent_spaces: Option<usize> = None;
+    let mut indent_spaces: Option<usize> = Some(0);
     let mut commenting = false;
     let mut prev_indent_level = 0;
     let mut line = 0;

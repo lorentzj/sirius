@@ -54,6 +54,14 @@ document.body.onload = () => {
             
             output_area.initializeOutputArea(displayErrorsElem, displayLogElem, errorElem, logElem);
 
+            editorElem.addEventListener('keydown', e => {
+                if(e.key === 'Tab') {
+                    editor.insertTab(editorElem, codeLines);
+                    updateEditor();
+                    e.preventDefault();
+                }
+            });
+
             const updateEditor = () => {
                 const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n') + '\n')) as types.ParserOutput;
                 parsed.typeTokens = new Set(parsed.typeTokens as unknown as number[]);

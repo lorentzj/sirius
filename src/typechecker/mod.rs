@@ -5,26 +5,26 @@ use crate::scope::Scope;
 use crate::stdlib::ExternalGlobals;
 
 mod add_preconditions;
+mod arithmetic;
 mod concreteness_check;
 mod constraint_check;
 mod eq_classes;
 mod equality;
 mod flow;
-mod ind;
 mod initialize_ast;
 mod name_rules;
-mod number_coersion;
 mod substitute;
 mod types;
 mod unify;
 
+use crate::solver::Constraint;
 use concreteness_check::concreteness_check;
 use constraint_check::constraint_check;
 use eq_classes::EqClasses;
-pub use ind::Ind;
 use initialize_ast::initialize_statement_types;
 pub use initialize_ast::{annotation_type, populate_annotation};
-pub use types::{Constraint, Substitution, Type};
+
+pub use types::{Substitution, Type};
 use unify::unify;
 
 pub struct ScopeEntry {
@@ -210,10 +210,10 @@ mod tests {
     use std::collections::HashMap;
 
     use super::typecheck;
-    use super::Ind;
     use super::Type;
     use crate::error::ErrorType;
     use crate::parser::{parse, S};
+    use crate::solver::poly::Poly;
 
     #[test]
     fn basic_typecheck() {
@@ -290,7 +290,7 @@ fn main():
 
         assert!(
             if let S::Let(_, _, _, _, val) = &state.ast["main"].body.0[0].data {
-                val.t.as_ref() == &Type::I64(Some(Ind::constant(3)))
+                val.t.as_ref() == &Type::I64(Some(Poly::constant(3)))
             } else {
                 false
             }
@@ -362,7 +362,7 @@ fn main():
         }
 
         if let S::Let(_, _, _, c_type, _) = &state.ast["main"].body.0[2].data {
-            let c_req = Type::I64(Some(Ind::constant(5)));
+            let c_req = Type::I64(Some(Poly::constant(5)));
             assert_eq!(c_type.as_ref(), &c_req);
         } else {
             panic!()
@@ -388,7 +388,7 @@ fn main():
 
                 assert!(matches!(&inner[1], Type::I64(Some(_b_var))));
                 if let Type::I64(Some(five)) = &inner[2] {
-                    assert_eq!(five, &Ind::constant(5));
+                    assert_eq!(five, &Poly::constant(5));
                 } else {
                     panic!();
                 }

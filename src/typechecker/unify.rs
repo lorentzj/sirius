@@ -1,15 +1,16 @@
 use std::rc::Rc;
 
+use super::arithmetic::{arith_coerce, is_arith};
 use super::eq_classes::EqClasses;
 use super::equality::equality_check;
-use super::number_coersion::{arith_coerce, is_arith};
 use super::substitute::substitute;
 use super::types::Type;
-use super::{Constraint, Ind, ScopeEntry};
+use super::{Constraint, ScopeEntry};
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
 use crate::parser::{Expression, Statement, UnaryOp, E, S};
 use crate::scope::Scope;
+use crate::solver::poly::Poly;
 
 fn unify_expression(
     expression: &Expression,
@@ -58,7 +59,7 @@ fn unify_expression(
                             expression.end,
                         ),
                         Type::I64(Some(ind)) => {
-                            let new_ind = ind.clone() * Ind::constant(-1);
+                            let new_ind = ind.clone() * Poly::constant(-1);
                             EqClasses::add_owned(
                                 eqc,
                                 expression.start,

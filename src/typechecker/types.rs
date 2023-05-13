@@ -2,73 +2,20 @@ use serde::{Serialize, Serializer};
 use std::cmp::Ordering;
 use std::fmt;
 
-use super::ind::Ind;
+use crate::solver::poly::Poly;
+use crate::solver::Constraint;
 
 #[derive(PartialEq, Clone)]
 pub enum Type {
     Unknown,
     Void,
     F64,
-    I64(Option<Ind>),
+    I64(Option<Poly>),
     Bool,
     Tuple(Vec<Type>),
     Function(Vec<String>, Vec<Type>, Box<Type>),
     TypeVar(String),
     ForAll(usize),
-}
-
-#[allow(clippy::enum_variant_names)]
-#[derive(Serialize, Clone, PartialEq, Eq, Debug)]
-pub enum C {
-    EqZero(Ind),
-    GtEqZero(Ind),
-    GtZero(Ind),
-}
-
-#[derive(Serialize, Clone, Debug)]
-pub struct Constraint {
-    pub start: usize,
-    pub data: C,
-    pub end: usize,
-}
-
-impl PartialEq for Constraint {
-    fn eq(&self, other: &Self) -> bool {
-        self.data == other.data
-    }
-}
-
-impl Constraint {
-    pub fn new_eq_z(v: Ind) -> Self {
-        Constraint {
-            start: 0,
-            data: C::EqZero(v),
-            end: 0,
-        }
-    }
-
-    pub fn new_gt_eq_z(v: Ind) -> Self {
-        Constraint {
-            start: 0,
-            data: C::GtEqZero(v),
-            end: 0,
-        }
-    }
-
-    pub fn new_gt_z(v: Ind) -> Self {
-        Constraint {
-            start: 0,
-            data: C::GtZero(v),
-            end: 0,
-        }
-    }
-
-    pub fn apply_pos(cs: &mut Vec<Self>, start: usize, end: usize) {
-        for c in cs {
-            c.start = start;
-            c.end = end;
-        }
-    }
 }
 
 pub type Substitution = (usize, Type);
@@ -302,10 +249,10 @@ impl Type {
     pub fn new_free_ind(curr_ind_forall_var: &mut usize, universal: bool) -> Type {
         *curr_ind_forall_var += 1;
         let mut name = "'".to_string() + &usize_name(*curr_ind_forall_var - 1);
-        if universal {
+        if !universal {
             name = name.to_uppercase();
         }
-        Type::I64(Some(Ind::var(&name)))
+        Type::I64(Some(Poly::var(&name, 1)))
     }
 
     pub fn ind_var_is_universal(ind_var_name: &str) -> bool {
@@ -376,7 +323,7 @@ fn priv_print(t: &Type) -> String {
         Type::Void => "void".into(),
         Type::F64 => "f64".into(),
         Type::I64(ind) => match ind {
-            Some(ind) => format!("i64(ind={ind:?})"),
+            Some(ind) => format!("i64(poly = {ind:?})"),
             None => "i64".into(),
         },
         Type::Bool => "bool".into(),
@@ -444,7 +391,8 @@ impl fmt::Debug for Type {
 
 #[cfg(test)]
 mod tests {
-    use super::{usize_name, Ind, Type};
+    use super::{usize_name, Type};
+    use crate::solver::poly::Poly;
 
     #[test]
     fn usize_name_test() {
@@ -468,8 +416,8 @@ mod tests {
         assert_eq!(format!("{:?}", Type::F64), "f64");
         assert_eq!(format!("{:?}", Type::I64(None)), "i64");
         assert_eq!(
-            format!("{:?}", Type::I64(Some(Ind::constant(1)))),
-            "i64(ind=1)"
+            format!("{:?}", Type::I64(Some(Poly::constant(1)))),
+            "i64(poly = 1)"
         );
         assert_eq!(format!("{:?}", Type::TypeVar("T".to_string())), "T");
         assert_eq!(

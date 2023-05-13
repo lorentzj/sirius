@@ -71,7 +71,15 @@ pub fn arith_coerce(
                             Op::Add => lval.clone() + rval.clone(),
                             Op::Sub => lval.clone() - rval.clone(),
                             Op::Mul => lval.clone() * rval.clone(),
-                            Op::Div => return Ok(Type::I64(None)),
+                            Op::Div => {
+                                let (qs, rem) = lval.clone().compound_divide(vec![rval.clone()]);
+
+                                if let Some(0) = rem.get_constant_val() {
+                                    qs[0].clone()
+                                } else {
+                                    return Ok(Type::I64(None));
+                                }
+                            }
                             _ => panic!(),
                         })))
                     } else {

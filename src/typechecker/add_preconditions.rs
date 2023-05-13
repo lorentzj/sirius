@@ -8,7 +8,75 @@ fn constraints_from_expr(expr: &Expression) -> Vec<Constraint> {
             if let (Type::I64(Some(lhs_val)), Type::I64(Some(rhs_val))) =
                 (lhs.t.as_ref(), rhs.t.as_ref())
             {
-                vec![Constraint::new_eq_z(lhs_val.clone() - rhs_val.clone())]
+                let mut constraint = Constraint::new_eq_z(lhs_val.clone() - rhs_val.clone());
+                constraint.start = expr.start;
+                constraint.end = expr.end;
+                vec![constraint]
+            } else {
+                vec![]
+            }
+        }
+
+        E::BinaryOp(lhs, Op::NotEqual, rhs) => {
+            if let (Type::I64(Some(lhs_val)), Type::I64(Some(rhs_val))) =
+                (lhs.t.as_ref(), rhs.t.as_ref())
+            {
+                let mut constraint = Constraint::new_neq_z(lhs_val.clone() - rhs_val.clone());
+                constraint.start = expr.start;
+                constraint.end = expr.end;
+                vec![constraint]
+            } else {
+                vec![]
+            }
+        }
+
+        E::BinaryOp(lhs, Op::Greater, rhs) => {
+            if let (Type::I64(Some(lhs_val)), Type::I64(Some(rhs_val))) =
+                (lhs.t.as_ref(), rhs.t.as_ref())
+            {
+                let mut constraint = Constraint::new_gt_z(lhs_val.clone() - rhs_val.clone());
+                constraint.start = expr.start;
+                constraint.end = expr.end;
+                vec![constraint]
+            } else {
+                vec![]
+            }
+        }
+
+        E::BinaryOp(lhs, Op::Less, rhs) => {
+            if let (Type::I64(Some(lhs_val)), Type::I64(Some(rhs_val))) =
+                (lhs.t.as_ref(), rhs.t.as_ref())
+            {
+                let mut constraint = Constraint::new_gt_z(rhs_val.clone() - lhs_val.clone());
+                constraint.start = expr.start;
+                constraint.end = expr.end;
+                vec![constraint]
+            } else {
+                vec![]
+            }
+        }
+
+        E::BinaryOp(lhs, Op::GreaterOrEq, rhs) => {
+            if let (Type::I64(Some(lhs_val)), Type::I64(Some(rhs_val))) =
+                (lhs.t.as_ref(), rhs.t.as_ref())
+            {
+                let mut constraint = Constraint::new_gt_eq_z(lhs_val.clone() - rhs_val.clone());
+                constraint.start = expr.start;
+                constraint.end = expr.end;
+                vec![constraint]
+            } else {
+                vec![]
+            }
+        }
+
+        E::BinaryOp(lhs, Op::LessOrEq, rhs) => {
+            if let (Type::I64(Some(lhs_val)), Type::I64(Some(rhs_val))) =
+                (lhs.t.as_ref(), rhs.t.as_ref())
+            {
+                let mut constraint = Constraint::new_gt_eq_z(rhs_val.clone() - lhs_val.clone());
+                constraint.start = expr.start;
+                constraint.end = expr.end;
+                vec![constraint]
             } else {
                 vec![]
             }
@@ -16,6 +84,14 @@ fn constraints_from_expr(expr: &Expression) -> Vec<Constraint> {
 
         E::BinaryOp(lhs, Op::And, rhs) => {
             vec![constraints_from_expr(lhs), constraints_from_expr(rhs)].concat()
+        }
+
+        E::BinaryOp(lhs, Op::Or, rhs) => {
+            let mut lhs_constraints = constraints_from_expr(lhs);
+            let rhs_constraints = constraints_from_expr(rhs);
+
+            lhs_constraints.retain(|c| rhs_constraints.contains(c));
+            lhs_constraints
         }
 
         _ => vec![],
@@ -36,12 +112,20 @@ pub fn add_preconditions(block: &mut [Statement]) {
             S::For(_, iter_type, preconditions, from, to, (inner_block, _)) => {
                 if let Type::I64(Some(iter_val)) = iter_type {
                     if let Type::I64(Some(from_val)) = from.t.as_ref() {
-                        preconditions
-                            .push(Constraint::new_gt_eq_z(iter_val.clone() - from_val.clone()))
+                        let mut constraint =
+                            Constraint::new_gt_eq_z(iter_val.clone() - from_val.clone());
+                        constraint.start = from.start;
+                        constraint.end = from.end;
+                        preconditions.push(constraint);
                     }
 
                     if let Type::I64(Some(to_val)) = to.t.as_ref() {
-                        preconditions.push(Constraint::new_gt_z(to_val.clone() - iter_val.clone()))
+                        let mut constraint =
+                            Constraint::new_gt_z(to_val.clone() - iter_val.clone());
+                        constraint.start = to.start;
+                        constraint.end = to.end;
+
+                        preconditions.push(constraint);
                     }
                 }
 

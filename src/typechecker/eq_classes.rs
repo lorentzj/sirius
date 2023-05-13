@@ -526,11 +526,11 @@ mod tests {
         eqc.add(1, &f, &g, 2);
 
         let class_vec: Vec<_> = eqc.iter();
-
-        assert_eq!(&class_vec[0][0].inner, a.as_ref());
-        assert_eq!(&class_vec[0][1].inner, b.as_ref());
-        assert_eq!(&class_vec[0][2].inner, c.as_ref());
-        assert_eq!(&class_vec[0][3].inner, d.as_ref());
+        let class_0: Vec<_> = class_vec[0].iter().map(|t| t.inner.clone()).collect();
+        assert!(class_0.contains(a.as_ref()));
+        assert!(class_0.contains(b.as_ref()));
+        assert!(class_0.contains(c.as_ref()));
+        assert!(class_0.contains(d.as_ref()));
 
         assert_eq!(class_vec[1].len(), 5);
     }

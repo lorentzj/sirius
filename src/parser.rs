@@ -3,10 +3,11 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::typechecker::{annotation_type, Constraint, Ind, Type};
-
 use crate::error::{Error, ErrorType};
 use crate::lexer::{tokenize, Op, Tok, Token};
+use crate::solver::poly::Poly;
+use crate::solver::Constraint;
+use crate::typechecker::{annotation_type, Type};
 
 lalrpop_mod!(#[allow(clippy::all)] pub grammar);
 
@@ -59,7 +60,7 @@ pub enum UnaryOp {
 #[derive(Serialize, Clone, Debug)]
 pub enum E {
     F64(f64),
-    I64(i64, Option<Ind>),
+    I64(i64, Option<Poly>),
     Bool(bool),
     Ident(String, Option<Vec<Positioned<Type>>>),
     BinaryOp(Box<Expression>, Op, Box<Expression>),

@@ -1,4 +1,14 @@
 import * as tooltip from './tooltip.js';
+export function insertTab(editorElem, codeLines) {
+    let selection = window.getSelection();
+    if (selection !== null) {
+        for (let i = 0; i < selection.rangeCount; ++i) {
+            let targetRange = selection.getRangeAt(i);
+            const insertPosition = codeIndexFromPosition(editorElem, targetRange.startContainer, targetRange.startOffset);
+            codeLines.insert(insertPosition, '    ');
+        }
+    }
+}
 export function updateCodeLines(editorElem, codeLines, e) {
     e.preventDefault();
     for (const targetRange of e.getTargetRanges()) {
