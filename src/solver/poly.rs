@@ -470,9 +470,9 @@ impl Serialize for Poly {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
     use super::{Poly, Term};
     use crate::solver::poly::monomial_div;
+    use std::rc::Rc;
 
     use rand::prelude::*;
 
