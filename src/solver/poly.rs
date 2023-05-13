@@ -2,6 +2,7 @@ use serde::{Serialize, Serializer};
 use std::cmp::Ordering;
 use std::fmt;
 use std::ops;
+use std::rc::Rc;
 
 #[derive(Clone, Debug)]
 pub struct Term {
@@ -12,9 +13,9 @@ pub struct Term {
 // returns var indices from dividend_var_dict
 fn monomial_div(
     dividend: Term,
-    dividend_var_dict: &[String],
+    dividend_var_dict: &[Rc<String>],
     divisor: Term,
-    divisor_var_dict: &[String],
+    divisor_var_dict: &[Rc<String>],
 ) -> Option<Term> {
     if matches!(divisor, Term { coef: 0, .. }) {
         None
@@ -72,9 +73,9 @@ fn monomial_div(
 
 pub fn grevlex(
     lhs: &Term,
-    lhs_var_dict: &[String],
+    lhs_var_dict: &[Rc<String>],
     rhs: &Term,
-    rhs_var_dict: &[String],
+    rhs_var_dict: &[Rc<String>],
 ) -> Ordering {
     let lhs_total_degree = lhs.vars.iter().fold(0, |acc, (_, pow)| acc + pow);
     let rhs_total_degree = rhs.vars.iter().fold(0, |acc, (_, pow)| acc + pow);
@@ -103,7 +104,7 @@ pub fn grevlex(
 #[derive(Clone)]
 pub struct Poly {
     terms: Vec<Term>,
-    var_dict: Vec<String>,
+    var_dict: Vec<Rc<String>>,
 }
 
 impl Poly {
@@ -122,7 +123,7 @@ impl Poly {
                     coef: 1,
                     vars: vec![(0, pow)],
                 }],
-                var_dict: vec![var.to_string()],
+                var_dict: vec![Rc::new(var.to_string())],
             }
         }
     }
@@ -188,7 +189,7 @@ impl Poly {
         }
     }
 
-    fn append_term(&mut self, term: Term, term_var_dict: &[String]) {
+    fn append_term(&mut self, term: Term, term_var_dict: &[Rc<String>]) {
         let mut new_vars = vec![];
         for (var, pow) in term.vars {
             let new_var_index = match self.var_dict.iter().position(|p| p == &term_var_dict[var]) {
@@ -469,6 +470,7 @@ impl Serialize for Poly {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
     use super::{Poly, Term};
     use crate::solver::poly::monomial_div;
 
@@ -589,7 +591,7 @@ mod tests {
             let (x_pow_str, x_pow) = match term
                 .vars
                 .iter()
-                .position(|(var, _)| x.var_dict[*var] == "x")
+                .position(|(var, _)| x.var_dict[*var].as_ref() == "x")
             {
                 Some(i) => (
                     if term.vars[i].1 == 1 {
@@ -605,7 +607,7 @@ mod tests {
             let (y_pow_str, y_pow) = match term
                 .vars
                 .iter()
-                .position(|(var, _)| x.var_dict[*var] == "y")
+                .position(|(var, _)| x.var_dict[*var].as_ref() == "y")
             {
                 Some(i) => (
                     if term.vars[i].1 == 1 {
@@ -621,7 +623,7 @@ mod tests {
             let (z_pow_str, z_pow) = match term
                 .vars
                 .iter()
-                .position(|(var, _)| x.var_dict[*var] == "z")
+                .position(|(var, _)| x.var_dict[*var].as_ref() == "z")
             {
                 Some(i) => (
                     if term.vars[i].1 == 1 {
@@ -650,10 +652,10 @@ mod tests {
     #[test]
     fn div() {
         let vars = vec![
-            "w".to_string(),
-            "x".to_string(),
-            "y".to_string(),
-            "z".to_string(),
+            Rc::new("w".to_string()),
+            Rc::new("x".to_string()),
+            Rc::new("y".to_string()),
+            Rc::new("z".to_string()),
         ];
         let t1 = Term {
             coef: 4,
