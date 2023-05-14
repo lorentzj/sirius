@@ -63,26 +63,13 @@ document.body.onload = () => {
             });
 
             const updateEditor = () => {
-                const parsed = JSON.parse(bindings.parse(codeLines.code.join('\n') + '\n')) as types.ParserOutput;
-                parsed.typeTokens = new Set(parsed.typeTokens as unknown as number[]);
+                const parser_output = types.prepare_parse_output(bindings.parse(codeLines.code.join('\n') + '\n'));
 
-                let hl_map: Map<number, number[]> = new Map();
-                Object.keys(parsed.highlightMap as unknown as {[k: string]: number[]}).forEach(key => {
-                    hl_map.set(Number.parseInt(key), (parsed.highlightMap as unknown as {[k: string]: number[]})[key]);
-                });
-                parsed.highlightMap = hl_map;
-
-                let ast: Map<string, types.Function> = new Map();
-                Object.keys(parsed.ast as unknown as {[k: string]: types.Function}).forEach(key => {
-                    ast.set(key, (parsed.ast as unknown as {[k: string]: types.Function})[key]);
-                });
-                parsed.ast = ast;
-
-                editor.updateEditorWithCode(editorElem, tooltipElem, editorLinesElem, codeLines.code, parsed);  
-                editor.updateEditorWithErrors(parsed.errors, editorElem);
+                editor.updateEditorWithCode(editorElem, tooltipElem, editorLinesElem, codeLines.code, parser_output);  
+                editor.updateEditorWithErrors(parser_output.errors, editorElem);
                 editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem);
-                output_area.updateErrorELement(displayErrorsElem, errorElem, parsed.errors, parsed.tokens);
-                return parsed;
+                output_area.updateErrorELement(displayErrorsElem, errorElem, parser_output.errors, parser_output.tokens);
+                return parser_output;
             }
 
             buttonElem.addEventListener('click', _ => {

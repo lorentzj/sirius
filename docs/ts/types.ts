@@ -107,3 +107,22 @@ export function constraint_name(constraint: Constraint): string {
         return '!!!!';
     }
 }
+
+export function prepare_parse_output(parse_output: string): ParserOutput {
+    const parsed = JSON.parse(parse_output) as ParserOutput;
+    parsed.typeTokens = new Set(parsed.typeTokens as unknown as number[]);
+    
+    let hl_map: Map<number, number[]> = new Map();
+    Object.keys(parsed.highlightMap as unknown as {[k: string]: number[]}).forEach(key => {
+        hl_map.set(Number.parseInt(key), (parsed.highlightMap as unknown as {[k: string]: number[]})[key]);
+    });
+    parsed.highlightMap = hl_map;
+    
+    let ast: Map<string, Function> = new Map();
+    Object.keys(parsed.ast as unknown as {[k: string]: Function}).forEach(key => {
+        ast.set(key, (parsed.ast as unknown as {[k: string]: Function})[key]);
+    });
+    parsed.ast = ast;    
+
+    return parsed;
+}

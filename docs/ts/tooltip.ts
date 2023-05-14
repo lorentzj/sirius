@@ -15,10 +15,10 @@ function updateToolTip(tooltipElem: HTMLElement, tokenElem: HTMLElement) {
 
     if(tokenElem.dataset['error'] !== undefined) {
         const errorTypeElem = document.createElement('span');
-        errorTypeElem.innerText = tokenElem.dataset['error'].split(': ')[0] + ': ';
+        errorTypeElem.innerText = tokenElem.dataset['errorType'] + ': ';
         errorTypeElem.classList.add('error_type');
 
-        let errorDetailsElem = parseErrorMessage(tokenElem.dataset['error'].split(': ').slice(1,).join(':'));
+        let errorDetailsElem = parseErrorMessage(tokenElem.dataset['error']);
 
         let errorMsgElem = document.createElement('div');
 
@@ -42,9 +42,9 @@ export function setToolTipHandler(tooltipElem: HTMLElement, tokenElem: HTMLEleme
     tokenElem.addEventListener('mouseenter', () => {
         if(tokenElem.dataset['error'] !== undefined || tokenElem.dataset['type'] !== undefined) {
             updateToolTip(tooltipElem, tokenElem);
+            tooltipElem.style.top  =  `${tokenElem.getBoundingClientRect().bottom + window.scrollY}px`;
+            tooltipElem.style.left =  `${tokenElem.getBoundingClientRect().left + window.scrollX}px`;
             tokenElem.appendChild(tooltipElem);
-            tooltipElem.style.top  =  `${tokenElem.getBoundingClientRect().bottom}px`;
-            tooltipElem.style.left =  `${tokenElem.getBoundingClientRect().left}px`;
             tooltipElem.style.display = 'block';    
         }
     });

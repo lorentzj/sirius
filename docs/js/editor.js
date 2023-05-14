@@ -243,12 +243,14 @@ export function updateEditorWithErrors(errors, editorElem) {
             const tokenElem = editorElem.querySelector(tokenSelector);
             if (tokenElem !== null) {
                 tokenElem.classList.add('error');
-                tokenElem.dataset['error'] = `${error.error_type}Error: ${error.message}`;
+                tokenElem.dataset['error'] = error.message;
+                tokenElem.dataset['errorType'] = `${error.error_type}Error`;
                 if (tokenId + 1 < error.end) {
                     const nextElem = tokenElem.nextElementSibling;
                     if (nextElem !== null) {
                         nextElem.classList.add('error');
-                        nextElem.dataset['error'] = `${error.error_type}Error: ${error.message}`;
+                        nextElem.dataset['error'] = error.message;
+                        nextElem.dataset['errorType'] = `${error.error_type}Error`;
                     }
                 }
             }
