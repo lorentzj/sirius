@@ -8,10 +8,12 @@ function generateSectionFootnotes(section, section_id) {
     for (const sup of sups) {
         if (sup.classList.contains('external')) {
             const link = sup.firstChild;
-            link.innerText = '[🡥]';
+            link.innerHTML = `[link]`;
             link.target = '_blank';
         }
-        else if (sup.classList.contains('footnote')) {
+    }
+    for (const sup of sups) {
+        if (sup.classList.contains('footnote')) {
             const link = document.createElement('a');
             link.classList.add('footnote_backlink');
             const backlink_id = `footnote_backlink_${section_id}_${ss}`;
@@ -28,7 +30,10 @@ function generateSectionFootnotes(section, section_id) {
         }
     }
     if (footnotes.length > 0) {
-        let footnoteContainer = document.createElement('div');
+        let footnoteContainer = document.createElement('details');
+        footnoteContainer.open = true;
+        let footnoteTitle = document.createElement('summary');
+        footnoteContainer.appendChild(footnoteTitle);
         footnoteContainer.classList.add('footnote_container');
         for (let [footnote, id, backlink_id] of footnotes) {
             let footnoteElem = document.createElement('div');

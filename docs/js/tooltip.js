@@ -1,13 +1,16 @@
 import { parseErrorMessage } from './output_area.js';
 function updateToolTip(tooltipElem, tokenElem) {
     tooltipElem.innerHTML = '';
+    let tooltipInner = document.createElement('div');
+    tooltipInner.id = 'tooltip_inner';
+    tooltipElem.appendChild(tooltipInner);
     if (tokenElem.dataset['type'] !== undefined) {
         let typeElem = document.createElement('span');
         typeElem.classList.add('code');
         typeElem.classList.add('token');
         typeElem.classList.add('type');
         typeElem.innerText = tokenElem.dataset['type'];
-        tooltipElem.appendChild(typeElem);
+        tooltipInner.appendChild(typeElem);
     }
     if (tokenElem.dataset['error'] !== undefined) {
         const errorTypeElem = document.createElement('span');
@@ -17,7 +20,7 @@ function updateToolTip(tooltipElem, tokenElem) {
         let errorMsgElem = document.createElement('div');
         errorMsgElem.appendChild(errorTypeElem);
         errorMsgElem.appendChild(errorDetailsElem);
-        tooltipElem.appendChild(errorMsgElem);
+        tooltipInner.appendChild(errorMsgElem);
     }
 }
 export function addTypeInfo(editorElem, ast) {

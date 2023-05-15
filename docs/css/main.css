@@ -9,8 +9,9 @@
 }
 
 html, body {
-    height: 100%;
-    padding: 0; margin: 0;
+    height: 99%;
+    padding: 0;
+    margin: 0;
     display: flex;
     flex-direction: column;
 }
@@ -68,8 +69,12 @@ section {
     margin-top: 20px;
     padding: 50px;
     max-width: 900px;
-    border: 2px solid black;
+    border: 3px solid black;
     font-size: large;
+}
+
+section:last-child {
+    margin-bottom: 20px;
 }
 
 p {
@@ -111,8 +116,9 @@ code {
 }
 
 code.block {
-    outline: 1px solid black;
+    outline: 3px solid black;
     display: block;
+    overflow-x: scroll;
 }
 
 code.doc {
@@ -134,14 +140,13 @@ tbody tr td:first-child {
 
 tbody td {
     padding: 10px;
-    outline: 1px solid black;
+    outline: 3px solid black;
     background-color: var(--primary-bg-color);
 }
 
 .footnote_container {
     padding: 10px;
     margin: 10px;
-    border-top: 5px solid black;
 }
 
 .footnote_content {
@@ -166,6 +171,12 @@ tbody td {
     animation: flash_primary_bg 1s ease-in;
 }
 
+summary {
+    border: 4px solid black;
+    background-color: var(--primary-bg-color);
+    padding-left: 10px;
+}
+
 /* Header */
 
 #header {
@@ -183,12 +194,18 @@ tbody td {
 }
 
 #tooltip {
-    border: 10px solid red;
     color: rgb(255, 255, 255);
     display: none;
     position: absolute;
     min-width: 200px;
     background-color: var(--secondary-bg-color);
+    margin: 1px;
+}
+
+#tooltip_inner {
+    margin: -1px;
+    padding: 3px;
+    outline: 3px solid black;
 }
 
 #editor_line_numbers, .line_numbers {

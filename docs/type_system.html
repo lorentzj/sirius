@@ -2,6 +2,7 @@
 <html>
     <head>
         <meta charset = "UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="icon" type="image/x-icon" href="./favicon.ico">
         <link rel = "stylesheet" href = "./css/main.css">
         <script src = "./js/docs.js" type = "module"></script>
@@ -12,28 +13,35 @@
             <div id="tooltip"></div>
             <section>
                 <a href = "./">Documentation Home</a><br>
+            </section>
+            <section>
                 <h1>The Sirius Type System</h1>
+                <ol>
+                    <li><a href = "#whats_special">What's Special About It?</a></li>
+                    <li><a href = "#basics">Basics</a></li>
+                    <li><a href = "#value_tracking">Value Tracking</a></li>
+                </ol>
             </section>
             <section id = "whats_special">
-                <h2>What's special about it?</h2>
+                <h2>What's Special About It?</h2>
                 <p>A type system featuring refinement types can enforce properties of programs at compile time that are usually enforced with runtime errors. For example, if a type system tracks the possible values of integers, it could:</p>
                 <ul>
                     <li>Detect potential overflows and divisions by zero</li>
                     <li>Check that array accesses are in-bounds</li>
-                    <li>Enforce constraints on array shapes, such as the dimension requirements for matrix multiplication: <code class = "doc">AB = C</code> implies for <code class = "doc">A[X, Y]</code> and <code class = "doc">B[Y, Z]</code>, <code class = "doc">C[X, Z]</code></li>
+                    <li>Enforce constraints on array shapes, such as the dimension requirements for matrix multiplication: <code class = "doc">C = AB</code> implies for <code class = "doc">A[X, Y]</code> and <code class = "doc">B[Y, Z]</code>, <code class = "doc">C[X, Z]</code></li>
                 </ul>
 
-                <p>Full-fledged refinement types can go much further; for instance, encoding the notion of a sorted list to verify a sorting algorithm.<sup class = "external"><a href = "https://ucsd-progsys.github.io/liquidhaskell/blogposts/2013-07-29-putting-things-in-order.lhs/">link</a></sup></p>
+                <p>Full-fledged refinement types can go much further; for instance, they can statically verify security policies of a web application.<sup class = "external"><a href = "https://www.usenix.org/conference/osdi21/presentation/lehmann">[link]</a></sup></p>
 
-                <p>To realize these advantages, programmers of refinement-typed languages must specify the properties they want as types and write procedures that provably adhere to those types. For industry programmers in fields without critical correctness requirements, this may be a prohibitive amount of work.<sup class = "footnote">Even if a programmer is perfectly comfortable with refinement types, more sophisticated type systems make helpful compiler errors harder to generate and increase compile times.</sup></p>
+                <p>To realize these advantages, programmers of refinement-typed languages must specify the properties they want as types and write procedures that provably adhere to those types. For programmers in fields without critical correctness requirements, this may be a prohibitive amount of work.<sup class = "footnote">Dependent type systems are even more expressive than refinement alone, since verification need not be performed by an SMT solver. On the other hand, programming is hard, compiling is slow, and compiler errors for arithmetic constraint violations in particular can be "daunting in size."<sup class = "external"><a href = "https://dl.acm.org/doi/10.1145/3341704">[link]</a></sup></sup> The expressive power of refinement depends on the theories supported by the attending solver. Languages that support refinement, like <a href = "https://ucsd-progsys.github.io/liquidhaskell/">Liquid Haskell</a>, also often have other powerful type features.</p>
+                
+                <p>Sirius instead only provides a single theory, polynomial integer arithmetic<sup class = "footnote">Unfortunately incomplete, courtesy of work on Hilbert's 10th problem.</sup>, and an otherwise simple type system. The language seeks to limit expressiveness so that the types that <em>can</em> be expressed have extra syntactic and semantic support.<sup class = "footnote">A composer might limit themselves to a proven formula like the fugue or sonata for analogous reasons. The perfect tool for communication of a given idea has all expressiveness necessary and no more.</sup></p>
 
-                <p>Sirius does not accommodate user-defined refinement types. The language only supplies a single built-in family of refinable types: a multivariate integer polynomial <code class = "doc"><span class = "token identifier type">Poly</span></code>. The type checker automatically tracks all integer values in the program as <code class = "doc"><span class = "token identifier type">Poly</span></code>s on a best-effort basis. The choice of polynomial representation may seem a bit random &mdash; hopefully the examples below illustrate that it suits many use cases for array programming.<sup class = "footnote">One motivation: polynomials are closed under addition and multiplication, the two operations needed to index a multidimensional array. Suppose we are given an array <code class = "doc">A[M, N, N]</code> of square matrices. If we want the 2nd element of the 2nd row of the 3rd matrix, we compute <code class = "doc">A[2*N^2 + N + 1]</code> (of course, usually written <code class = "doc">A[2, 1, 1]</code>).</sup></p>
-
-                <p>The type system laid out in this document accomplishes the above list of integer refinement type use cases and also unlocks potential optimizations for high-level array code.</p>
+                <p>Sirius supplies a built-in family of refinable types: a multivariate integer polynomial <code class = "doc"><span class = "token identifier type">Poly</span></code>. The typechecker automatically tracks all integer values in the program as <code class = "doc"><span class = "token identifier type">Poly</span></code>s on a best-effort basis. The choice of polynomial representation may seem arbitrary &mdash; this document will hopefully illustrate that it suits many use cases for array programming.<sup class = "footnote">One motivation to pique interest: polynomials are closed under addition and multiplication, the two operations needed to index a multidimensional array. Suppose we are given an array <code class = "doc">A[M, N, N]</code> of square matrices. If we want the 2nd element of the 2nd row of the 3rd matrix, we compute <code class = "doc">A[2*N^2 + N + 1]</code> (of course, usually written <code class = "doc">A[2, 1, 1]</code>).</sup> Encoding array sizes and accesses with <code class = "doc"><span class = "token identifier type">Poly</span></code>s also unlocks potential optimizations for high-level array code.</p>
             </section>
             <section id = "basics">
                 <h2>Basics</h2>
-                <p>The Sirius type system has a fundamental law: no type information may flow between functions except through their signatures.<sup class = "footnote">In other words, there is no program or module-level inference, only intra-function inference. At the cost of requiring annotations, this makes it easier to reason about programs for both the programmer and the typechecker.</sup> </p>
+                <p>The Sirius type system has a fundamental law: no type information may flow between functions except through their signatures. In other words, the typechecker performs inference only within function boundaries.   </p>
                 <p>Sirius currently supports a small set of primitive types: boolean <code class = "doc"><span class = "token type identifier">bool</span></code>, 64-bit integer <code class = "doc"><span class = "token type identifier">i64</span></code>, and 64-bit floating point <code class = "doc"><span class = "token type identifier">f64</span></code>. We can combine types as tuples or functions.</p>
                 
 <code class = "block please_parse">fn main():
@@ -47,6 +55,31 @@
 // but mandatory for function signatures
 fn example(x: f64) -> bool:
     return x > 3</code>
+
+                <p>Type parameters may be added to functions, but all expressions must have concrete types.</p>
+<code class = "block please_parse">// the type parameter list is enclosed by curly brackets 
+fn double{T}(x: T) -> (T, T):
+    return (x, x)
+
+fn main():
+    print double(1)
+    print double{bool}(true) // as are type parameters in expressions
+    print double(double{f64})</code>        
+            </section>
+            <section id = "value_tracking">
+            <h2>Value Tracking</h2>
+            </section>
+            <section id = "systems_of_equations">
+                <h2>Systems of Equations</h2>
+            </section>    
+            <section id = "constraints_and_flow">
+                <h2>Constraints and Flow</h2>
+            </section>    
+            <section id = "array_programming">
+                <h2>Array Programming</h2>
+            </section>
+            <section id = "concerns_and_caveats">
+                <h2>Concerns and Caveats</h2>
             </section>
         </article>
     </body>

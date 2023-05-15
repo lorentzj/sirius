@@ -3,6 +3,9 @@ import {parseErrorMessage} from './output_area.js';
 
 function updateToolTip(tooltipElem: HTMLElement, tokenElem: HTMLElement) {
     tooltipElem.innerHTML = '';
+    let tooltipInner = document.createElement('div');
+    tooltipInner.id = 'tooltip_inner';
+    tooltipElem.appendChild(tooltipInner);
     if(tokenElem.dataset['type'] !== undefined) {
         let typeElem = document.createElement('span');
         typeElem.classList.add('code');
@@ -10,7 +13,7 @@ function updateToolTip(tooltipElem: HTMLElement, tokenElem: HTMLElement) {
         typeElem.classList.add('type');        
         typeElem.innerText = tokenElem.dataset['type'];
 
-        tooltipElem.appendChild(typeElem);
+        tooltipInner.appendChild(typeElem);
     }
 
     if(tokenElem.dataset['error'] !== undefined) {
@@ -24,7 +27,7 @@ function updateToolTip(tooltipElem: HTMLElement, tokenElem: HTMLElement) {
 
         errorMsgElem.appendChild(errorTypeElem);
         errorMsgElem.appendChild(errorDetailsElem);
-        tooltipElem.appendChild(errorMsgElem);
+        tooltipInner.appendChild(errorMsgElem);
     }
 }
 
