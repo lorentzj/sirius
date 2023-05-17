@@ -67,9 +67,11 @@ section {
     background-color: var(--secondary-bg-color);
     margin: auto;
     margin-top: 20px;
-    padding: 50px;
+    padding-top: 50px;
+    padding-bottom: 50px;
+    padding-left: calc(10px + 2vw);
+    padding-right: calc(10px + 2vw);
     max-width: 900px;
-    border: 3px solid black;
     font-size: large;
 }
 
@@ -116,7 +118,6 @@ code {
 }
 
 code.block {
-    outline: 3px solid black;
     display: block;
     overflow-x: scroll;
 }
@@ -172,9 +173,8 @@ tbody td {
 }
 
 summary {
-    border: 4px solid black;
-    background-color: var(--primary-bg-color);
     padding-left: 10px;
+    cursor: pointer;
 }
 
 /* Header */
@@ -341,7 +341,7 @@ button.selected {
     text-overflow: ellipsis;
 }
 
-.error_summary:hover {
+summary:hover {
     background-color: var(--button-hover-color);
 }
 

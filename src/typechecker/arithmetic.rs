@@ -64,7 +64,6 @@ pub fn arith_coerce(
     } else {
         match op {
             Op::Greater | Op::Less | Op::GreaterOrEq | Op::LessOrEq => Ok(Type::Bool),
-            Op::Exp => Ok(Type::F64),
             _ => {
                 if let Type::I64(Some(lval)) = lhs {
                     if let Type::I64(Some(rval)) = rhs {
@@ -89,6 +88,27 @@ pub fn arith_coerce(
                                     } else {
                                         return Ok(Type::I64(None));
                                     }
+                                }
+                            }
+                            Op::Exp => {
+                                if let Some(exp) = rval.get_constant_val() {
+                                    if exp < 0 {
+                                        return Err(Error::new(
+                                            ErrorType::Constraint,
+                                            "cannot raise integer to negative power".to_string(),
+                                            start,
+                                            end,
+                                        ));
+                                    } else {
+                                        let mut v = Poly::constant(1);
+                                        for _ in 0..exp {
+                                            v = v * lval.clone();
+                                        }
+
+                                        v
+                                    }
+                                } else {
+                                    return Ok(Type::I64(None));
                                 }
                             }
                             _ => panic!(),
