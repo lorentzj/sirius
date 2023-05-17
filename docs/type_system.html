@@ -6,7 +6,7 @@
         <link rel="icon" type="image/x-icon" href="./favicon.ico">
         <link rel = "stylesheet" href = "./css/main.css">
         <script src = "./js/docs.js" type = "module"></script>
-        <title>Sirius</title>
+        <title>Sirius Type System</title>
     </head>
     <body>
         <article>
@@ -19,6 +19,9 @@
                 <ol>
                     <li><a href = "#low_friction_refinement">Low-Friction Refinement</a></li>
                     <li><a href = "#basics">Basics</a></li>
+                    <li><a href = "#systems_and_constraints">Systems and Constraints</a></li>
+                    <li><a href = "#array_programming">Array Programming</a></li>
+                    <li><a href = "#caveats">Caveats</a></li>
                 </ol>
             </section>
             <section id = "low_friction_refinement">
@@ -30,13 +33,13 @@
                     <li>Enforce constraints on array shapes, such as the dimension requirements for matrix multiplication: <code class = "doc">C = AB</code> implies for <code class = "doc">A[X, Y]</code> and <code class = "doc">B[Y, Z]</code>, <code class = "doc">C[X, Z]</code></li>
                 </ul>
 
-                <p>Full-fledged refinement types can go much further; for instance, they can statically verify security policies of a web application.<sup class = "external"><a href = "https://www.usenix.org/conference/osdi21/presentation/lehmann">[link]</a></sup></p>
+                <p>Full-fledged refinement types can go much further; for instance, they can statically verify security policies of <a href = "https://www.usenix.org/conference/osdi21/presentation/lehmann" target = "_blank">a web application</a>.</p>
 
                 <p>To realize these advantages, programmers of refinement-typed languages must specify the properties they want as types and write procedures that provably adhere to those types. For programmers in fields without critical correctness requirements, this may be a prohibitive amount of work.<sup class = "footnote">Dependent type systems are even more expressive than refinement alone, since verification need not be performed by an SMT solver. On the other hand, programming is hard, compiling is slow, and compiler errors for arithmetic constraint violations in particular can be "daunting in size."<sup class = "external"><a href = "https://dl.acm.org/doi/10.1145/3341704">[link]</a></sup></sup> The expressive power of refinement depends on the theories supported by the attending solver. Languages that support refinement, like <a href = "https://ucsd-progsys.github.io/liquidhaskell/" target = "_blank">Liquid Haskell</a>, also often have other powerful type features.</p>
                 
                 <p>Sirius instead only provides a single theory, polynomial integer arithmetic<sup class = "footnote">Unfortunately incomplete, courtesy of work on <a href = "https://en.wikipedia.org/wiki/Hilbert%27s_tenth_problem" target = "_blank">Hilbert's 10th problem</a>.</sup>, and an otherwise simple type system. We seek to limit expressiveness so that the types that <em>can</em> be expressed have extra syntactic and semantic support.<sup class = "footnote">A composer might limit themselves to a proven formula like the fugue or sonata for analogous reasons. The perfect tool to communicate a given idea has all expressiveness necessary and no more.</sup></p>
 
-                <p>Sirius supplies a built-in family of refinable types: the multivariate integer polynomial <code class = "doc"><span class = "token identifier type">Poly</span></code>. The typechecker automatically tracks all integer values in the program as <code class = "doc"><span class = "token identifier type">Poly</span></code>s on a best-effort basis. The choice of polynomial representation may seem arbitrary &mdash; this document will hopefully illustrate that it suits many use cases for array programming.<sup class = "footnote">One motivation to pique interest: polynomials are closed under addition and multiplication, the two operations needed to index a multidimensional array. Suppose we are given an array <code class = "doc">A[M, N, N]</code> of square matrices. If we want the 2nd element of the 2nd row of the 3rd matrix, we compute <code class = "doc">A[2*N^2 + N + 1]</code> (of course, usually written <code class = "doc">A[2, 1, 1]</code>).</sup> Encoding array sizes and accesses with <code class = "doc"><span class = "token identifier type">Poly</span></code>s also unlocks potential optimizations for high-level array code.</p>
+                <p>The typechecker automatically tracks all integer values in the program as multivariate integer polynomial <code class = "doc"><span class = "token identifier type">Poly</span></code>s on a best-effort basis. The choice of polynomial representation may seem arbitrary &mdash; this document will hopefully illustrate that it suits many use cases for array programming.<sup class = "footnote">One motivation to pique interest: polynomials are closed under addition and multiplication, the two operations needed to index a multidimensional array. Suppose we are given an array <code class = "doc">A[M, N, N]</code> of square matrices. If we want the 2nd element of the 2nd row of the 3rd matrix, we compute <code class = "doc">A[2*N^2 + N + 1]</code> (of course, usually written <code class = "doc">A[2, 1, 1]</code>).</sup> Encoding array sizes and accesses with <code class = "doc"><span class = "token identifier type">Poly</span></code>s also unlocks potential optimizations for high-level array code.</p>
             </section>
             <section id = "basics">
                 <h2>Basics</h2>
@@ -76,7 +79,7 @@ fn main():
     let z = x + y             // i64(poly = 'a + 1)
     let w = (y^2 - 9)/(y + 3) // i64(poly = 'a - 3)</code>
 
-                <p>We cannot perform inference with mutable variables<sup class = "footnote">Well, we could try<sup class = "external"><a href = "https://ieeexplore.ieee.org/document/855785"></a></sup>, but it doesn't play nicely with control flow.</sup>. Iterators are considered immutable for type purposes.</p>
+                <p>We cannot perform inference with mutable variables.<sup class = "footnote">Well, <a href = "https://ieeexplore.ieee.org/document/855785" target = "_blank">we could try</a>, but it doesn't play nicely with control flow.</sup> Iterators are considered immutable for type purposes.</p>
 
                 <code class = "block please_parse">fn main():
     let mut x = 0       // plain i64
@@ -92,8 +95,8 @@ fn main():
             <section id = "array_programming">
                 <h2>Array Programming</h2>
             </section>
-            <section id = "concerns_and_caveats">
-                <h2>Concerns and Caveats</h2>
+            <section id = "caveats">
+                <h2>Caveats</h2>
             </section>
         </article>
     </body>

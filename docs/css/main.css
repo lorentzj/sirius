@@ -4,6 +4,9 @@
     --button-color: rgb(83, 63, 79);
     --button-hover-color: rgb(112, 86, 107);
     --footnote-higlight-color: rgb(147, 96, 33);
+    --link-color: rgb(129, 255, 154);
+    --hover-link-color: rgb(36, 205, 44);
+    --comment-color: rgb(152, 151, 151);
     --rounded-corners: 3px;
     --button-padding: 0.7em;
 }
@@ -73,6 +76,7 @@ section {
     padding-right: calc(10px + 2vw);
     max-width: 900px;
     font-size: large;
+    border-radius: var(--rounded-corners);
 }
 
 section:last-child {
@@ -94,11 +98,11 @@ span.asp {
 }
 
 a {
-    color: rgb(129, 255, 154);
+    color: var(--link-color);
 }
 
 a:hover {
-    color: rgb(36, 205, 44);
+    color: var(--hover-link-color);
 }
 
 
@@ -141,7 +145,6 @@ tbody tr td:first-child {
 
 tbody td {
     padding: 10px;
-    outline: 3px solid black;
     background-color: var(--primary-bg-color);
 }
 
@@ -173,8 +176,9 @@ tbody td {
 }
 
 summary {
-    padding-left: 10px;
+    padding-left: 1em;
     cursor: pointer;
+    border-radius: var(--rounded-corners);
 }
 
 /* Header */
@@ -208,24 +212,8 @@ summary {
     outline: 3px solid black;
 }
 
-#editor_line_numbers, .line_numbers {
-    color: rgb(117, 117, 116);
-    flex: none;
-    padding: 3px;
-    white-space: pre;
-    font-family: monospace;
-    font-size: x-large;
-    min-width: 2em;
-    text-align: end;
-    margin-right: 1em;
-    user-select: none;
-}
-
-#editor_line_numbers .error, .line_numbers .error {
-    color: rgb(255, 0, 0);
-}
-
 #tooltip, code, #editor, .parsed_code_block {
+    line-height: 1;
     padding: 3px;
     caret-color: black;
     font-family: monospace;
@@ -236,7 +224,28 @@ summary {
     caret-color: rgb(255, 255, 255);
 }
 
+li.code_line {
+    list-style: none;
+    padding-bottom: 5px;
+}
+
+li.code_line::before {
+    counter-increment: line-number;
+    content: counter(line-number);
+    display: inline-block;
+    color: var(--comment-color);
+    min-width: 2em;
+    padding-right: 1em;
+    text-align: end;
+}
+
+li.code_line.error::before {
+    color: rgb(255, 0, 0);
+}
+
+
 #editor, .parsed_code_block {
+    counter-reset: line-number;
     white-space: pre;
 }
 
@@ -249,7 +258,7 @@ span.token.highlight {
 }
 
 span.token.comment {
-    color: rgb(176, 176, 176);
+    color: var(--comment-color);
 }
 
 span.token.const {

@@ -6,7 +6,7 @@
         <link rel="icon" type="image/x-icon" href="./favicon.ico">
         <link rel = "stylesheet" href = "./css/main.css">
         <script src = "./js/demo.js" type = "module"></script>
-        <title>Sirius</title>
+        <title>Sirius Web Editor</title>
     </head>
     <body>
         <div id = "header">
@@ -20,8 +20,7 @@
         </div><br>
         <div id="editor_container">
             <div id="tooltip" contenteditable="false"></div>
-            <div id="editor_line_numbers" class="column">1</div>
-            <div id="editor" contenteditable="true" spellcheck="false" class="column"><div class="code_line" data-line="1"><br data-sentinel="true"></div></div>
+            <ol id="editor" contenteditable="true" spellcheck="false"><li class="code_line" data-line="1"><br data-sentinel="true"></li></ol>
         </div><br>
 
         <div id="output_tabs">

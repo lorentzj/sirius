@@ -8,7 +8,6 @@ document.body.onload = () => {
     Promise.all([init(), load_demo_programs()]).then(([_, demo_programs]) => {
         const editorElem = document.getElementById('editor');
         const tooltipElem = document.getElementById('tooltip');
-        const editorLinesElem = document.getElementById('editor_line_numbers');
         const buttonElem = document.getElementById('run');
         const displayErrorsElem = document.getElementById('display_errors');
         const displayLogElem = document.getElementById('display_log');
@@ -18,7 +17,6 @@ document.body.onload = () => {
         let codeLines = new CodeLines();
         if (editorElem !== null
             && tooltipElem !== null
-            && editorLinesElem !== null
             && displayErrorsElem !== null
             && displayLogElem !== null
             && errorElem !== null
@@ -53,7 +51,7 @@ document.body.onload = () => {
             });
             const updateEditor = () => {
                 const parser_output = types.prepare_parse_output(bindings.parse(codeLines.code.join('\n') + '\n'));
-                editor.updateEditorWithCode(editorElem, tooltipElem, editorLinesElem, codeLines.code, parser_output);
+                editor.updateEditorWithCode(editorElem, tooltipElem, codeLines.code, parser_output);
                 editor.updateEditorWithErrors(parser_output.errors, editorElem);
                 editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem);
                 output_area.updateErrorELement(displayErrorsElem, errorElem, parser_output.errors, parser_output.tokens);

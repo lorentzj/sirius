@@ -45,7 +45,7 @@ export function updateCaretPosition(caretPosition, editorElem) {
             selectedRange.setStart(editorElem, 0);
         }
         else {
-            const lineSelector = `div.code_line[data-line='${caretPosition.line + 1}']`;
+            const lineSelector = `li.code_line[data-line='${caretPosition.line + 1}']`;
             const selectedLine = editorElem.querySelector(lineSelector);
             selectedLine.scrollIntoView();
             const firstElementIsSentinel = selectedLine.children[0].dataset['sentinel'] == 'true';
@@ -160,11 +160,11 @@ function codeIndexFromPosition(editorElem, container, offset) {
         }
     }
 }
-export function updateEditorWithCode(editorElem, tooltipElem, editorLinesElem, code, parseOutput) {
+export function updateEditorWithCode(editorElem, tooltipElem, code, parseOutput) {
     editorElem.innerHTML = '';
     let token_i = 0;
     code.forEach((lineCode, line) => {
-        const lineElement = document.createElement('div');
+        const lineElement = document.createElement('li');
         lineElement.classList.add('code_line');
         lineElement.dataset['line'] = (line + 1).toString();
         let line_i = 0;
@@ -205,18 +205,13 @@ export function updateEditorWithCode(editorElem, tooltipElem, editorLinesElem, c
     tooltip.addTypeInfo(editorElem, parseOutput.ast);
     let errorLines = new Set();
     for (let error of parseOutput.errors) {
-        errorLines.add(parseOutput.tokens[error.start].line);
-    }
-    let newEditorLines = [];
-    for (let i = 0; i < code.length; ++i) {
-        let rowLine = document.createElement('span');
-        rowLine.innerText = `${i + 1}\n`;
-        if (errorLines.has(i)) {
-            rowLine.classList.add('error');
+        const errorLine = parseOutput.tokens[error.start].line;
+        const lineSelector = `li.code_line[data-line='${errorLine + 1}']`;
+        const selectedLine = editorElem.querySelector(lineSelector);
+        if (selectedLine !== null) {
+            selectedLine.classList.add('error');
         }
-        newEditorLines.push(rowLine);
     }
-    editorLinesElem.replaceChildren(...newEditorLines);
 }
 function setMouseOverHLHandler(editorElem, codeSpan, tokenId, highlightMap) {
     let highlightMatches = [];

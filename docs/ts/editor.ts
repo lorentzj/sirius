@@ -51,7 +51,7 @@ export function updateCaretPosition(caretPosition: CodePosition, editorElem: HTM
         if(caretPosition.line === 0 && caretPosition.offset === 0) {
             selectedRange.setStart(editorElem, 0);
         } else {
-            const lineSelector = `div.code_line[data-line='${caretPosition.line + 1}']`;
+            const lineSelector = `li.code_line[data-line='${caretPosition.line + 1}']`;
             const selectedLine = editorElem.querySelector(lineSelector) as HTMLElement;
 
             selectedLine.scrollIntoView();
@@ -167,12 +167,12 @@ function codeIndexFromPosition(editorElem: HTMLElement, container: Node, offset:
     }
 }
 
-export function updateEditorWithCode(editorElem: HTMLElement, tooltipElem: HTMLElement, editorLinesElem: HTMLElement, code: string[], parseOutput: types.ParserOutput) {
+export function updateEditorWithCode(editorElem: HTMLElement, tooltipElem: HTMLElement, code: string[], parseOutput: types.ParserOutput) {
     editorElem.innerHTML = '';
     let token_i = 0;
 
     code.forEach((lineCode, line) => {
-        const lineElement = document.createElement('div');
+        const lineElement = document.createElement('li');
         lineElement.classList.add('code_line');
         lineElement.dataset['line'] = (line + 1).toString();
 
@@ -226,19 +226,13 @@ export function updateEditorWithCode(editorElem: HTMLElement, tooltipElem: HTMLE
 
     let errorLines = new Set<Number>();
     for(let error of parseOutput.errors) {
-        errorLines.add(parseOutput.tokens[error.start].line);
-    }
-
-    let newEditorLines = [];
-    for(let i = 0; i < code.length; ++i) {
-        let rowLine = document.createElement('span');
-        rowLine.innerText = `${i + 1}\n`;
-        if(errorLines.has(i)) {
-            rowLine.classList.add('error')
+        const errorLine = parseOutput.tokens[error.start].line;
+        const lineSelector = `li.code_line[data-line='${errorLine + 1}']`;
+        const selectedLine = editorElem.querySelector(lineSelector);
+        if(selectedLine !== null) {
+            selectedLine.classList.add('error');
         }
-        newEditorLines.push(rowLine);
     }
-    editorLinesElem.replaceChildren(...newEditorLines);
 }
 
 function setMouseOverHLHandler(editorElem: HTMLElement, codeSpan: HTMLElement, tokenId: number, highlightMap: Map<number, number[]>) {

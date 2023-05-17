@@ -27,5 +27,10 @@ pub fn math_mod() -> HashMap<String, Type> {
         Type::Function(vec![], vec![Type::F64], Box::new(Type::F64)),
     );
 
+    vals.insert(
+        "round".into(),
+        Type::Function(vec![], vec![Type::F64], Box::new(Type::I64(None))),
+    );
+
     vals
 }

@@ -6,13 +6,6 @@ function generateSectionFootnotes(section, section_id) {
     let footnotes = [];
     let sups = section.getElementsByTagName('sup');
     for (const sup of sups) {
-        if (sup.classList.contains('external')) {
-            const link = sup.firstChild;
-            link.innerHTML = `[link]`;
-            link.target = '_blank';
-        }
-    }
-    for (const sup of sups) {
         if (sup.classList.contains('footnote')) {
             const link = document.createElement('a');
             link.classList.add('footnote_backlink');
@@ -72,14 +65,11 @@ document.body.onload = () => {
                 block.style.display = 'flex';
                 const code = block.innerText;
                 const parser_output = types.prepare_parse_output(bindings.parse(code));
-                const codeElem = document.createElement('div');
-                codeElem.classList.add('parsed_code_block', 'column');
-                const blockLinesElem = document.createElement('div');
-                blockLinesElem.classList.add('line_numbers', 'column');
+                const codeElem = document.createElement('ol');
+                codeElem.classList.add('parsed_code_block');
                 block.innerHTML = '';
-                block.appendChild(blockLinesElem);
                 block.appendChild(codeElem);
-                editor.updateEditorWithCode(codeElem, tooltipElem, blockLinesElem, code.split('\n'), parser_output);
+                editor.updateEditorWithCode(codeElem, tooltipElem, code.split('\n'), parser_output);
                 editor.updateEditorWithErrors(parser_output.errors, codeElem);
             }
         }

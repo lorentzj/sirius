@@ -42,6 +42,14 @@ fn ln(v: Vec<Value>) -> Option<Value> {
     }
 }
 
+fn round(v: Vec<Value>) -> Option<Value> {
+    if let Some(Value::F64(v)) = v.first() {
+        Some(Value::I64(v.round() as i64))
+    } else {
+        unreachable!()
+    }
+}
+
 pub fn stdlib<'a>() -> HashMap<String, Value<'a>> {
     let mut lib = HashMap::<String, Value>::default();
 
@@ -51,6 +59,7 @@ pub fn stdlib<'a>() -> HashMap<String, Value<'a>> {
     lib.insert("tan".into(), Value::ExternalFunction(tan));
     lib.insert("log10".into(), Value::ExternalFunction(log10));
     lib.insert("ln".into(), Value::ExternalFunction(ln));
+    lib.insert("round".into(), Value::ExternalFunction(round));
 
     lib
 }
