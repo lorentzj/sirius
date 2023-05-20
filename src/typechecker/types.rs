@@ -93,6 +93,7 @@ impl Type {
         &self,
         other: &Type,
         allow_demote: bool,
+        allow_promote: &mut Option<&mut usize>
     ) -> Option<(Vec<Substitution>, Vec<Constraint>)> {
         if self == other {
             return Some((vec![], vec![]));
@@ -147,6 +148,15 @@ impl Type {
                         vec![],
                         vec![Constraint::new_eq_z(other_i.clone() - self_i.clone())],
                     )),
+                    Type::I64(None) => {
+                        match allow_promote {
+                            Some(var) => Some((
+                                vec![],
+                                vec![Constraint::new_eq_z(other_i.clone() - Poly::var(&usize_name(**var), 1))]
+                            )),
+                            None => None
+                        }
+                    }
                     _ => None,
                 },
                 Type::I64(None) => match self {
@@ -170,13 +180,13 @@ impl Type {
                             let mut constraints = vec![];
                             for (l_type, r_type) in l_types.iter().zip(r_types) {
                                 let (mut inner_subs, mut inner_constraints) =
-                                    Type::unify(l_type, r_type, allow_demote)?;
+                                    Type::unify(l_type, r_type, allow_demote, allow_promote)?;
                                 let mut combined_subs = vec![];
                                 for (s_var, s) in &subs {
                                     for (i_s_var, i_s) in &inner_subs {
                                         if s_var == i_s_var {
                                             let (comb_subs, comb_constraints) =
-                                                s.unify(i_s, allow_demote)?;
+                                                s.unify(i_s, allow_demote, allow_promote)?;
                                             combined_subs.extend(comb_subs);
                                             inner_constraints.extend(comb_constraints);
                                         }
@@ -202,13 +212,13 @@ impl Type {
                             let mut constraints = vec![];
                             for (l_type, r_type) in l_i.iter().zip(r_i) {
                                 let (mut inner_subs, mut inner_constraints) =
-                                    Type::unify(l_type, r_type, allow_demote)?;
+                                    Type::unify(l_type, r_type, allow_demote, allow_promote)?;
                                 let mut combined_subs = vec![];
                                 for (s_var, s) in &subs {
                                     for (i_s_var, i_s) in &inner_subs {
                                         if s_var == i_s_var {
                                             let (comb_subs, comb_constraints) =
-                                                s.unify(i_s, allow_demote)?;
+                                                s.unify(i_s, allow_demote, allow_promote)?;
                                             combined_subs.extend(comb_subs);
                                             inner_constraints.extend(comb_constraints);
                                         }
@@ -220,14 +230,14 @@ impl Type {
                             }
 
                             let (mut o_subs, mut o_constraints) =
-                                Type::unify(l_o, r_o, allow_demote)?;
+                                Type::unify(l_o, r_o, allow_demote, allow_promote)?;
                             let mut combined_subs = vec![];
 
                             for (s_var, s) in &subs {
                                 for (o_s_var, o_s) in &o_subs {
                                     if s_var == o_s_var {
                                         let (comb_subs, comb_constraints) =
-                                            s.unify(o_s, allow_demote)?;
+                                            s.unify(o_s, allow_demote, allow_promote)?;
                                         combined_subs.extend(comb_subs);
                                         o_constraints.extend(comb_constraints);
                                     }
@@ -481,6 +491,6 @@ mod tests {
         let a = Type::ForAll(0);
         let b = Type::Bool;
 
-        assert_eq!(vec![(0, Type::Bool)], a.unify(&b, false).unwrap().0);
+        assert_eq!(vec![(0, Type::Bool)], a.unify(&b, false, &mut None).unwrap().0);
     }
 }

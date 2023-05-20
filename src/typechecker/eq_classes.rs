@@ -10,7 +10,7 @@ use std::rc::{Rc, Weak};
 pub struct EqClasses {
     trees: Vec<(Option<Rc<Type>>, TypeTree)>,
     owned: Vec<Rc<Type>>,
-    can_demote: Vec<Positioned<(Rc<Type>, Rc<Type>)>>,
+    can_demote_or_promote: Vec<Positioned<(Rc<Type>, Rc<Type>)>>,
     must_demote: Vec<Positioned<(Rc<Type>, Rc<Type>)>>,
     must_promote: Vec<Positioned<(Rc<Type>, Rc<Type>)>>,
 }
@@ -20,21 +20,21 @@ impl EqClasses {
         Self {
             trees: vec![],
             owned: vec![],
-            can_demote: vec![],
+            can_demote_or_promote: vec![],
             must_demote: vec![],
             must_promote: vec![],
         }
     }
 
-    pub fn add_can_demote_owned(&mut self, start: usize, a: &Rc<Type>, b: Type, end: usize) {
+    pub fn add_can_demote_or_promote_owned(&mut self, start: usize, a: &Rc<Type>, b: Type, end: usize) {
         self.owned.push(Rc::new(b));
         let b = self.owned.last().unwrap().clone();
 
-        self.add_can_demote(start, a, &b, end);
+        self.add_can_demote_or_promote(start, a, &b, end);
     }
 
-    pub fn add_can_demote(&mut self, start: usize, a: &Rc<Type>, b: &Rc<Type>, end: usize) {
-        self.can_demote
+    pub fn add_can_demote_or_promote(&mut self, start: usize, a: &Rc<Type>, b: &Rc<Type>, end: usize) {
+        self.can_demote_or_promote
             .push(Positioned::new(start, (a.clone(), b.clone()), end));
     }
 
@@ -132,7 +132,7 @@ impl EqClasses {
             let mut tree_repr = ts.first().unwrap().clone().inner;
 
             for t in ts {
-                match tree_repr.unify(&t.inner, false) {
+                match tree_repr.unify(&t.inner, false, &mut None) {
                     Some((subs, mut cs)) => {
                         if !subs.is_empty() {
                             any_changes = true;
@@ -180,7 +180,7 @@ impl EqClasses {
             } in &self.must_demote
             {
                 if tree.contains(a) {
-                    match tree_repr.unify(&b.demote_inds(), true) {
+                    match tree_repr.unify(&b.demote_inds(), true, &mut None) {
                         Some((mut subs, _)) => {
                             let a_forall_vars = tree_repr.forall_vars();
                             let b_forall_vars = b.forall_vars();
@@ -238,10 +238,10 @@ impl EqClasses {
                 start,
                 inner: (a, b),
                 end,
-            } in &self.can_demote
+            } in &self.can_demote_or_promote
             {
                 if tree.contains(a) {
-                    match tree_repr.unify(b, true) {
+                    match tree_repr.unify(b, true, &mut Some(curr_ind_forall_var)) {
                         Some((mut subs, mut cs)) => {
                             let a_forall_vars = tree_repr.forall_vars();
                             let b_forall_vars = b.forall_vars();
@@ -301,7 +301,7 @@ impl EqClasses {
             {
                 if tree.contains(a) {
                     let promoted_type = b.promote_inds(curr_ind_forall_var);
-                    match promoted_type.unify(&tree_repr, false) {
+                    match promoted_type.unify(&tree_repr, false, &mut None) {
                         Some((mut subs, mut cs)) => {
                             let a_forall_vars = tree_repr.forall_vars();
                             let b_forall_vars = b.forall_vars();
@@ -476,7 +476,7 @@ impl SubstitutionList {
         let (new_var, new_sub) = sub;
 
         for (self_var, self_sub) in &self.0 {
-            if new_var == *self_var && self_sub.unify(&new_sub, false).is_none() {
+            if new_var == *self_var && self_sub.unify(&new_sub, false, &mut None).is_none() {
                 return Err(self_sub.clone());
             }
         }

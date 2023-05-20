@@ -265,7 +265,7 @@ fn unify_expression(
                         for ((given_arg, expected_arg), arg_expr) in
                             arg_types.into_iter().zip(i).zip(args)
                         {
-                            eqc.add_can_demote_owned(
+                            eqc.add_can_demote_or_promote_owned(
                                 arg_expr.start,
                                 &given_arg,
                                 expected_arg.clone(),
@@ -354,7 +354,7 @@ pub fn unify(
                         Err(error) => errors.push(error),
                     }
 
-                    eqc.add_can_demote(val.start, &val.t, return_type, val.end);
+                    eqc.add_can_demote_or_promote(val.start, &val.t, return_type, val.end);
                 } else {
                     eqc.add_owned(statement.start, return_type, Type::Void, statement.end);
                 }
@@ -399,8 +399,8 @@ pub fn unify(
                     Err(error) => errors.push(error),
                 }
 
-                eqc.add_can_demote_owned(from.start, &from.t, Type::I64(None), from.end);
-                eqc.add_can_demote_owned(to.start, &to.t, Type::I64(None), to.end);
+                eqc.add_can_demote_or_promote_owned(from.start, &from.t, Type::I64(None), from.end);
+                eqc.add_can_demote_or_promote_owned(to.start, &to.t, Type::I64(None), to.end);
 
                 context.push();
                 context.insert(

@@ -79,14 +79,21 @@ fn main():
     let z = x + y             // i64(poly = 'a + 1)
     let w = (y^2 - 9)/(y + 3) // i64(poly = 'a - 3)</code>
 
-                <p>We cannot perform inference with mutable variables.<sup class = "footnote">Well, <a href = "https://ieeexplore.ieee.org/document/855785" target = "_blank">we could try</a>, but it doesn't play nicely with control flow.</sup> Iterators are considered immutable for type purposes.</p>
+                <p>We cannot perform value inference with mutable integers.<sup class = "footnote">Well, <a href = "https://ieeexplore.ieee.org/document/855785" target = "_blank">we could try</a>, but it doesn't play nicely with control flow.</sup> Iterators are considered immutable for type purposes.</p>
 
                 <code class = "block please_parse">fn main():
     let mut x = 0       // plain i64
     for i from 0 to 10: // i64(poly = 'a)
         x = x + i</code>
                 
-                <p></p>
+                <p>Integer literals are legal types, representing constant polynomials. <code class = "doc">Poly</code> variable names cannot be spelled.</p>
+
+                <code class = "block please_parse">fn get_two() -> 2:
+    return 2
+
+fn main():
+    let a: 3 = 3
+    let b: 5 = a + get_two()</code>                
 
             </section>
             <section id = "systems_and_constraints">
