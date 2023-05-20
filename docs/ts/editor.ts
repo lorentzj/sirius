@@ -41,43 +41,47 @@ export function updateCodeLines(editorElem: HTMLElement, codeLines: CodeLines, e
     return codeLines;
 }
 
-export function updateCaretPosition(caretPosition: CodePosition, editorElem: HTMLElement) {
+export function updateCaretPosition(caretPosition: CodePosition, editorElem: HTMLElement, scrollTop: number, scrollBottom: number) {
 
     const selection = window.getSelection();
     if(selection !== null) {
         selection.removeAllRanges();
         
         let selectedRange = document.createRange();
-        if(caretPosition.line === 0 && caretPosition.offset === 0) {
-            selectedRange.setStart(editorElem, 0);
-        } else {
-            const lineSelector = `li.code_line[data-line='${caretPosition.line + 1}']`;
-            const selectedLine = editorElem.querySelector(lineSelector) as HTMLElement;
 
-            selectedLine.scrollIntoView();
+        const lineSelector = `li.code_line[data-line='${caretPosition.line + 1}']`;
+        const selectedLine = editorElem.querySelector(lineSelector) as HTMLElement;
 
-            const firstElementIsSentinel = (selectedLine.children[0] as HTMLElement).dataset['sentinel'] == 'true';
+        let lineY = selectedLine.getBoundingClientRect().top - editorElem.getBoundingClientRect().top;
 
-            if(firstElementIsSentinel) {
-                selectedRange.setStart(selectedLine, 0);
-            } else {
-                for(let i = 0; i < selectedLine.children.length; ++i) {
-                    const tokenElement  = (selectedLine.children[i] as HTMLElement);
-                    const spanCharStart = Number.parseInt(tokenElement.dataset.charStart as string);
-                    const spanCharEnd   = Number.parseInt(tokenElement.dataset.charEnd as string);
-                    if(spanCharStart <= caretPosition.offset && spanCharEnd >= caretPosition.offset) {
-                        if(spanCharEnd === caretPosition.offset) {
-                            selectedRange.setStartAfter(tokenElement);  
-                        } else if(spanCharStart === caretPosition.offset) {
-                            selectedRange.setStartBefore(tokenElement);  
-                        } else {
-                            selectedRange.setStart(tokenElement.childNodes[0], caretPosition.offset - spanCharStart);
-                        }
-                        break;
-                    }
-                }
-            }        
+        if(scrollBottom < lineY + selectedLine.offsetHeight*2) {
+            selectedLine.scrollIntoView(false);
+        } else if(scrollTop > lineY) {
+            selectedLine.scrollIntoView(true);
         }
+
+        const firstElementIsSentinel = (selectedLine.children[0] as HTMLElement).dataset['sentinel'] == 'true';
+
+        if(firstElementIsSentinel) {
+            selectedRange.setStart(selectedLine, 0);
+        } else {
+            for(let i = 0; i < selectedLine.children.length; ++i) {
+                const tokenElement  = (selectedLine.children[i] as HTMLElement);
+                const spanCharStart = Number.parseInt(tokenElement.dataset.charStart as string);
+                const spanCharEnd   = Number.parseInt(tokenElement.dataset.charEnd as string);
+                if(spanCharStart <= caretPosition.offset && spanCharEnd >= caretPosition.offset) {
+                    if(spanCharEnd === caretPosition.offset) {
+                        selectedRange.setStartAfter(tokenElement);  
+                    } else if(spanCharStart === caretPosition.offset) {
+                        selectedRange.setStartBefore(tokenElement);  
+                    } else {
+                        selectedRange.setStart(tokenElement.childNodes[0], caretPosition.offset - spanCharStart);
+                    }
+                    break;
+                }
+            }
+        }        
+
         selection.addRange(selectedRange);
     }
 }

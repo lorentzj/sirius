@@ -63,9 +63,14 @@ document.body.onload = () => {
             const updateEditor = () => {
                 const parser_output = types.prepare_parse_output(bindings.parse(codeLines.code.join('\n') + '\n'));
 
+                const scrollTop = (editorElem.parentElement as HTMLElement).scrollTop;
+                const scrollBottom = scrollTop + (editorElem.parentElement as HTMLElement).clientHeight;
+
                 editor.updateEditorWithCode(editorElem, tooltipElem, codeLines.code, parser_output);  
                 editor.updateEditorWithErrors(parser_output.errors, editorElem);
-                editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem);
+
+                editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem, scrollTop, scrollBottom);
+
                 output_area.updateErrorELement(displayErrorsElem, errorElem, parser_output.errors, parser_output.tokens);
                 return parser_output;
             }

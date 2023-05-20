@@ -36,39 +36,40 @@ export function updateCodeLines(editorElem, codeLines, e) {
     }
     return codeLines;
 }
-export function updateCaretPosition(caretPosition, editorElem) {
+export function updateCaretPosition(caretPosition, editorElem, scrollTop, scrollBottom) {
     const selection = window.getSelection();
     if (selection !== null) {
         selection.removeAllRanges();
         let selectedRange = document.createRange();
-        if (caretPosition.line === 0 && caretPosition.offset === 0) {
-            selectedRange.setStart(editorElem, 0);
+        const lineSelector = `li.code_line[data-line='${caretPosition.line + 1}']`;
+        const selectedLine = editorElem.querySelector(lineSelector);
+        let lineY = selectedLine.getBoundingClientRect().top - editorElem.getBoundingClientRect().top;
+        if (scrollBottom < lineY + selectedLine.offsetHeight * 2) {
+            selectedLine.scrollIntoView(false);
+        }
+        else if (scrollTop > lineY) {
+            selectedLine.scrollIntoView(true);
+        }
+        const firstElementIsSentinel = selectedLine.children[0].dataset['sentinel'] == 'true';
+        if (firstElementIsSentinel) {
+            selectedRange.setStart(selectedLine, 0);
         }
         else {
-            const lineSelector = `li.code_line[data-line='${caretPosition.line + 1}']`;
-            const selectedLine = editorElem.querySelector(lineSelector);
-            selectedLine.scrollIntoView();
-            const firstElementIsSentinel = selectedLine.children[0].dataset['sentinel'] == 'true';
-            if (firstElementIsSentinel) {
-                selectedRange.setStart(selectedLine, 0);
-            }
-            else {
-                for (let i = 0; i < selectedLine.children.length; ++i) {
-                    const tokenElement = selectedLine.children[i];
-                    const spanCharStart = Number.parseInt(tokenElement.dataset.charStart);
-                    const spanCharEnd = Number.parseInt(tokenElement.dataset.charEnd);
-                    if (spanCharStart <= caretPosition.offset && spanCharEnd >= caretPosition.offset) {
-                        if (spanCharEnd === caretPosition.offset) {
-                            selectedRange.setStartAfter(tokenElement);
-                        }
-                        else if (spanCharStart === caretPosition.offset) {
-                            selectedRange.setStartBefore(tokenElement);
-                        }
-                        else {
-                            selectedRange.setStart(tokenElement.childNodes[0], caretPosition.offset - spanCharStart);
-                        }
-                        break;
+            for (let i = 0; i < selectedLine.children.length; ++i) {
+                const tokenElement = selectedLine.children[i];
+                const spanCharStart = Number.parseInt(tokenElement.dataset.charStart);
+                const spanCharEnd = Number.parseInt(tokenElement.dataset.charEnd);
+                if (spanCharStart <= caretPosition.offset && spanCharEnd >= caretPosition.offset) {
+                    if (spanCharEnd === caretPosition.offset) {
+                        selectedRange.setStartAfter(tokenElement);
                     }
+                    else if (spanCharStart === caretPosition.offset) {
+                        selectedRange.setStartBefore(tokenElement);
+                    }
+                    else {
+                        selectedRange.setStart(tokenElement.childNodes[0], caretPosition.offset - spanCharStart);
+                    }
+                    break;
                 }
             }
         }

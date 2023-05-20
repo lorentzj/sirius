@@ -72,8 +72,8 @@ section {
     margin-top: 20px;
     padding-top: 50px;
     padding-bottom: 50px;
-    padding-left: calc(10px + 2vw);
-    padding-right: calc(10px + 2vw);
+    padding-left: calc(min(10px + 2vw, 40px));
+    padding-right: calc(min(10px + 2vw, 40px));
     max-width: 900px;
     font-size: large;
     border-radius: var(--rounded-corners);
