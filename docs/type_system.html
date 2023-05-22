@@ -12,7 +12,7 @@
         <article>
             <div id="tooltip"></div>
             <section>
-                <a href = "./">Documentation Home</a><br>
+                <p><a href = "./">Documentation Home</a></p>
             </section>
             <section>
                 <h1>The Sirius Type System</h1>
@@ -35,7 +35,7 @@
 
                 <p>Full-fledged refinement types can go much further; for instance, they can statically verify security policies of <a href = "https://www.usenix.org/conference/osdi21/presentation/lehmann" target = "_blank">a web application</a>.</p>
 
-                <p>To realize these advantages, programmers of refinement-typed languages must specify the properties they want as types and write procedures that provably adhere to those types. For programmers in fields without critical correctness requirements, this may be a prohibitive amount of work.<sup class = "footnote">Dependent type systems are even more expressive than refinement alone, since verification need not be performed by an SMT solver. On the other hand, programming is hard, compiling is slow, and compiler errors for arithmetic constraint violations in particular can be "daunting in size."<sup class = "external"><a href = "https://dl.acm.org/doi/10.1145/3341704">[link]</a></sup></sup> The expressive power of refinement depends on the theories supported by the attending solver. Languages that support refinement, like <a href = "https://ucsd-progsys.github.io/liquidhaskell/" target = "_blank">Liquid Haskell</a>, also often have other powerful type features.</p>
+                <p>To realize these advantages, programmers of refinement-typed languages must specify the properties they want as types and write procedures that provably adhere to those types. For programmers in fields without critical correctness requirements, this may be a prohibitive amount of work.<sup class = "footnote">Dependent type systems are even more expressive than refinement alone, since verification need not be performed by an SMT solver. On the other hand, programming is hard, compiling is slow, and compiler errors for arithmetic constraint violations in particular can be "<a href = "https://dl.acm.org/doi/10.1145/3341704" target = "_blank">daunting in size</a>."</sup> The expressive power of refinement depends on the theories supported by the attending solver. Languages that support refinement, like <a href = "https://ucsd-progsys.github.io/liquidhaskell/" target = "_blank">Liquid Haskell</a>, also often have other powerful type features.</p>
                 
                 <p>Sirius instead only provides a single theory, polynomial integer arithmetic<sup class = "footnote">Unfortunately incomplete, courtesy of work on <a href = "https://en.wikipedia.org/wiki/Hilbert%27s_tenth_problem" target = "_blank">Hilbert's 10th problem</a>.</sup>, and an otherwise simple type system. We seek to limit expressiveness so that the types that <em>can</em> be expressed have extra syntactic and semantic support.<sup class = "footnote">A composer might limit themselves to a proven formula like the fugue or sonata for analogous reasons. The perfect tool to communicate a given idea has all expressiveness necessary and no more.</sup></p>
 
@@ -86,7 +86,7 @@ fn main():
     for i from 0 to 10: // i64(poly = 'a)
         x = x + i</code>
                 
-                <p>Integer literals are legal types, representing constant polynomials. <code class = "doc">Poly</code> variable names cannot be spelled.</p>
+                <p>Integer literals are legal types, representing constant polynomials. <code class = "doc">Poly</code> variable names cannot be spelled in general.</p>
 
                 <code class = "block please_parse">fn get_two() -> 2:
     return 2
@@ -94,10 +94,77 @@ fn main():
 fn main():
     let a: 3 = 3
     let b: 5 = a + get_two()</code>                
+                <p>This diagram illlustrates the possible promotion and demotion paths of integer values in a Sirius program. Promotions always create a new equation, as described in the next section.</p>
+                <svg alt = "At let bindings, all untracked ints are promoted and assigned fresh Poly variables, and at mutable let bindings, all Polys are demoted to untracked ints. Any value may be promoted or demoted at function boundaries (either a return value or a parameter), though promotion creates a constraint for the solver. Arithmetic with an untracked integer always results in another untracked integer, while arithmetic with polys will result in a new poly if possible." width = "100%" viewbox = "0 0 400 200" xmlns = "http://www.w3.org/2000/svg" xmlns:xlink = "http://www.w3.org/1999/xlink">
 
+                    <defs>
+                        <marker id = "arrowhead" markerWidth = "10" markerHeight = "20" refX = "9" refY = "5" orient = "auto">
+                            <polygon fill = "white" points = "0 0, 0 10, 10 5"></polygon>
+                        </marker>
+                        <g id="box">
+                            <path stroke = "white" fill = "black" d =
+                                "M -50 -15
+                                h100
+                                a5,5 0 0 1 5,5
+                                v20
+                                a5,5 0 0 1 -5,5
+                                h-100
+                                a5,5 0 0 1 -5,-5
+                                v-20
+                                a5,5 0 0 1 5,-5
+                                z" />
+                        </g>
+                    </defs>
+                    <g transform="translate(100 90)">
+                        <use xlink:href="#box"/>
+                        <text x = "0" y = "0" text-anchor = "middle" dominant-baseline = "middle" fill = "white">Poly</text>
+                    </g>
+
+                    <g transform="translate(300 90)">
+                        <use xlink:href="#box"/>
+                        <text x = "0" y = "0" text-anchor = "middle" dominant-baseline = "middle" fill = "white">Untracked</text>
+                    </g>
+
+                    <line stroke = "white" marker-end = "url(#arrowhead)" x1 = "155" y1 = "90" x2 = "244" y2 = "90"/>
+                    <line stroke = "white" marker-end = "url(#arrowhead)" x1 = "245" y1 = "90" x2 = "156" y2 = "90"/>
+                    <text x = "200" y = "75" text-anchor = "middle" dominant-baseline = "middle" fill = "white" font-size = "0.8rem">Arg/return</text>
+
+                    <path stroke = "white" fill = "transparent" marker-end = "url(#arrowhead)" d = 
+                        "M 60 105
+                        v40
+                        a5,5 0 0 0 5,5
+                        h70
+                        a5,5 0 0 0 5,-5
+                        v-39
+                        " />
+                    
+                    <text x = "100" y = "135" text-anchor = "middle" dominant-baseline = "middle" fill = "white" font-size = "0.8rem">Arithmetic</text>
+
+
+                    <line stroke = "white" marker-end = "url(#arrowhead)" x1 = "105" y1 = "150" x2 = "205" y2 = "150"/>
+                    <line stroke = "white" marker-start = "url(#arrowhead)" marker-end = "url(#arrowhead)" x1 = "105" y1 = "150" x2 = "305" y2 = "150"/>
+
+                    <path stroke = "white" fill = "transparent" marker-end = "url(#arrowhead)" d = 
+                        "M 260 105
+                        v40
+                        a5,5 0 0 0 5,5
+                        h70
+                        a5,5 0 0 0 5,-5
+                        v-39
+                        " />
+
+                    <text x = "300" y = "135" text-anchor = "middle" dominant-baseline = "middle" fill = "white" font-size = "0.8rem">Arithmetic</text>
+
+
+                    <text x = "100" y = "40" text-anchor = "middle" dominant-baseline = "middle" fill = "white" font-size = "0.8rem">Immutable let</text>
+                    <line stroke = "white" marker-end = "url(#arrowhead)" x1 = "100" y1 = "50" x2 = "100" y2 = "74"/>
+                    <text x = "300" y = "40" text-anchor = "middle" dominant-baseline = "middle" fill = "white" font-size = "0.8rem">Mutable let</text>
+                    <line stroke = "white" marker-end = "url(#arrowhead)" x1 = "300" y1 = "50" x2 = "300" y2 = "74"/>
+                </svg>
             </section>
             <section id = "systems_and_constraints">
                 <h2>Systems and Constraints</h2>
+                <p>To express non-trivial refinements, we must allow <code class = "doc"><span class = "token identifier type">Poly</span></code> type variables in function arguments. When the Sirius typechecker unifies two <code class = "doc"><span class = "token identifier type">Poly</span></code>s at a function call or return statement, it creates an equation.</p>
             </section>    
             <section id = "array_programming">
                 <h2>Array Programming</h2>

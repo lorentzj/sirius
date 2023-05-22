@@ -1,5 +1,5 @@
 :root {
-    --primary-bg-color: rgb(22, 22, 22);
+    --primary-bg-color: rgb(0, 0, 0);
     --secondary-bg-color: rgb(61, 47, 58);
     --button-color: rgb(83, 63, 79);
     --button-hover-color: rgb(112, 86, 107);
@@ -7,12 +7,24 @@
     --link-color: rgb(129, 255, 154);
     --hover-link-color: rgb(36, 205, 44);
     --comment-color: rgb(152, 151, 151);
+    --whiteish: rgb(250, 250, 250);
     --rounded-corners: 3px;
-    --button-padding: 0.7em;
+    --button-padding: 0.7rem;
+    --bigger-font-size: 2rem;
+    --normal-font-size: 1.2rem;
+    --smaller-font-size: 1rem;
+}
+
+@media screen and (max-width: 699px) {
+    :root {
+        --bigger-font-size: 1.5rem;
+        --normal-font-size: 1rem;
+        --smaller-font-size: 0.9rem;
+    }    
 }
 
 html, body {
-    height: 99%;
+    min-height: 99vh;
     padding: 0;
     margin: 0;
     display: flex;
@@ -25,13 +37,13 @@ body > * {
 
 body {
     background-color: var(--primary-bg-color);
-    color: rgb(255, 255, 255);
+    color: var(--whiteish);
 }
 
 select {
     background-color: var(--button-color);
     border: none;
-    color: rgb(255, 255, 255);
+    color: var(--whiteish);
     padding: var(--button-padding);
     text-decoration: none;
     margin: 3px;
@@ -45,7 +57,7 @@ option {
 button {
     background-color: var(--button-color);
     border: none;
-    color: rgb(255, 255, 255);
+    color: var(--whiteish);
     padding: var(--button-padding);
     text-align: center;
     text-decoration: none;
@@ -72,10 +84,9 @@ section {
     margin-top: 20px;
     padding-top: 50px;
     padding-bottom: 50px;
-    padding-left: calc(min(10px + 2vw, 40px));
-    padding-right: calc(min(10px + 2vw, 40px));
-    max-width: 900px;
-    font-size: large;
+    padding-left: calc(min(10px + 2rem, 40px));
+    padding-right: calc(min(10px + 2rem, 40px));
+    max-width: 50rem;
     border-radius: var(--rounded-corners);
 }
 
@@ -84,11 +95,13 @@ section:last-child {
 }
 
 p {
-    text-indent: 2em;
+    font-size: var(--normal-font-size);
+    text-indent: 2rem;
     line-height: 2;
 }
 
 ul, ol {
+    font-size: var(--normal-font-size);
     line-height: 1.5;
 }
 
@@ -107,12 +120,12 @@ a:hover {
 
 
 h1 {
-    font-size: xx-large;
+    font-size: var(--bigger-font-size);
     text-align: center;
 }
 
 h2 {
-    font-size: x-large;
+    font-size: var(--bigger-font-size);
 }
 
 
@@ -123,20 +136,22 @@ code {
 
 code.block {
     display: block;
-    overflow-x: scroll;
+    overflow-x: auto;
 }
 
 code.doc {
     white-space: nowrap;
+    font-size: var(--normal-font-size);
 }
 
 table {
+    font-size: var(--normal-font-size);
     width: 100%;
     border-spacing: 10px;
 }
 
 th {
-    padding-bottom: 0.5em;
+    padding-bottom: 0.5rem;
 }
 
 tbody tr td:first-child {
@@ -154,8 +169,8 @@ tbody td {
 }
 
 .footnote_content {
-    font-size: medium;
-    text-indent: 2em;
+    font-size: var(--smaller-font-size);
+    text-indent: 2rem;
     padding: 10px;
     line-height: 2;
 }
@@ -176,7 +191,7 @@ tbody td {
 }
 
 summary {
-    padding-left: 1em;
+    padding-left: 1rem;
     cursor: pointer;
     border-radius: var(--rounded-corners);
 }
@@ -198,7 +213,7 @@ summary {
 }
 
 #tooltip {
-    color: rgb(255, 255, 255);
+    color: var(--whiteish);
     display: none;
     position: absolute;
     min-width: 200px;
@@ -212,16 +227,20 @@ summary {
     outline: 3px solid black;
 }
 
+code.doc {
+    font-size: var(--normal-font-size);
+}
+
 #tooltip, code, #editor, .parsed_code_block {
+    font-size: var(--normal-font-size);
     line-height: 1;
     padding: 3px;
     caret-color: black;
     font-family: monospace;
-    font-size: x-large;
     flex: auto;
     border: none;
     outline: none;
-    caret-color: rgb(255, 255, 255);
+    caret-color: var(--whiteish);
 }
 
 li.code_line {
@@ -234,8 +253,8 @@ li.code_line::before {
     content: counter(line-number);
     display: inline-block;
     color: var(--comment-color);
-    min-width: 2em;
-    padding-right: 1em;
+    min-width: 2rem;
+    padding-right: 1rem;
     text-align: end;
 }
 
@@ -266,7 +285,7 @@ span.token.const {
 }
 
 span.token.identifier {
-    color: rgb(255, 255, 255);
+    color: var(--whiteish);
 }
 
 span.token.keyword {
@@ -274,23 +293,23 @@ span.token.keyword {
 }
 
 span.token.assign {
-    color: rgb(255, 255, 255);
+    color: var(--whiteish);
 }
 
 span.token.semicolon {
-    color: rgb(255, 255, 255);
+    color: var(--whiteish);
 }
 
 span.token.colon {
-    color: rgb(255, 255, 255);
+    color: var(--whiteish);
 }
 
 span.token.operator {
-    color: rgb(255, 255, 255);
+    color: var(--whiteish);
 }
 
 span.token.openparen, span.token.closeparen {
-    color: rgb(255, 255, 255);
+    color: var(--whiteish);
 }
 
 span.token.type {
@@ -313,8 +332,7 @@ span.code.error::selection {
 }
 
 #output {
-    flex-grow: 1;
-    flex-basis: 0;
+    flex: auto;
     background-color: var(--secondary-bg-color);
     padding: 3px;
     overflow-y: auto;
@@ -328,17 +346,17 @@ button.selected {
 #log {
     margin: 3px;
     font-family: monospace;
-    font-size: x-large;
+    font-size: var(--normal-font-size);
 }
 
 #errors {
     padding: 3px;
     font-family: monospace;
-    font-size: x-large;
+    font-size: var(--normal-font-size);
 }
 
 .error_details {
-    text-indent: 3em;
+    text-indent: 3rem;
 }
 
 .error_summary {
