@@ -1,4 +1,4 @@
-import {Action, ActionHistory} from './action_history.js';
+import {Action, CompositeAction, ActionHistory} from './action_history.js';
 
 export type CodePosition = {line: number, offset: number};
 
@@ -114,6 +114,13 @@ export class CodeLines {
 
     delete(from: CodePosition, to: CodePosition) {
         this.history.executeAction(new CodeLines.DeleteAction(this, from, to));
+    }
+
+    deleteAndInsert(from: CodePosition, to: CodePosition, content: string) {
+        this.history.executeAction(new CompositeAction([
+            new CodeLines.DeleteAction(this, from, to),
+            new CodeLines.InsertAction(this, from, content)
+        ]));
     }
 
     getText(from: CodePosition, to: CodePosition): string {

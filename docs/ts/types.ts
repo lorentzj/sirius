@@ -78,7 +78,7 @@ export type Constraint = Positioned<{
 }>;
 
 export type Function = {
-    name: string
+    name: Positioned<string>,
     type_args: Positioned<string>[],
     args: [Positioned<string>, Positioned<string>][],
     return_type: Positioned<string>,
@@ -104,7 +104,7 @@ export function constraint_name(constraint: Constraint): string {
     if(constraint.data.Eq !== undefined) {
         return `${constraint.data.Eq[0]} == ${constraint.data.Eq[1]}`;
     } else {
-        return '!!!!';
+        return '[Internal Error]';
     }
 }
 

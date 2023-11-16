@@ -23,16 +23,14 @@ export function updateCodeLines(editorElem: HTMLElement, codeLines: CodeLines, e
         const deleteOps = ['deleteContentBackward', 'deleteContentForward', 'deleteByCut', 'deleteByDrag']
 
         if(e.inputType === 'insertText' && e.data !== null) {
-            codeLines.delete(startPosition, endPosition);
-            codeLines.insert(startPosition, e.data);
+            codeLines.deleteAndInsert(startPosition, endPosition, e.data);
         } else if(e.inputType === 'insertParagraph' || e.inputType === 'insertLineBreak') {
             codeLines.insert(startPosition, '\n');
         } else if(deleteOps.indexOf(e.inputType) !== -1) {
             codeLines.delete(startPosition, endPosition);
         } else if((e.inputType === 'insertFromPaste'|| e.inputType === 'insertFromDrop') && e.dataTransfer !== null) {
             let pastedText = e.dataTransfer.getData('text/plain');
-            codeLines.delete(startPosition, endPosition);
-            codeLines.insert(startPosition, pastedText);
+            codeLines.deleteAndInsert(startPosition, endPosition, pastedText);
         } else {
             console.error(`No handler for ${e.inputType} event`);
         }
@@ -42,7 +40,6 @@ export function updateCodeLines(editorElem: HTMLElement, codeLines: CodeLines, e
 }
 
 export function updateCaretPosition(caretPosition: CodePosition, editorElem: HTMLElement, scrollTop: number, scrollBottom: number) {
-
     const selection = window.getSelection();
     if(selection !== null) {
         selection.removeAllRanges();
@@ -80,7 +77,7 @@ export function updateCaretPosition(caretPosition: CodePosition, editorElem: HTM
                     break;
                 }
             }
-        }        
+        }
 
         selection.addRange(selectedRange);
     }

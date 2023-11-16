@@ -16,8 +16,7 @@ export function updateCodeLines(editorElem, codeLines, e) {
         const endPosition = codeIndexFromPosition(editorElem, targetRange.endContainer, targetRange.endOffset);
         const deleteOps = ['deleteContentBackward', 'deleteContentForward', 'deleteByCut', 'deleteByDrag'];
         if (e.inputType === 'insertText' && e.data !== null) {
-            codeLines.delete(startPosition, endPosition);
-            codeLines.insert(startPosition, e.data);
+            codeLines.deleteAndInsert(startPosition, endPosition, e.data);
         }
         else if (e.inputType === 'insertParagraph' || e.inputType === 'insertLineBreak') {
             codeLines.insert(startPosition, '\n');
@@ -27,8 +26,7 @@ export function updateCodeLines(editorElem, codeLines, e) {
         }
         else if ((e.inputType === 'insertFromPaste' || e.inputType === 'insertFromDrop') && e.dataTransfer !== null) {
             let pastedText = e.dataTransfer.getData('text/plain');
-            codeLines.delete(startPosition, endPosition);
-            codeLines.insert(startPosition, pastedText);
+            codeLines.deleteAndInsert(startPosition, endPosition, pastedText);
         }
         else {
             console.error(`No handler for ${e.inputType} event`);

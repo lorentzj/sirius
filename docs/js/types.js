@@ -4,7 +4,7 @@ export function constraint_name(constraint) {
         return `${constraint.data.Eq[0]} == ${constraint.data.Eq[1]}`;
     }
     else {
-        return '!!!!';
+        return '[Internal Error]';
     }
 }
 export function prepare_parse_output(parse_output) {

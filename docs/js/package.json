@@ -1,6 +1,12 @@
 {
   "name": "sirius",
+  "description": "the Sirius programming language compiler and documentation",
   "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lorentzj/sirius"
+  },
   "files": [
     "sirius_bg.wasm",
     "sirius.js",

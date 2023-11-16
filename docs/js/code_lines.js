@@ -1,4 +1,4 @@
-import { ActionHistory } from './action_history.js';
+import { CompositeAction, ActionHistory } from './action_history.js';
 export class CodeLines {
     static InsertAction = class {
         lines;
@@ -87,6 +87,12 @@ export class CodeLines {
     }
     delete(from, to) {
         this.history.executeAction(new CodeLines.DeleteAction(this, from, to));
+    }
+    deleteAndInsert(from, to, content) {
+        this.history.executeAction(new CompositeAction([
+            new CodeLines.DeleteAction(this, from, to),
+            new CodeLines.InsertAction(this, from, content)
+        ]));
     }
     getText(from, to) {
         if (from.line === to.line) {
