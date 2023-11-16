@@ -2,6 +2,8 @@ use super::types::Type;
 use super::ScopeEntry;
 use crate::error::{Error, ErrorType};
 use crate::scope::Scope;
+use crate::solver::poly::Poly;
+use crate::solver::rational::Rat;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -94,7 +96,7 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> 
             }
         }
 
-        E::I64(_, ind) => Ok(Type::I64(Some(ind.clone()))),
+        E::I64(val) => Ok(Type::I64(Some(Poly::constant(Rat::from(*val))))),
 
         _ => Err((annotation.start, annotation.end)),
     }
@@ -172,7 +174,7 @@ fn initialize_expression_types(
     match &mut expression.data {
         E::Bool(_) => expression.t = Rc::new(Type::Bool),
         E::F64(_) => expression.t = Rc::new(Type::F64),
-        E::I64(_, ind) => expression.t = Rc::new(Type::I64(Some(ind.clone()))),
+        E::I64(val) => expression.t = Rc::new(Type::I64(Some(Poly::constant(Rat::from(*val))))),
         E::UnaryOp(_, inner) => {
             *curr_forall_var += 1;
             expression.t = Rc::new(Type::ForAll(*curr_forall_var - 1));

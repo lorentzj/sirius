@@ -1,11 +1,16 @@
 // with thanks to Prof. Emre Sertöz for the great lectures on Computational Algebraic Geometry on YouTube.
 
-use crate::error::{Error, ErrorType};
 use serde::Serialize;
 
-pub mod poly;
+use crate::error::{Error, ErrorType};
+use rational::Rat;
 
-use poly::Poly;
+pub mod field;
+pub mod poly;
+pub mod rational;
+pub mod univariate;
+
+type Poly = poly::Poly<Rat>;
 
 #[allow(clippy::enum_variant_names)]
 #[derive(Serialize, Clone, PartialEq, Eq, Debug)]
@@ -75,8 +80,8 @@ impl Constraint {
             data: match &self.data {
                 C::EqZero(p) => C::NEqZero(p.clone()),
                 C::NEqZero(p) => C::EqZero(p.clone()),
-                C::GtZero(p) => C::GtEqZero(p.clone() * Poly::constant(-1)),
-                C::GtEqZero(p) => C::GtZero(p.clone() * Poly::constant(-1)),
+                C::GtZero(p) => C::GtEqZero(p.clone() * Poly::constant(Rat::from(-1))),
+                C::GtEqZero(p) => C::GtZero(p.clone() * Poly::constant(Rat::from(-1))),
             },
             end: self.end,
         }

@@ -5,7 +5,6 @@ use std::rc::Rc;
 
 use crate::error::{Error, ErrorType};
 use crate::lexer::{tokenize, Op, Tok, Token};
-use crate::solver::poly::Poly;
 use crate::solver::Constraint;
 use crate::typechecker::{annotation_type, Type};
 
@@ -60,7 +59,7 @@ pub enum UnaryOp {
 #[derive(Serialize, Clone, Debug)]
 pub enum E {
     F64(f64),
-    I64(i64, Poly),
+    I64(i64),
     Bool(bool),
     Ident(String, Option<Vec<Positioned<Type>>>),
     BinaryOp(Box<Expression>, Op, Box<Expression>),

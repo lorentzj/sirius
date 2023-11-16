@@ -100,7 +100,7 @@ fn main():
 }
 
 #[test]
-fn scope_test() {
+fn scope() {
     let code = "
 fn main():
     let i = true
@@ -120,5 +120,41 @@ fn main():
     assert_eq!(
         output,
         "{\"stdout\":\"true\\n(1, 2)\\ntrue\\n1\\n2\\n3\\n\",\"error\":null}"
+    );
+}
+
+#[test]
+fn function_annotation() {
+    let code = "
+fn sin_red(x: f64, y: f64) -> f64:
+    return sin(x)
+
+fn cos_red(x: f64, y: f64) -> f64:
+    return cos(x)
+
+fn tan_red(x: f64, y: f64) -> f64:
+    return tan(x)
+
+
+fn trig_fns(choice: i64) -> (f64, f64) -> f64:
+    if choice == 0:
+        return sin_red
+
+    if choice == 1:
+        return cos_red
+
+    return tan_red
+
+fn main():
+    print trig_fns(0)(pi/2, 1.)
+    print trig_fns(1)(pi/2, 1.)
+    print trig_fns(2)(pi/2, 1.)
+"
+    .into();
+
+    let output = wasm::interpret(code);
+    assert_eq!(
+        output,
+        "{\"stdout\":\"1\\n0.00000000000000006123233995736766\\n16331239353195370\\n\",\"error\":null}"
     );
 }

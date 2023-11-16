@@ -11,6 +11,7 @@ use crate::lexer::Op;
 use crate::parser::{Expression, Statement, UnaryOp, E, S};
 use crate::scope::Scope;
 use crate::solver::poly::Poly;
+use crate::solver::rational::Rat;
 
 fn unify_expression(
     expression: &Expression,
@@ -23,7 +24,7 @@ fn unify_expression(
     match &expression.data {
         E::Bool(_) => Ok(()),
         E::F64(_) => Ok(()),
-        E::I64(_, _) => Ok(()),
+        E::I64(_) => Ok(()),
         E::Accessor(_, _) => Err(Error::new(
             ErrorType::NotImplemented,
             "array access not implemented yet".into(),
@@ -60,7 +61,7 @@ fn unify_expression(
                             expression.end,
                         ),
                         Type::I64(Some(ind)) => {
-                            let new_ind = ind.clone() * Poly::constant(-1);
+                            let new_ind = ind.clone() * Poly::constant(Rat::from(-1));
                             EqClasses::add_owned(
                                 eqc,
                                 expression.start,
@@ -166,7 +167,7 @@ fn unify_expression(
 
                         Op::Dot => match lhs.t.as_ref() {
                             Type::Tuple(lhs_inner) => match rhs.data {
-                                E::I64(val, _) => {
+                                E::I64(val) => {
                                     if val < 0 || val as usize > lhs_inner.len() {
                                         return Err(Error::new(
                                             ErrorType::Type,

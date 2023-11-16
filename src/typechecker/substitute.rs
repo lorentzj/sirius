@@ -30,7 +30,7 @@ fn substitute_expression(expression: &mut Expression, eq_classes: &EqClasses) {
             }
         }
 
-        E::F64(_) | E::I64(_, _) | E::Bool(_) | E::Ident(_, _) => (),
+        E::F64(_) | E::I64(_) | E::Bool(_) | E::Ident(_, _) => (),
 
         E::OpenTuple(_) => unreachable!(),
     }

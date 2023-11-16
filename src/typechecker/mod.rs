@@ -214,6 +214,7 @@ mod tests {
     use crate::error::ErrorType;
     use crate::parser::{parse, S};
     use crate::solver::poly::Poly;
+    use crate::solver::rational::Rat;
 
     #[test]
     fn basic_typecheck() {
@@ -290,7 +291,7 @@ fn main():
 
         assert!(
             if let S::Let(_, _, _, _, val) = &state.ast["main"].body.0[0].data {
-                val.t.as_ref() == &Type::I64(Some(Poly::constant(3)))
+                val.t.as_ref() == &Type::I64(Some(Poly::constant(Rat::from(3))))
             } else {
                 false
             }
@@ -375,7 +376,7 @@ fn main():
         }
 
         if let S::Let(_, _, _, c_type, _) = &state.ast["main"].body.0[2].data {
-            let c_req = Type::I64(Some(Poly::constant(5)));
+            let c_req = Type::I64(Some(Poly::constant(Rat::from(5))));
             assert_eq!(c_type.as_ref(), &c_req);
         } else {
             panic!()
@@ -401,7 +402,7 @@ fn main():
 
                 assert!(matches!(&inner[1], Type::I64(Some(_b_var))));
                 if let Type::I64(Some(five)) = &inner[2] {
-                    assert_eq!(five, &Poly::constant(5));
+                    assert_eq!(five, &Poly::constant(Rat::from(5)));
                 } else {
                     panic!();
                 }

@@ -44,7 +44,7 @@ fn check_expr_for_foralls(expression: &Expression) -> Vec<Error> {
             }
         }
 
-        E::F64(_) | E::Bool(_) | E::I64(_, _) | E::Ident(_, _) => (),
+        E::F64(_) | E::Bool(_) | E::I64(_) | E::Ident(_, _) => (),
 
         E::OpenTuple(_) => panic!(),
     }

@@ -2,6 +2,7 @@ use super::types::Type;
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
 use crate::solver::poly::Poly;
+use crate::solver::rational::Rat;
 
 pub fn is_arith(op: &Op) -> bool {
     matches!(
@@ -72,7 +73,7 @@ pub fn arith_coerce(
                             Op::Sub => lval.clone() - rval.clone(),
                             Op::Mul => lval.clone() * rval.clone(),
                             Op::Div => {
-                                if rval == &Poly::constant(0) {
+                                if rval.is_zero() {
                                     return Err(Error::new(
                                         ErrorType::Constraint,
                                         "cannot divide by zero".to_string(),
@@ -81,7 +82,7 @@ pub fn arith_coerce(
                                     ));
                                 } else {
                                     let (qs, rem) =
-                                        lval.clone().compound_divide(vec![rval.clone()]);
+                                        lval.clone().compound_divide(&vec![rval.clone()]);
 
                                     if let Some(0) = rem.get_constant_val() {
                                         qs[0].clone()
@@ -100,7 +101,7 @@ pub fn arith_coerce(
                                             end,
                                         ));
                                     } else {
-                                        let mut v = Poly::constant(1);
+                                        let mut v = Poly::constant(Rat::from(1));
                                         for _ in 0..exp {
                                             v = v * lval.clone();
                                         }

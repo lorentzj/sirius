@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use std::fmt;
 
 use crate::solver::poly::Poly;
+use crate::solver::rational::Rat;
 use crate::solver::Constraint;
 
 #[derive(PartialEq, Clone)]
@@ -10,7 +11,7 @@ pub enum Type {
     Unknown,
     Void,
     F64,
-    I64(Option<Poly>),
+    I64(Option<Poly<Rat>>),
     Bool,
     Tuple(Vec<Type>),
     Function(Vec<String>, Vec<Type>, Box<Type>),
@@ -152,7 +153,7 @@ impl Type {
                         (
                             vec![],
                             vec![Constraint::new_eq_z(
-                                other_i.clone() - Poly::var(&usize_name(**var), 1),
+                                other_i.clone() - Poly::var(usize_name(**var), 1),
                             )],
                         )
                     }),
@@ -261,7 +262,7 @@ impl Type {
         if !universal {
             name = name.to_uppercase();
         }
-        Type::I64(Some(Poly::var(&name, 1)))
+        Type::I64(Some(Poly::var(name, 1)))
     }
 
     pub fn ind_var_is_universal(ind_var_name: &str) -> bool {
@@ -401,7 +402,7 @@ impl fmt::Debug for Type {
 #[cfg(test)]
 mod tests {
     use super::{usize_name, Type};
-    use crate::solver::poly::Poly;
+    use crate::solver::{poly::Poly, rational::Rat};
 
     #[test]
     fn usize_name_test() {
@@ -425,7 +426,7 @@ mod tests {
         assert_eq!(format!("{:?}", Type::F64), "f64");
         assert_eq!(format!("{:?}", Type::I64(None)), "i64");
         assert_eq!(
-            format!("{:?}", Type::I64(Some(Poly::constant(1)))),
+            format!("{:?}", Type::I64(Some(Poly::constant(Rat::from(1))))),
             "i64(p=1)"
         );
         assert_eq!(format!("{:?}", Type::TypeVar("T".to_string())), "T");

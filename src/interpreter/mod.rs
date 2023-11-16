@@ -113,7 +113,7 @@ pub fn interpret_expression<'a>(
 ) -> Value<'a> {
     match &expression.data {
         E::F64(val) => Value::F64(*val),
-        E::I64(val, _) => Value::I64(*val),
+        E::I64(val) => Value::I64(*val),
         E::Bool(val) => Value::Bool(*val),
         E::BinaryOp(lhs, op, rhs) => {
             let (lhs, rhs) = (
