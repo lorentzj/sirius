@@ -2,6 +2,9 @@
 name = "sirius"
 version = "0.1.0"
 edition = "2021"
+description = "the Sirius programming language compiler and documentation"
+repository = "https://github.com/lorentzj/sirius"
+license = "MIT"
 
 [package.metadata]
 wasm-opt = false

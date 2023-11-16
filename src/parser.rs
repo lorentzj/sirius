@@ -60,7 +60,7 @@ pub enum UnaryOp {
 #[derive(Serialize, Clone, Debug)]
 pub enum E {
     F64(f64),
-    I64(i64, Option<Poly>),
+    I64(i64, Poly),
     Bool(bool),
     Ident(String, Option<Vec<Positioned<Type>>>),
     BinaryOp(Box<Expression>, Op, Box<Expression>),

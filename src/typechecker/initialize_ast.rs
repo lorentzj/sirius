@@ -94,7 +94,7 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> 
             }
         }
 
-        E::I64(_, Some(ind)) => Ok(Type::I64(Some(ind.clone()))),
+        E::I64(_, ind) => Ok(Type::I64(Some(ind.clone()))),
 
         _ => Err((annotation.start, annotation.end)),
     }
@@ -172,7 +172,7 @@ fn initialize_expression_types(
     match &mut expression.data {
         E::Bool(_) => expression.t = Rc::new(Type::Bool),
         E::F64(_) => expression.t = Rc::new(Type::F64),
-        E::I64(_, ind) => expression.t = Rc::new(Type::I64(ind.clone())),
+        E::I64(_, ind) => expression.t = Rc::new(Type::I64(Some(ind.clone()))),
         E::UnaryOp(_, inner) => {
             *curr_forall_var += 1;
             expression.t = Rc::new(Type::ForAll(*curr_forall_var - 1));

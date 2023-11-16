@@ -239,7 +239,7 @@ fn main():
         let mut state = parse(code);
         typecheck(&mut state, HashMap::default());
 
-        println!("{:?}", state.errors);
+        assert_eq!(state.errors, vec![]);
     }
 
     #[test]
@@ -320,12 +320,25 @@ fn double{T}(x: T) -> (T, T):
     return (x, x)
 fn main():
     let f = double
-    ";
+";
 
         let mut state = parse(code);
         typecheck(&mut state, HashMap::default());
 
         assert_eq!(ErrorType::Type, state.errors[0].error_type);
+    }
+
+    #[test]
+    fn tuple_equality_error() {
+        let code = "
+fn main():
+    if (0, 1) == (0, 2):
+        print true
+";
+
+        let mut state = parse(code);
+        typecheck(&mut state, HashMap::default());
+        assert_eq!(ErrorType::Constraint, state.errors[0].error_type);
     }
 
     #[test]

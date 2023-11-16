@@ -16,6 +16,7 @@ fn unify_expression(
     expression: &Expression,
     eqc: &mut EqClasses,
     context: &Scope<ScopeEntry>,
+    constraints: &mut Vec<Constraint>,
 ) -> Result<(), Error> {
     eqc.add_single(expression.start, &expression.t, expression.end);
 
@@ -41,7 +42,7 @@ fn unify_expression(
             None => unreachable!(),
         },
         E::UnaryOp(op, inner) => {
-            unify_expression(inner, eqc, context)?;
+            unify_expression(inner, eqc, context, constraints)?;
 
             if inner.t.forall_vars().is_empty() {
                 match op {
@@ -110,7 +111,7 @@ fn unify_expression(
         E::Tuple(inner) => {
             let inner_types = inner.iter().map(|e| e.t.as_ref().clone()).collect();
             for e in inner {
-                unify_expression(e, eqc, context)?;
+                unify_expression(e, eqc, context, constraints)?;
             }
 
             let tuple_t = Type::Tuple(inner_types);
@@ -120,8 +121,8 @@ fn unify_expression(
             Ok(())
         }
         E::BinaryOp(lhs, op, rhs) => {
-            unify_expression(lhs, eqc, context)?;
-            unify_expression(rhs, eqc, context)?;
+            unify_expression(lhs, eqc, context, constraints)?;
+            unify_expression(rhs, eqc, context, constraints)?;
 
             if lhs.t.forall_vars().is_empty() && rhs.t.forall_vars().is_empty() {
                 if is_arith(op) {
@@ -136,22 +137,32 @@ fn unify_expression(
                     );
                 } else {
                     match op {
-                        Op::Equal | Op::NotEqual => match equality_check(&lhs.t, &rhs.t) {
-                            Ok(_) => eqc.add_owned(
-                                expression.start,
-                                &expression.t,
-                                Type::Bool,
-                                expression.end,
-                            ),
-                            Err(msg) => {
-                                return Err(Error::new(
-                                    ErrorType::Type,
-                                    msg,
-                                    expression.start,
-                                    expression.end,
-                                ))
+                        Op::Equal | Op::NotEqual => {
+                            match equality_check(lhs.start, &lhs.t, &rhs.t, rhs.end) {
+                                Ok(cs) => {
+                                    if let Some(mut cs) = cs {
+                                        if op == &Op::NotEqual {
+                                            cs = cs.iter().map(|c| c.negate()).collect();
+                                        }
+                                        constraints.append(&mut cs);
+                                    }
+                                    eqc.add_owned(
+                                        expression.start,
+                                        &expression.t,
+                                        Type::Bool,
+                                        expression.end,
+                                    );
+                                }
+                                Err(msg) => {
+                                    return Err(Error::new(
+                                        ErrorType::Type,
+                                        msg,
+                                        expression.start,
+                                        expression.end,
+                                    ))
+                                }
                             }
-                        },
+                        }
 
                         Op::Dot => match lhs.t.as_ref() {
                             Type::Tuple(lhs_inner) => match rhs.data {
@@ -240,10 +251,10 @@ fn unify_expression(
             Ok(())
         }
         E::FnCall(caller, args) => {
-            unify_expression(caller, eqc, context)?;
+            unify_expression(caller, eqc, context, constraints)?;
 
             for e in args.iter() {
-                unify_expression(e, eqc, context)?;
+                unify_expression(e, eqc, context, constraints)?;
             }
 
             let arg_types: Vec<_> = args.iter().map(|e| e.t.clone()).collect();
@@ -305,12 +316,12 @@ pub fn unify(
     context.push();
     for statement in &mut *block {
         match &mut statement.data {
-            S::Print(val) => match unify_expression(val, &mut eqc, context) {
+            S::Print(val) => match unify_expression(val, &mut eqc, context, constraints) {
                 Ok(()) => (),
                 Err(error) => errors.push(error),
             },
             S::Assign(place, val) => {
-                match unify_expression(val, &mut eqc, context) {
+                match unify_expression(val, &mut eqc, context, constraints) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
@@ -321,7 +332,7 @@ pub fn unify(
                 }
             }
             S::Let(name, mutable, ann, val_adj_type, val) => {
-                match unify_expression(val, &mut eqc, context) {
+                match unify_expression(val, &mut eqc, context, constraints) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
@@ -349,7 +360,7 @@ pub fn unify(
             }
             S::Return(val) => {
                 if let Some(val) = val {
-                    match unify_expression(val, &mut eqc, context) {
+                    match unify_expression(val, &mut eqc, context, constraints) {
                         Ok(()) => (),
                         Err(error) => errors.push(error),
                     }
@@ -360,7 +371,7 @@ pub fn unify(
                 }
             }
             S::If(cond, _, (true_inner, true_inner_constraints), false_inner) => {
-                match unify_expression(cond, &mut eqc, context) {
+                match unify_expression(cond, &mut eqc, context, constraints) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
@@ -389,12 +400,12 @@ pub fn unify(
                 }
             }
             S::For(iterator, iter_type, _, from, to, (inner, inner_constraints)) => {
-                match unify_expression(from, &mut eqc, context) {
+                match unify_expression(from, &mut eqc, context, constraints) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
 
-                match unify_expression(to, &mut eqc, context) {
+                match unify_expression(to, &mut eqc, context, constraints) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
@@ -428,9 +439,9 @@ pub fn unify(
     context.pop();
 
     match eqc.generate(curr_ind_forall_var) {
-        Ok((any_changes, cs)) => {
+        Ok((any_changes, mut cs)) => {
             substitute(block, &eqc);
-            *constraints = cs;
+            constraints.append(&mut cs);
             any_changes
         }
         Err(error) => {

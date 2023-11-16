@@ -4,7 +4,6 @@ use serde::Serialize;
 pub enum ErrorType {
     Syntax,
     Type,
-    IndType,
     Name,
     UnboundIdentifier,
     Flow,

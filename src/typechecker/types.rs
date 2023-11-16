@@ -93,7 +93,7 @@ impl Type {
         &self,
         other: &Type,
         allow_demote: bool,
-        allow_promote: &mut Option<&mut usize>
+        allow_promote: &mut Option<&mut usize>,
     ) -> Option<(Vec<Substitution>, Vec<Constraint>)> {
         if self == other {
             return Some((vec![], vec![]));
@@ -148,15 +148,14 @@ impl Type {
                         vec![],
                         vec![Constraint::new_eq_z(other_i.clone() - self_i.clone())],
                     )),
-                    Type::I64(None) => {
-                        match allow_promote {
-                            Some(var) => Some((
-                                vec![],
-                                vec![Constraint::new_eq_z(other_i.clone() - Poly::var(&usize_name(**var), 1))]
-                            )),
-                            None => None
-                        }
-                    }
+                    Type::I64(None) => allow_promote.as_mut().map(|var| {
+                        (
+                            vec![],
+                            vec![Constraint::new_eq_z(
+                                other_i.clone() - Poly::var(&usize_name(**var), 1),
+                            )],
+                        )
+                    }),
                     _ => None,
                 },
                 Type::I64(None) => match self {
@@ -333,7 +332,7 @@ fn priv_print(t: &Type) -> String {
         Type::Void => "void".into(),
         Type::F64 => "f64".into(),
         Type::I64(ind) => match ind {
-            Some(ind) => format!("i64(poly = {ind:?})"),
+            Some(ind) => format!("i64(p={ind:?})"),
             None => "i64".into(),
         },
         Type::Bool => "bool".into(),
@@ -427,7 +426,7 @@ mod tests {
         assert_eq!(format!("{:?}", Type::I64(None)), "i64");
         assert_eq!(
             format!("{:?}", Type::I64(Some(Poly::constant(1)))),
-            "i64(poly = 1)"
+            "i64(p=1)"
         );
         assert_eq!(format!("{:?}", Type::TypeVar("T".to_string())), "T");
         assert_eq!(
@@ -491,6 +490,9 @@ mod tests {
         let a = Type::ForAll(0);
         let b = Type::Bool;
 
-        assert_eq!(vec![(0, Type::Bool)], a.unify(&b, false, &mut None).unwrap().0);
+        assert_eq!(
+            vec![(0, Type::Bool)],
+            a.unify(&b, false, &mut None).unwrap().0
+        );
     }
 }

@@ -26,14 +26,26 @@ impl EqClasses {
         }
     }
 
-    pub fn add_can_demote_or_promote_owned(&mut self, start: usize, a: &Rc<Type>, b: Type, end: usize) {
+    pub fn add_can_demote_or_promote_owned(
+        &mut self,
+        start: usize,
+        a: &Rc<Type>,
+        b: Type,
+        end: usize,
+    ) {
         self.owned.push(Rc::new(b));
         let b = self.owned.last().unwrap().clone();
 
         self.add_can_demote_or_promote(start, a, &b, end);
     }
 
-    pub fn add_can_demote_or_promote(&mut self, start: usize, a: &Rc<Type>, b: &Rc<Type>, end: usize) {
+    pub fn add_can_demote_or_promote(
+        &mut self,
+        start: usize,
+        a: &Rc<Type>,
+        b: &Rc<Type>,
+        end: usize,
+    ) {
         self.can_demote_or_promote
             .push(Positioned::new(start, (a.clone(), b.clone()), end));
     }
