@@ -124,5 +124,7 @@ export function prepare_parse_output(parse_output: string): ParserOutput {
     });
     parsed.ast = ast;    
 
+    console.log(parsed.ast);
+
     return parsed;
 }

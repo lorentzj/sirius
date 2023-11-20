@@ -165,7 +165,6 @@ pub fn populate_annotation(
 fn initialize_expression_types(
     expression: &mut Expression,
     curr_forall_var: &mut usize,
-    _curr_ind_forall_var: &mut usize,
     context: &Scope<ScopeEntry>,
     type_vars: &[String],
     errors: &mut Vec<Error>,
@@ -182,7 +181,6 @@ fn initialize_expression_types(
             initialize_expression_types(
                 &mut *inner,
                 curr_forall_var,
-                _curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -196,7 +194,6 @@ fn initialize_expression_types(
             initialize_expression_types(
                 &mut *lhs,
                 curr_forall_var,
-                _curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -206,7 +203,6 @@ fn initialize_expression_types(
             initialize_expression_types(
                 &mut *rhs,
                 curr_forall_var,
-                _curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -220,7 +216,6 @@ fn initialize_expression_types(
             initialize_expression_types(
                 &mut *lhs,
                 curr_forall_var,
-                _curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -230,7 +225,6 @@ fn initialize_expression_types(
             initialize_expression_types(
                 &mut *rhs,
                 curr_forall_var,
-                _curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -244,7 +238,6 @@ fn initialize_expression_types(
                 initialize_expression_types(
                     e,
                     curr_forall_var,
-                    _curr_ind_forall_var,
                     context,
                     type_vars,
                     errors,
@@ -259,7 +252,6 @@ fn initialize_expression_types(
             initialize_expression_types(
                 &mut *caller,
                 curr_forall_var,
-                _curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -270,7 +262,6 @@ fn initialize_expression_types(
                 initialize_expression_types(
                     e,
                     curr_forall_var,
-                    _curr_ind_forall_var,
                     context,
                     type_vars,
                     errors,
@@ -374,7 +365,6 @@ pub fn initialize_statement_types(
             initialize_expression_types(
                 val,
                 curr_forall_var,
-                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -387,7 +377,6 @@ pub fn initialize_statement_types(
             initialize_expression_types(
                 val,
                 curr_forall_var,
-                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -422,7 +411,6 @@ pub fn initialize_statement_types(
             initialize_expression_types(
                 val,
                 curr_forall_var,
-                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -453,7 +441,6 @@ pub fn initialize_statement_types(
             initialize_expression_types(
                 cond,
                 curr_forall_var,
-                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -461,7 +448,7 @@ pub fn initialize_statement_types(
             );
 
             context.push();
-            for stmt in true_block {
+            for stmt in true_block.iter_mut() {
                 initialize_statement_types(
                     stmt,
                     curr_forall_var,
@@ -475,7 +462,7 @@ pub fn initialize_statement_types(
             context.pop();
             if let Some((false_block, _)) = false_block {
                 context.push();
-                for stmt in false_block {
+                for stmt in false_block.iter_mut() {
                     initialize_statement_types(
                         stmt,
                         curr_forall_var,
@@ -495,7 +482,6 @@ pub fn initialize_statement_types(
             initialize_expression_types(
                 from,
                 curr_forall_var,
-                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -504,7 +490,6 @@ pub fn initialize_statement_types(
             initialize_expression_types(
                 to,
                 curr_forall_var,
-                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -522,7 +507,7 @@ pub fn initialize_statement_types(
                     decl_site: Some(iterator.start),
                 },
             );
-            for stmt in block {
+            for stmt in block.iter_mut() {
                 initialize_statement_types(
                     stmt,
                     curr_forall_var,
@@ -540,7 +525,6 @@ pub fn initialize_statement_types(
                 initialize_expression_types(
                     val,
                     curr_forall_var,
-                    curr_ind_forall_var,
                     context,
                     type_vars,
                     errors,

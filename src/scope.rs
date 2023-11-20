@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 
-pub struct Scope<T>(Vec<HashMap<String, T>>);
+#[derive(Clone)]
+pub struct Scope<T: Clone>(Vec<HashMap<String, T>>);
 
-impl<T> std::default::Default for Scope<T> {
+impl<T: Clone> std::default::Default for Scope<T> {
     fn default() -> Self {
         Scope::<T>(vec![])
     }
 }
 
-impl<T> Scope<T> {
+impl<T: Clone> Scope<T> {
     pub fn init(globals: HashMap<String, T>) -> Self {
         let mut v = Self(vec![]);
         v.0.push(globals);

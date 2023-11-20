@@ -20,5 +20,6 @@ export function prepare_parse_output(parse_output) {
         ast.set(key, parsed.ast[key]);
     });
     parsed.ast = ast;
+    console.log(parsed.ast);
     return parsed;
 }

@@ -3,7 +3,6 @@ use std::rc::Rc;
 use super::arithmetic::{arith_coerce, is_arith};
 use super::eq_classes::EqClasses;
 use super::equality::equality_check;
-use super::substitute::substitute;
 use super::types::Type;
 use super::{Constraint, ScopeEntry};
 use crate::error::{Error, ErrorType};
@@ -35,7 +34,7 @@ fn unify_expression(
             Some(ScopeEntry { t: var_t, .. }) => match var_t.as_ref() {
                 Type::Function(_, _, _) => Ok(()),
                 _ => {
-                    EqClasses::add(eqc, expression.start, &expression.t, var_t, expression.end);
+                    eqc.add(expression.start, &expression.t, var_t, expression.end);
 
                     Ok(())
                 }
@@ -129,8 +128,7 @@ fn unify_expression(
                 if is_arith(op) {
                     let arith_result =
                         arith_coerce(expression.start, &lhs.t, op, &rhs.t, expression.end)?;
-                    EqClasses::add_owned(
-                        eqc,
+                    eqc.add_owned(
                         expression.start,
                         &expression.t,
                         arith_result,
@@ -140,13 +138,12 @@ fn unify_expression(
                     match op {
                         Op::Equal | Op::NotEqual => {
                             match equality_check(lhs.start, &lhs.t, &rhs.t, rhs.end) {
-                                Ok(cs) => {
-                                    if let Some(mut cs) = cs {
-                                        if op == &Op::NotEqual {
-                                            cs = cs.iter().map(|c| c.negate()).collect();
-                                        }
-                                        constraints.append(&mut cs);
+                                Ok(mut cs) => {
+                                    if op == &Op::NotEqual {
+                                        cs = cs.iter().map(|c| c.negate()).collect();
                                     }
+                                    constraints.append(&mut cs);
+
                                     eqc.add_owned(
                                         expression.start,
                                         &expression.t,
@@ -305,49 +302,62 @@ fn unify_expression(
     }
 }
 
+pub struct UnificationResult {
+    pub any_changes: bool,
+    pub eq_classes: Vec<EqClasses>,
+}
+
 pub fn unify(
     block: &mut [Statement],
-    context: &mut Scope<ScopeEntry>,
+    mut context: Scope<ScopeEntry>,
     return_type: &Rc<Type>,
     errors: &mut Vec<Error>,
     curr_ind_forall_var: &mut usize,
-    mut eqc: EqClasses,
     constraints: &mut Vec<Constraint>,
-) -> bool {
+) -> UnificationResult {
+    let mut result = UnificationResult {
+        any_changes: false,
+        eq_classes: vec![EqClasses::new()],
+    };
+
     context.push();
-    for statement in &mut *block {
+    for statement in block {
         match &mut statement.data {
-            S::Print(val) => match unify_expression(val, &mut eqc, context, constraints) {
-                Ok(()) => (),
-                Err(error) => errors.push(error),
-            },
+            S::Print(val) => {
+                match unify_expression(val, &mut result.eq_classes[0], &context, constraints) {
+                    Ok(()) => (),
+                    Err(error) => errors.push(error),
+                }
+            }
             S::Assign(place, val) => {
-                match unify_expression(val, &mut eqc, context, constraints) {
+                match unify_expression(val, &mut result.eq_classes[0], &context, constraints) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
 
                 match context.get(&place.inner) {
-                    Some(ScopeEntry { t, .. }) => eqc.add(val.start, &val.t, t, val.end),
+                    Some(ScopeEntry { t, .. }) => {
+                        result.eq_classes[0].add(val.start, &val.t, t, val.end)
+                    }
                     None => unreachable!(),
                 }
             }
             S::Let(name, mutable, ann, val_adj_type, val) => {
-                match unify_expression(val, &mut eqc, context, constraints) {
+                result.eq_classes[0].add_single(val.start, val_adj_type, val.end);
+
+                match unify_expression(val, &mut result.eq_classes[0], &context, constraints) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
 
-                eqc.add_single(val.start, val_adj_type, val.end);
-
                 if *mutable {
-                    eqc.add_must_demote(val.start, val_adj_type, &val.t, val.end);
+                    result.eq_classes[0].add_must_demote(val.start, val_adj_type, &val.t, val.end);
                 } else {
-                    eqc.add_must_promote(val.start, val_adj_type, &val.t, val.end);
+                    result.eq_classes[0].add_must_promote(val.start, val_adj_type, &val.t, val.end);
                 }
 
                 if let Some(ann) = ann {
-                    eqc.add(ann.start, val_adj_type, &ann.inner, ann.end);
+                    result.eq_classes[0].add(ann.start, val_adj_type, &ann.inner, ann.end);
                 }
 
                 context.insert(
@@ -361,58 +371,83 @@ pub fn unify(
             }
             S::Return(val) => {
                 if let Some(val) = val {
-                    match unify_expression(val, &mut eqc, context, constraints) {
+                    match unify_expression(val, &mut result.eq_classes[0], &context, constraints) {
                         Ok(()) => (),
                         Err(error) => errors.push(error),
                     }
 
-                    eqc.add_can_demote_or_promote(val.start, &val.t, return_type, val.end);
-                } else {
-                    eqc.add_owned(statement.start, return_type, Type::Void, statement.end);
-                }
-            }
-            S::If(cond, _, (true_inner, true_inner_constraints), false_inner) => {
-                match unify_expression(cond, &mut eqc, context, constraints) {
-                    Ok(()) => (),
-                    Err(error) => errors.push(error),
-                }
-
-                eqc.add_owned(cond.start, &cond.t, Type::Bool, cond.end);
-
-                unify(
-                    true_inner,
-                    context,
-                    return_type,
-                    errors,
-                    curr_ind_forall_var,
-                    eqc.clone(),
-                    true_inner_constraints,
-                );
-                if let Some((false_inner, false_inner_constraints)) = false_inner {
-                    unify(
-                        false_inner,
-                        context,
+                    result.eq_classes[0].add_can_demote_or_promote(
+                        val.start,
+                        &val.t,
                         return_type,
-                        errors,
-                        curr_ind_forall_var,
-                        eqc.clone(),
-                        false_inner_constraints,
+                        val.end,
+                    );
+                } else {
+                    result.eq_classes[0].add_owned(
+                        statement.start,
+                        return_type,
+                        Type::Void,
+                        statement.end,
                     );
                 }
             }
+            S::If(cond, _, (true_inner, true_inner_constraints), false_inner) => {
+                match unify_expression(cond, &mut result.eq_classes[0], &context, constraints) {
+                    Ok(()) => (),
+                    Err(error) => errors.push(error),
+                }
+
+                result.eq_classes[0].add_owned(cond.start, &cond.t, Type::Bool, cond.end);
+
+                let mut inner_result = unify(
+                    true_inner,
+                    context.clone(),
+                    return_type,
+                    errors,
+                    curr_ind_forall_var,
+                    true_inner_constraints,
+                );
+
+                result.any_changes |= inner_result.any_changes;
+                result.eq_classes.append(&mut inner_result.eq_classes);
+
+                if let Some((false_inner, false_inner_constraints)) = false_inner {
+                    let mut inner_result = unify(
+                        false_inner,
+                        context.clone(),
+                        return_type,
+                        errors,
+                        curr_ind_forall_var,
+                        false_inner_constraints,
+                    );
+
+                    result.any_changes |= inner_result.any_changes;
+                    result.eq_classes.append(&mut inner_result.eq_classes);
+                }
+            }
             S::For(iterator, iter_type, _, from, to, (inner, inner_constraints)) => {
-                match unify_expression(from, &mut eqc, context, constraints) {
+                match unify_expression(from, &mut result.eq_classes[0], &context, constraints) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
 
-                match unify_expression(to, &mut eqc, context, constraints) {
+                match unify_expression(to, &mut result.eq_classes[0], &context, constraints) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
 
-                eqc.add_can_demote_or_promote_owned(from.start, &from.t, Type::I64(None), from.end);
-                eqc.add_can_demote_or_promote_owned(to.start, &to.t, Type::I64(None), to.end);
+                result.eq_classes[0].add_can_demote_or_promote_owned(
+                    from.start,
+                    &from.t,
+                    Type::I64(None),
+                    from.end,
+                );
+                result.eq_classes[0].add_can_demote_or_promote_owned(
+                    to.start,
+                    &to.t,
+                    Type::I64(None),
+                    to.end,
+                );
 
                 context.push();
                 context.insert(
@@ -424,30 +459,33 @@ pub fn unify(
                     },
                 );
 
-                unify(
+                let mut inner_result = unify(
                     inner,
-                    context,
+                    context.clone(),
                     return_type,
                     errors,
                     curr_ind_forall_var,
-                    eqc.clone(),
                     inner_constraints,
                 );
+
+                result.any_changes |= inner_result.any_changes;
+                result.eq_classes.append(&mut inner_result.eq_classes);
+
                 context.pop();
             }
         }
     }
     context.pop();
 
-    match eqc.generate(curr_ind_forall_var) {
-        Ok((any_changes, mut cs)) => {
-            substitute(block, &eqc);
+    match result.eq_classes[0].generate(curr_ind_forall_var) {
+        Ok((block_changes, mut cs)) => {
             constraints.append(&mut cs);
-            any_changes
+            result.any_changes |= block_changes;
+            result
         }
         Err(error) => {
             errors.push(error);
-            false
+            result
         }
     }
 }

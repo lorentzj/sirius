@@ -33,6 +33,17 @@ impl EqClasses {
         b: Type,
         end: usize,
     ) {
+        for Positioned {
+            start: _,
+            inner: (curr_a, curr_b),
+            end: _,
+        } in &self.can_demote_or_promote
+        {
+            if a == curr_a && &b == curr_b.as_ref() {
+                return;
+            }
+        }
+
         self.owned.push(Rc::new(b));
         let b = self.owned.last().unwrap().clone();
 
@@ -46,16 +57,49 @@ impl EqClasses {
         b: &Rc<Type>,
         end: usize,
     ) {
+        for Positioned {
+            start: _,
+            inner: (curr_a, curr_b),
+            end: _,
+        } in &self.can_demote_or_promote
+        {
+            if a == curr_a && b == curr_b {
+                return;
+            }
+        }
+
         self.can_demote_or_promote
             .push(Positioned::new(start, (a.clone(), b.clone()), end));
     }
 
     pub fn add_must_demote(&mut self, start: usize, a: &Rc<Type>, b: &Rc<Type>, end: usize) {
+        for Positioned {
+            start: _,
+            inner: (curr_a, curr_b),
+            end: _,
+        } in &self.must_demote
+        {
+            if a == curr_a && b == curr_b {
+                return;
+            }
+        }
+
         self.must_demote
             .push(Positioned::new(start, (a.clone(), b.clone()), end));
     }
 
     pub fn add_must_promote(&mut self, start: usize, a: &Rc<Type>, b: &Rc<Type>, end: usize) {
+        for Positioned {
+            start: _,
+            inner: (curr_a, curr_b),
+            end: _,
+        } in &self.must_promote
+        {
+            if a == curr_a && b == curr_b {
+                return;
+            }
+        }
+
         self.must_promote
             .push(Positioned::new(start, (a.clone(), b.clone()), end));
     }
@@ -86,31 +130,77 @@ impl EqClasses {
     }
 
     pub fn add(&mut self, start: usize, a: &Rc<Type>, b: &Rc<Type>, end: usize) {
-        for (_, tree) in &mut self.trees {
+        let mut merge: Option<(usize, usize)> = None;
+        let mut insert: Option<(&Rc<Type>, usize)> = None;
+
+        for (i, (_, tree)) in self.trees.iter().enumerate() {
             if tree.contains(a) {
                 if !tree.contains(b) {
-                    tree.insert(start, b, end);
+                    let mut found = false;
+                    for (j, (_, tree)) in self.trees.iter().enumerate().skip(i) {
+                        if tree.contains(b) {
+                            merge = Some((i, j));
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if !found {
+                        insert = Some((b, i));
+                    }
                 }
-                return;
+                break;
             } else if tree.contains(b) {
                 if !tree.contains(a) {
-                    tree.insert(start, a, end);
+                    let mut found = false;
+                    for (j, (_, tree)) in self.trees.iter().enumerate().skip(i) {
+                        if tree.contains(a) {
+                            merge = Some((i, j));
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if !found {
+                        insert = Some((a, i));
+                    }
                 }
-                return;
+                break;
             }
         }
 
-        let mut tree = TypeTree {
-            start,
-            val: Rc::downgrade(a),
-            lhs: None,
-            rhs: None,
-            end,
-        };
+        match (merge, insert) {
+            (Some((i, j)), _) => {
+                let prefix = self.trees.split_at(i).0.to_owned();
+                let suffix = self.trees.split_at(j + 1).1.to_owned();
+                let inner = self.trees.split_at(j).0.split_at(i + 1).1.to_owned();
+                let merged = (None, self.trees[i].1.clone().merge(self.trees[j].1.clone()));
+                self.trees = prefix
+                    .into_iter()
+                    .chain([merged])
+                    .chain(inner)
+                    .chain(suffix)
+                    .collect();
+            }
 
-        tree.insert(start, b, end);
+            (_, Some((a, i))) => {
+                self.trees[i].1.insert(start, a, end);
+            }
 
-        self.trees.push((None, tree));
+            (None, None) => {
+                let mut tree = TypeTree {
+                    start,
+                    val: Rc::downgrade(a),
+                    lhs: None,
+                    rhs: None,
+                    end,
+                };
+
+                tree.insert(start, b, end);
+
+                self.trees.push((None, tree));
+            }
+        }
     }
 
     #[cfg(test)]
@@ -121,7 +211,7 @@ impl EqClasses {
     pub fn find_replacement(&self, t: &Rc<Type>) -> Option<Rc<Type>> {
         for (repr, tree) in &self.trees {
             if let Some(repr) = repr {
-                if tree.contains(t) {
+                if tree.contains(t) && repr != t {
                     return Some(repr.clone());
                 }
             }
@@ -143,7 +233,7 @@ impl EqClasses {
             let ts = tree.to_vec();
             let mut tree_repr = ts.first().unwrap().clone().inner;
 
-            for t in ts {
+            for t in ts.iter().skip(1) {
                 match tree_repr.unify(&t.inner, false, &mut None) {
                     Some((subs, mut cs)) => {
                         if !subs.is_empty() {
@@ -405,6 +495,10 @@ struct TypeTree {
 
 impl TypeTree {
     fn insert(&mut self, start: usize, v: &Rc<Type>, end: usize) {
+        if self.contains(v) {
+            return;
+        }
+
         if Rc::as_ptr(v) >= Weak::as_ptr(&self.val) {
             if let Some(lhs) = &mut self.lhs {
                 lhs.insert(start, v, end);
@@ -470,6 +564,35 @@ impl TypeTree {
         }
 
         v
+    }
+
+    fn to_ref_vec(&self) -> Vec<Positioned<Rc<Type>>> {
+        let mut v = vec![];
+
+        if let Some(t) = self.val.upgrade() {
+            v.push(Positioned {
+                start: self.start,
+                inner: t,
+                end: self.end,
+            });
+        }
+
+        if let Some(lhs) = &self.lhs {
+            v.extend(lhs.to_ref_vec());
+        }
+
+        if let Some(rhs) = &self.rhs {
+            v.extend(rhs.to_ref_vec());
+        }
+
+        v
+    }
+
+    fn merge(mut self, other: TypeTree) -> TypeTree {
+        for t in other.to_ref_vec() {
+            self.insert(t.start, &t.inner, t.end);
+        }
+        self
     }
 }
 

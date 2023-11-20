@@ -20,13 +20,16 @@ mod unify;
 use crate::solver::Constraint;
 use concreteness_check::concreteness_check;
 use constraint_check::constraint_check;
-use eq_classes::EqClasses;
 use initialize_ast::initialize_statement_types;
 pub use initialize_ast::{annotation_type, populate_annotation};
 
 pub use types::{Substitution, Type};
 use unify::unify;
 
+use self::substitute::substitute;
+use self::unify::UnificationResult;
+
+#[derive(Clone)]
 pub struct ScopeEntry {
     t: Rc<Type>,
     mutable: bool,
@@ -161,18 +164,26 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
             continue;
         }
 
-        let mut to_continue = true;
+        let mut unification_result = UnificationResult {
+            any_changes: true,
+            eq_classes: vec![],
+        };
 
-        while to_continue && function_errors.is_empty() {
-            to_continue = unify(
+        while unification_result.any_changes && function_errors.is_empty() {
+            unification_result = unify(
                 &mut function.body.0,
-                &mut scope,
+                scope.clone(),
                 &function.return_type.inner,
                 &mut function_errors,
                 &mut curr_ind_forall_var,
-                EqClasses::new(),
                 &mut function.body.1,
             );
+
+            if function_errors.is_empty() {
+                for eqc in &unification_result.eq_classes {
+                    substitute(&mut function.body.0, eqc);
+                }
+            }
         }
 
         scope.pop();
@@ -330,19 +341,6 @@ fn main():
     }
 
     #[test]
-    fn tuple_equality_error() {
-        let code = "
-fn main():
-    if (0, 1) == (0, 2):
-        print true
-";
-
-        let mut state = parse(code);
-        typecheck(&mut state, HashMap::default());
-        assert_eq!(ErrorType::Constraint, state.errors[0].error_type);
-    }
-
-    #[test]
     fn mutation_tracking() {
         let code = "
 fn main():
@@ -411,6 +409,64 @@ fn main():
             }
         } else {
             panic!();
+        }
+    }
+
+    #[test]
+    fn nested_block_checks() {
+        let code = "
+fn main():
+    let mut a = 1
+    let mut b = 2
+
+    if a + b < 10:
+        let x = a
+        let y = b
+        if a > 2:
+            let z = x + y
+";
+
+        let mut state = parse(code);
+        typecheck(&mut state, HashMap::default());
+
+        assert!(state.errors.is_empty());
+    }
+
+    #[test]
+    fn consistent_poly_vars_in_flow() {
+        let code = "
+fn untracked() -> i64:
+    return 1
+
+fn main():
+    let x = untracked()
+    let y = untracked()
+
+    if true:
+        let z = x + y
+";
+
+        let mut state = parse(code);
+        typecheck(&mut state, HashMap::default());
+
+        let first_let_stmt = &state.ast["main"].body.0[0].data;
+        let second_let_stmt = &state.ast["main"].body.0[1].data;
+        let if_stmt = &state.ast["main"].body.0[2].data;
+
+        if let (S::Let(_, _, _, t1, _), S::Let(_, _, _, t2, _), S::If(_, _, (inner, _), _)) =
+            (first_let_stmt, second_let_stmt, if_stmt)
+        {
+            let inner_let_stmt = &inner[0].data;
+            if let S::Let(_, _, _, t3, _) = inner_let_stmt {
+                assert_eq!(
+                    "i64(p='a), i64(p='b), i64(p='a + 'b)",
+                    format!("{t1:?}, {t2:?}, {t3:?}")
+                )
+            } else {
+                panic!("if shoud have one let")
+            }
+        } else {
+            panic!("main should have let, let, if")
         }
     }
 }

@@ -104,8 +104,8 @@ impl Type {
             Type::Unknown => Some((vec![], vec![])),
             Type::ForAll(self_i) => match other {
                 Type::ForAll(other_i) => match self_i.cmp(other_i) {
-                    Ordering::Greater => Some((vec![(*self_i, other.clone())], vec![])),
-                    Ordering::Less => Some((vec![(*other_i, self.clone())], vec![])),
+                    Ordering::Less => Some((vec![(*self_i, other.clone())], vec![])),
+                    Ordering::Greater => Some((vec![(*other_i, self.clone())], vec![])),
                     Ordering::Equal => Some((vec![], vec![])),
                 },
                 _ => Some((vec![(*self_i, other.clone())], vec![])),
@@ -147,13 +147,14 @@ impl Type {
                 Type::I64(Some(other_i)) => match self {
                     Type::I64(Some(self_i)) => Some((
                         vec![],
-                        vec![Constraint::new_eq_z(other_i.clone() - self_i.clone())],
+                        vec![Constraint::new_eq(other_i.clone(), self_i.clone())],
                     )),
                     Type::I64(None) => allow_promote.as_mut().map(|var| {
                         (
                             vec![],
-                            vec![Constraint::new_eq_z(
-                                other_i.clone() - Poly::var(usize_name(**var), 1),
+                            vec![Constraint::new_eq(
+                                other_i.clone(),
+                                Poly::var(usize_name(**var), 1),
                             )],
                         )
                     }),
