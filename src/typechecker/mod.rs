@@ -145,7 +145,7 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
 
         scope.push();
 
-        for statement in function.body.0.iter_mut() {
+        for statement in function.body.statements.iter_mut() {
             initialize_statement_types(
                 statement,
                 &mut curr_forall_var,
@@ -171,17 +171,17 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
 
         while unification_result.any_changes && function_errors.is_empty() {
             unification_result = unify(
-                &mut function.body.0,
+                &mut function.body.statements,
                 scope.clone(),
                 &function.return_type.inner,
                 &mut function_errors,
                 &mut curr_ind_forall_var,
-                &mut function.body.1,
+                &mut function.body.post_constraints,
             );
 
             if function_errors.is_empty() {
                 for eqc in &unification_result.eq_classes {
-                    substitute(&mut function.body.0, eqc);
+                    substitute(&mut function.body.statements, eqc);
                 }
             }
         }
@@ -203,7 +203,7 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
         }
 
         // if and for preconditions
-        add_preconditions::add_preconditions(&mut function.body.0);
+        add_preconditions::add_preconditions(&mut function.body.statements);
 
         // constraint check - pass value constraints to solver
 
@@ -223,6 +223,7 @@ mod tests {
     use super::typecheck;
     use super::Type;
     use crate::error::ErrorType;
+    use crate::parser::Block;
     use crate::parser::{parse, S};
     use crate::solver::poly::Poly;
     use crate::solver::rational::Rat;
@@ -301,8 +302,8 @@ fn main():
         typecheck(&mut state, HashMap::default());
 
         assert!(
-            if let S::Let(_, _, _, _, val) = &state.ast["main"].body.0[0].data {
-                val.t.as_ref() == &Type::I64(Some(Poly::constant(Rat::from(3))))
+            if let S::Let { value, .. } = &state.ast["main"].body.statements[0].data {
+                value.t.as_ref() == &Type::I64(Some(Poly::constant(Rat::from(3))))
             } else {
                 false
             }
@@ -356,7 +357,10 @@ fn main():
 
         assert!(state.errors.is_empty());
 
-        if let S::Let(_, _, _, a_type, _) = &state.ast["main"].body.0[0].data {
+        if let S::Let {
+            bound_type: a_type, ..
+        } = &state.ast["main"].body.statements[0].data
+        {
             let a_req = Type::Tuple(vec![
                 Type::Tuple(vec![Type::I64(None), Type::I64(None)]),
                 Type::I64(None),
@@ -366,27 +370,39 @@ fn main():
             panic!()
         }
 
-        if let S::Let(_, _, _, b_type, _) = &state.ast["main"].body.0[1].data {
+        if let S::Let {
+            bound_type: b_type, ..
+        } = &state.ast["main"].body.statements[1].data
+        {
             let b_req = Type::I64(None);
             assert_eq!(b_type.as_ref(), &b_req);
         } else {
             panic!()
         }
 
-        if let S::Let(_, _, _, c_type, _) = &state.ast["main"].body.0[2].data {
+        if let S::Let {
+            bound_type: c_type, ..
+        } = &state.ast["main"].body.statements[2].data
+        {
             let c_req = Type::I64(Some(Poly::constant(Rat::from(5))));
             assert_eq!(c_type.as_ref(), &c_req);
         } else {
             panic!()
         }
 
-        if let S::Let(_, _, _, d_type, _) = &state.ast["main"].body.0[3].data {
+        if let S::Let {
+            bound_type: d_type, ..
+        } = &state.ast["main"].body.statements[3].data
+        {
             if let Type::Tuple(inner) = d_type.as_ref() {
                 if let Type::Tuple(a_0) = &inner[0] {
                     assert!(matches!(&a_0[0], Type::I64(Some(_a_0_0_var))));
 
                     if let Type::I64(Some(a_0_1_var)) = &a_0[1] {
-                        if let S::Let(_, _, _, e_type, _) = &state.ast["main"].body.0[4].data {
+                        if let S::Let {
+                            bound_type: e_type, ..
+                        } = &state.ast["main"].body.statements[4].data
+                        {
                             if let Type::I64(Some(d_0_1_var)) = e_type.as_ref() {
                                 assert_eq!(d_0_1_var, a_0_1_var);
                             } else {
@@ -449,21 +465,29 @@ fn main():
         let mut state = parse(code);
         typecheck(&mut state, HashMap::default());
 
-        let first_let_stmt = &state.ast["main"].body.0[0].data;
-        let second_let_stmt = &state.ast["main"].body.0[1].data;
-        let if_stmt = &state.ast["main"].body.0[2].data;
+        let first_let_stmt = &state.ast["main"].body.statements[0].data;
+        let second_let_stmt = &state.ast["main"].body.statements[1].data;
+        let if_stmt = &state.ast["main"].body.statements[2].data;
 
-        if let (S::Let(_, _, _, t1, _), S::Let(_, _, _, t2, _), S::If(_, _, (inner, _), _)) =
-            (first_let_stmt, second_let_stmt, if_stmt)
+        if let (
+            S::Let { bound_type: t1, .. },
+            S::Let { bound_type: t2, .. },
+            S::If {
+                true_inner: Block {
+                    statements: inner, ..
+                },
+                ..
+            },
+        ) = (first_let_stmt, second_let_stmt, if_stmt)
         {
             let inner_let_stmt = &inner[0].data;
-            if let S::Let(_, _, _, t3, _) = inner_let_stmt {
+            if let S::Let { bound_type: t3, .. } = inner_let_stmt {
                 assert_eq!(
                     "i64(p='a), i64(p='b), i64(p='a + 'b)",
                     format!("{t1:?}, {t2:?}, {t3:?}")
                 )
             } else {
-                panic!("if shoud have one let")
+                panic!("if should have one let")
             }
         } else {
             panic!("main should have let, let, if")

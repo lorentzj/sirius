@@ -61,13 +61,29 @@ pub enum E {
     F64(f64),
     I64(i64),
     Bool(bool),
-    Ident(String, Option<Vec<Positioned<Type>>>),
-    BinaryOp(Box<Expression>, Op, Box<Expression>),
-    UnaryOp(UnaryOp, Box<Expression>),
+    Ident {
+        name: String,
+        type_args: Option<Vec<Positioned<Type>>>,
+    },
+    BinaryOp {
+        lhs: Box<Expression>,
+        op: Op,
+        rhs: Box<Expression>,
+    },
+    UnaryOp {
+        op: UnaryOp,
+        inner: Box<Expression>,
+    },
     OpenTuple(Vec<Expression>),
     Tuple(Vec<Expression>),
-    Accessor(Box<Expression>, Box<Expression>),
-    FnCall(Box<Expression>, Vec<Expression>),
+    Accessor {
+        target: Box<Expression>,
+        index: Box<Expression>,
+    },
+    FnCall {
+        func: Box<Expression>,
+        args: Vec<Expression>,
+    },
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -89,29 +105,41 @@ impl Expression {
     }
 }
 
-type Block = (Vec<Statement>, Vec<Constraint>);
+#[derive(Serialize, Clone, Debug)]
+pub struct Block {
+    pub statements: Vec<Statement>,
+    pub post_constraints: Vec<Constraint>,
+}
 
 #[derive(Serialize, Clone, Debug)]
 pub enum S {
-    Let(
-        Positioned<String>,
-        bool,
-        Option<Positioned<Rc<Type>>>,
-        Rc<Type>,
-        Expression,
-    ),
-    Assign(Positioned<String>, Expression),
+    Let {
+        name: Positioned<String>,
+        mutable: bool,
+        annotation: Option<Positioned<Rc<Type>>>,
+        bound_type: Rc<Type>,
+        value: Expression,
+    },
+    Assign {
+        place: Positioned<String>,
+        value: Expression,
+    },
     Print(Expression),
     Return(Option<Expression>),
-    If(Expression, Vec<Constraint>, Block, Option<Block>),
-    For(
-        Positioned<String>,
-        Type,
-        Vec<Constraint>,
-        Expression,
-        Expression,
-        Block,
-    ),
+    If {
+        condition: Expression,
+        pre_constraints: Vec<Constraint>,
+        true_inner: Block,
+        false_inner: Option<Block>,
+    },
+    For {
+        iterator: Positioned<String>,
+        iterator_type: Type,
+        pre_constraints: Vec<Constraint>,
+        from: Expression,
+        to: Expression,
+        inner: Block,
+    },
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -126,23 +154,29 @@ impl Statement {
         name: Positioned<String>,
         mutable: bool,
         annotation: Option<Positioned<Rc<Type>>>,
-        val: Expression,
+        value: Expression,
     ) -> Self {
         let start = name.start - 1;
-        let end = val.end;
+        let end = value.end;
         Statement {
             start,
-            data: S::Let(name, mutable, annotation, Rc::new(Type::Unknown), val),
+            data: S::Let {
+                name,
+                mutable,
+                annotation,
+                bound_type: Rc::new(Type::Unknown),
+                value,
+            },
             end,
         }
     }
 
-    pub fn new_assign(name: Positioned<String>, val: Expression) -> Self {
+    pub fn new_assign(name: Positioned<String>, value: Expression) -> Self {
         let start = name.start;
-        let end = val.end;
+        let end = value.end;
         Statement {
             start,
-            data: S::Assign(name, val),
+            data: S::Assign { place: name, value },
             end,
         }
     }
@@ -169,19 +203,25 @@ impl Statement {
 
     pub fn new_if(
         start: usize,
-        cond: Expression,
+        condition: Expression,
         true_block: Vec<Statement>,
         false_block: Option<Vec<Statement>>,
         end: usize,
     ) -> Self {
         Statement {
             start,
-            data: S::If(
-                cond,
-                vec![],
-                (true_block, vec![]),
-                false_block.map(|false_block| (false_block, vec![])),
-            ),
+            data: S::If {
+                condition,
+                pre_constraints: vec![],
+                true_inner: Block {
+                    statements: true_block,
+                    post_constraints: vec![],
+                },
+                false_inner: false_block.map(|false_block| Block {
+                    statements: false_block,
+                    post_constraints: vec![],
+                }),
+            },
             end,
         }
     }
@@ -196,7 +236,17 @@ impl Statement {
     ) -> Self {
         Statement {
             start,
-            data: S::For(iterator, Type::I64(None), vec![], from, to, (inner, vec![])),
+            data: S::For {
+                iterator,
+                iterator_type: Type::I64(None),
+                pre_constraints: vec![],
+                from,
+                to,
+                inner: Block {
+                    statements: inner,
+                    post_constraints: vec![],
+                },
+            },
             end,
         }
     }

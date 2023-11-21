@@ -8,11 +8,11 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::lexer::Op;
-use crate::parser::{Expression, Positioned, Statement, E, S};
+use crate::parser::{Block, Expression, Positioned, Statement, E, S};
 
 pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> {
     match &annotation.data {
-        E::Ident(name, type_args) => {
+        E::Ident { name, type_args } => {
             if type_args.is_some() {
                 Err((annotation.start, annotation.end))
             } else if name.eq("f64") {
@@ -38,14 +38,15 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> 
             Ok(Type::Tuple(members))
         }
 
-        E::BinaryOp(
-            box Expression {
-                data: E::Tuple(inner),
-                ..
-            },
-            Op::Apply,
+        E::BinaryOp {
+            lhs:
+                box Expression {
+                    data: E::Tuple(inner),
+                    ..
+                },
+            op: Op::Apply,
             rhs,
-        ) => {
+        } => {
             let mut args = vec![];
             for expression in inner {
                 args.push(annotation_type(expression)?);
@@ -56,14 +57,22 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> 
             Ok(Type::Function(vec![], args, Box::new(return_type)))
         }
 
-        E::BinaryOp(lhs, Op::Apply, rhs) => {
+        E::BinaryOp {
+            lhs,
+            op: Op::Apply,
+            rhs,
+        } => {
             let args = vec![annotation_type(lhs)?];
             let return_type = annotation_type(rhs)?;
 
             Ok(Type::Function(vec![], args, Box::new(return_type)))
         }
 
-        E::BinaryOp(lhs, Op::Add, rhs) => {
+        E::BinaryOp {
+            lhs,
+            op: Op::Add,
+            rhs,
+        } => {
             let lhs = annotation_type(lhs)?;
             let rhs = annotation_type(rhs)?;
 
@@ -74,7 +83,11 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> 
             }
         }
 
-        E::BinaryOp(lhs, Op::Sub, rhs) => {
+        E::BinaryOp {
+            lhs,
+            op: Op::Sub,
+            rhs,
+        } => {
             let lhs = annotation_type(lhs)?;
             let rhs = annotation_type(rhs)?;
 
@@ -85,7 +98,11 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> 
             }
         }
 
-        E::BinaryOp(lhs, Op::Mul, rhs) => {
+        E::BinaryOp {
+            lhs,
+            op: Op::Mul,
+            rhs,
+        } => {
             let lhs = annotation_type(lhs)?;
             let rhs = annotation_type(rhs)?;
 
@@ -174,7 +191,7 @@ fn initialize_expression_types(
         E::Bool(_) => expression.t = Rc::new(Type::Bool),
         E::F64(_) => expression.t = Rc::new(Type::F64),
         E::I64(val) => expression.t = Rc::new(Type::I64(Some(Poly::constant(Rat::from(*val))))),
-        E::UnaryOp(_, inner) => {
+        E::UnaryOp { inner, .. } => {
             *curr_forall_var += 1;
             expression.t = Rc::new(Type::ForAll(*curr_forall_var - 1));
 
@@ -187,7 +204,7 @@ fn initialize_expression_types(
                 highlight_map,
             );
         }
-        E::BinaryOp(lhs, _, rhs) => {
+        E::BinaryOp { lhs, rhs, .. } => {
             *curr_forall_var += 1;
             expression.t = Rc::new(Type::ForAll(*curr_forall_var - 1));
 
@@ -209,12 +226,12 @@ fn initialize_expression_types(
                 highlight_map,
             );
         }
-        E::Accessor(lhs, rhs) => {
+        E::Accessor { target, index } => {
             *curr_forall_var += 1;
             expression.t = Rc::new(Type::ForAll(*curr_forall_var - 1));
 
             initialize_expression_types(
-                &mut *lhs,
+                &mut *target,
                 curr_forall_var,
                 context,
                 type_vars,
@@ -223,7 +240,7 @@ fn initialize_expression_types(
             );
 
             initialize_expression_types(
-                &mut *rhs,
+                &mut *index,
                 curr_forall_var,
                 context,
                 type_vars,
@@ -245,12 +262,12 @@ fn initialize_expression_types(
                 );
             }
         }
-        E::FnCall(caller, args) => {
+        E::FnCall { func, args } => {
             *curr_forall_var += 1;
             expression.t = Rc::new(Type::ForAll(*curr_forall_var - 1));
 
             initialize_expression_types(
-                &mut *caller,
+                &mut *func,
                 curr_forall_var,
                 context,
                 type_vars,
@@ -269,7 +286,7 @@ fn initialize_expression_types(
                 );
             }
         }
-        E::Ident(name, type_args) => match context.get(name) {
+        E::Ident { name, type_args } => match context.get(name) {
             Some(ScopeEntry { t, decl_site, .. }) => {
                 if let Some(decl_site) = decl_site {
                     highlight_map.insert(expression.start, vec![expression.start, *decl_site]);
@@ -371,11 +388,17 @@ pub fn initialize_statement_types(
                 highlight_map,
             );
         }
-        S::Let(name, mutable, ann, val_adj_type, val) => {
+        S::Let {
+            name,
+            mutable,
+            annotation,
+            bound_type,
+            value,
+        } => {
             highlight_map.insert(name.start, vec![name.start]);
 
             initialize_expression_types(
-                val,
+                value,
                 curr_forall_var,
                 context,
                 type_vars,
@@ -384,16 +407,17 @@ pub fn initialize_statement_types(
             );
 
             *curr_forall_var += 1;
-            *val_adj_type = Rc::new(Type::ForAll(*curr_forall_var - 1));
+            *bound_type = Rc::new(Type::ForAll(*curr_forall_var - 1));
 
-            *ann = ann.as_ref().map(|ann| {
-                match populate_annotation(&ann.inner, &mut Some(curr_forall_var), type_vars) {
-                    Ok(t) => Positioned::new(ann.start, Rc::new(t), ann.end),
+            *annotation = annotation.as_ref().map(|annotation| {
+                match populate_annotation(&annotation.inner, &mut Some(curr_forall_var), type_vars)
+                {
+                    Ok(t) => Positioned::new(annotation.start, Rc::new(t), annotation.end),
                     Err(mut error) => {
-                        error.start = ann.start;
-                        error.end = ann.end;
+                        error.start = annotation.start;
+                        error.end = annotation.end;
                         errors.push(error);
-                        Positioned::new(ann.start, Rc::new(Type::Unknown), ann.end)
+                        Positioned::new(annotation.start, Rc::new(Type::Unknown), annotation.end)
                     }
                 }
             });
@@ -401,15 +425,15 @@ pub fn initialize_statement_types(
             context.insert(
                 name.inner.clone(),
                 ScopeEntry {
-                    t: val_adj_type.clone(),
+                    t: bound_type.clone(),
                     mutable: *mutable,
                     decl_site: Some(name.start),
                 },
             );
         }
-        S::Assign(place, val) => {
+        S::Assign { place, value } => {
             initialize_expression_types(
-                val,
+                value,
                 curr_forall_var,
                 context,
                 type_vars,
@@ -437,9 +461,18 @@ pub fn initialize_statement_types(
                 }
             }
         }
-        S::If(cond, _, (true_block, _), false_block) => {
+        S::If {
+            condition,
+            true_inner:
+                Block {
+                    statements: true_block,
+                    ..
+                },
+            false_inner,
+            ..
+        } => {
             initialize_expression_types(
-                cond,
+                condition,
                 curr_forall_var,
                 context,
                 type_vars,
@@ -460,7 +493,11 @@ pub fn initialize_statement_types(
                 );
             }
             context.pop();
-            if let Some((false_block, _)) = false_block {
+            if let Some(Block {
+                statements: false_block,
+                ..
+            }) = false_inner
+            {
                 context.push();
                 for stmt in false_block.iter_mut() {
                     initialize_statement_types(
@@ -476,7 +513,16 @@ pub fn initialize_statement_types(
                 context.pop();
             }
         }
-        S::For(iterator, iter_type, _, from, to, (block, _)) => {
+        S::For {
+            iterator,
+            iterator_type,
+            from,
+            to,
+            inner: Block {
+                statements: block, ..
+            },
+            ..
+        } => {
             highlight_map.insert(iterator.start, vec![iterator.start]);
 
             initialize_expression_types(
@@ -496,13 +542,13 @@ pub fn initialize_statement_types(
                 highlight_map,
             );
 
-            *iter_type = Type::new_free_ind(curr_ind_forall_var, true);
+            *iterator_type = Type::new_free_ind(curr_ind_forall_var, true);
 
             context.push();
             context.insert(
                 iterator.inner.clone(),
                 ScopeEntry {
-                    t: Rc::new(iter_type.clone()),
+                    t: Rc::new(iterator_type.clone()),
                     mutable: false,
                     decl_site: Some(iterator.start),
                 },

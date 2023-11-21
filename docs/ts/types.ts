@@ -47,12 +47,12 @@ export type E =
     { 'F64': number }
     | { 'I64': string | null }
     | { 'Bool': boolean }
-    | { 'Ident': [string, Positioned<string>[] | null]}
-    | { 'BinaryOp': [Expression, Op, Expression]}
-    | { 'UnaryOp': ['ArithNeg' | 'BoolNeg' | 'Tick', Expression]}
+    | { 'Ident': { 'name': string, 'type_args': Positioned<string>[] | null }}
+    | { 'BinaryOp': { 'lhs': Expression, 'op': Op, 'rhs': Expression }}
+    | { 'UnaryOp': { 'op': 'ArithNeg' | 'BoolNeg' | 'Tick', 'inner': Expression }}
     | { 'Tuple': Expression[] }
-    | { 'Accessor': [Expression, Expression] }
-    | { 'FnCall': [Expression, Expression[]] };
+    | { 'Accessor': { target: Expression, index: Expression } }
+    | { 'FnCall': { func: Expression, args: Expression[] } };
 
 export type Expression = {
     start: number,
@@ -61,15 +61,37 @@ export type Expression = {
     end: number
 };
 
-export type Block = [Statement[], Constraint[]];
+export type Block = {
+    statements: Statement[],
+    post_constraints: Constraint[]
+};
 
 export type S = 
-    { 'Let': [Positioned<string>, boolean, Positioned<string> | null, string, Expression] }
-    | { 'Assign': [Positioned<string>, Expression] }
+    { 'Let': { 
+        name: Positioned<string>,
+        mutable: boolean,
+        annotation: Positioned<string> | null,
+        bound_type: string,
+        value: Expression }
+    }
+    | { 'Assign': { 'place': Positioned<string>, 'value': Expression } }
     | { 'Print': Expression }
     | { 'Return': Expression | null }
-    | { 'If': [Expression, Constraint[], Block, Block | null]}
-    | { 'For': [Positioned<string>, string, Constraint[], Expression, Expression, Block]};
+    | { 'If': { 
+        'condition': Expression,
+        'pre_constraints': Constraint[],
+        'true_inner': Block,
+        'false_inner': Block | null }
+    }
+    | { 'For': {
+        'iterator': Positioned<string>,
+        'iterator_type': string,
+        'pre_constraints': Constraint[],
+        'from': Expression,
+        'to': Expression,
+        'inner': Block
+    }
+};
 
 export type Statement = Positioned<S>;
 
@@ -123,8 +145,6 @@ export function prepare_parse_output(parse_output: string): ParserOutput {
         ast.set(key, (parsed.ast as unknown as {[k: string]: Function})[key]);
     });
     parsed.ast = ast;    
-
-    console.log(parsed.ast);
 
     return parsed;
 }

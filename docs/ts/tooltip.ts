@@ -60,7 +60,7 @@ export function setToolTipHandler(tooltipElem: HTMLElement, tokenElem: HTMLEleme
 function getIdentTypePairs(ast: types.AST): [number, string][] {
     let r: [number, string][] = [];
     for(let f of ast.values()) {
-        r = r.concat(getIdentTypePairsInBlock(f.body[0]));
+        r = r.concat(getIdentTypePairsInBlock(f.body.statements));
     }
 
     return r;
@@ -70,25 +70,25 @@ function getIdentTypePairsInBlock(statements: types.Statement[]): [number, strin
     let r: [number, string][] = [];
     for(let statement of statements) {
         if('Let' in statement.data) {
-            r.push([statement.data['Let'][0].start, statement.data['Let'][3]]);
-            r = r.concat(getIdentTypePairsInExpr(statement.data['Let'][4]));
+            r.push([statement.data['Let'].name.start, statement.data['Let'].bound_type]);
+            r = r.concat(getIdentTypePairsInExpr(statement.data['Let'].value));
         } else if('Assign' in statement.data) {
-            r = r.concat(getIdentTypePairsInExpr(statement.data['Assign'][1]));
+            r = r.concat(getIdentTypePairsInExpr(statement.data['Assign'].value));
         } else if('Print' in statement.data) {
             r = r.concat(getIdentTypePairsInExpr(statement.data['Print']));
         } else if('Return' in statement.data && statement.data['Return'] !== null) {
             r = r.concat(getIdentTypePairsInExpr(statement.data['Return']));
         } else if('If' in statement.data) {
-            r = r.concat(getIdentTypePairsInExpr(statement.data['If'][0]));
-            r = r.concat(getIdentTypePairsInBlock(statement.data['If'][2][0]));
-            if(statement.data['If'][3] !== null) {
-                r = r.concat(getIdentTypePairsInBlock(statement.data['If'][3][0]));
+            r = r.concat(getIdentTypePairsInExpr(statement.data['If'].condition));
+            r = r.concat(getIdentTypePairsInBlock(statement.data['If'].true_inner.statements));
+            if(statement.data['If'].false_inner !== null) {
+                r = r.concat(getIdentTypePairsInBlock(statement.data['If'].false_inner.statements));
             }
         } else if('For' in statement.data) {
-            r.push([statement.data['For'][0].start, statement.data['For'][1]]);
-            r = r.concat(getIdentTypePairsInExpr(statement.data['For'][3]));
-            r = r.concat(getIdentTypePairsInExpr(statement.data['For'][4]));
-            r = r.concat(getIdentTypePairsInBlock(statement.data['For'][5][0]));
+            r.push([statement.data['For'].iterator.start, statement.data['For'].iterator_type]);
+            r = r.concat(getIdentTypePairsInExpr(statement.data['For'].from));
+            r = r.concat(getIdentTypePairsInExpr(statement.data['For'].to));
+            r = r.concat(getIdentTypePairsInBlock(statement.data['For'].inner.statements));
         }
     }
 
@@ -99,13 +99,13 @@ function getIdentTypePairsInExpr(expression: types.Expression): [number, string]
     if('Ident' in expression.data) {
         return [[expression.start, expression.t]];
     } else if('BinaryOp' in expression.data) {
-        let lhs = expression.data['BinaryOp'][0];
-        let rhs = expression.data['BinaryOp'][2];
+        let lhs = expression.data['BinaryOp'].lhs;
+        let rhs = expression.data['BinaryOp'].rhs;
 
         return getIdentTypePairsInExpr(lhs).concat(getIdentTypePairsInExpr(rhs));
 
     } else if('UnaryOp' in expression.data) {
-        let inner = expression.data['UnaryOp'][1];
+        let inner = expression.data['UnaryOp'].inner;
         return getIdentTypePairsInExpr(inner);
     } else if('Tuple' in expression.data) {
         let r: [number, string][] = [];
@@ -115,18 +115,18 @@ function getIdentTypePairsInExpr(expression: types.Expression): [number, string]
         }
         return r;
     } else if('FnCall' in expression.data) {
-        let caller = expression.data['FnCall'][0];
+        let caller = expression.data['FnCall'].func;
 
         let r: [number, string][] = [];
         r = r.concat(getIdentTypePairsInExpr(caller));
 
-        for(let inner of expression.data['FnCall'][1]) {
+        for(let inner of expression.data['FnCall'].args) {
             r = r.concat(getIdentTypePairsInExpr(inner));
         }
         return r;
     } else if('Accessor' in expression.data) {
-        let lhs = expression.data['Accessor'][0];
-        let rhs = expression.data['Accessor'][1];
+        let lhs = expression.data['Accessor'].target;
+        let rhs = expression.data['Accessor'].index;
 
         return getIdentTypePairsInExpr(lhs).concat(getIdentTypePairsInExpr(rhs));
     } else {

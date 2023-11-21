@@ -7,7 +7,7 @@ use super::types::Type;
 use super::{Constraint, ScopeEntry};
 use crate::error::{Error, ErrorType};
 use crate::lexer::Op;
-use crate::parser::{Expression, Statement, UnaryOp, E, S};
+use crate::parser::{Block, Expression, Statement, UnaryOp, E, S};
 use crate::scope::Scope;
 use crate::solver::poly::Poly;
 use crate::solver::rational::Rat;
@@ -24,13 +24,13 @@ fn unify_expression(
         E::Bool(_) => Ok(()),
         E::F64(_) => Ok(()),
         E::I64(_) => Ok(()),
-        E::Accessor(_, _) => Err(Error::new(
+        E::Accessor { .. } => Err(Error::new(
             ErrorType::NotImplemented,
             "array access not implemented yet".into(),
             expression.start,
             expression.end,
         )),
-        E::Ident(name, _) => match context.get(name) {
+        E::Ident { name, .. } => match context.get(name) {
             Some(ScopeEntry { t: var_t, .. }) => match var_t.as_ref() {
                 Type::Function(_, _, _) => Ok(()),
                 _ => {
@@ -41,7 +41,7 @@ fn unify_expression(
             },
             None => unreachable!(),
         },
-        E::UnaryOp(op, inner) => {
+        E::UnaryOp { op, inner } => {
             unify_expression(inner, eqc, context, constraints)?;
 
             if inner.t.forall_vars().is_empty() {
@@ -120,7 +120,7 @@ fn unify_expression(
 
             Ok(())
         }
-        E::BinaryOp(lhs, op, rhs) => {
+        E::BinaryOp { lhs, op, rhs } => {
             unify_expression(lhs, eqc, context, constraints)?;
             unify_expression(rhs, eqc, context, constraints)?;
 
@@ -248,8 +248,8 @@ fn unify_expression(
 
             Ok(())
         }
-        E::FnCall(caller, args) => {
-            unify_expression(caller, eqc, context, constraints)?;
+        E::FnCall { func, args } => {
+            unify_expression(func, eqc, context, constraints)?;
 
             for e in args.iter() {
                 unify_expression(e, eqc, context, constraints)?;
@@ -257,7 +257,7 @@ fn unify_expression(
 
             let arg_types: Vec<_> = args.iter().map(|e| e.t.clone()).collect();
 
-            match caller.t.as_ref() {
+            match func.t.as_ref() {
                 Type::Function(_, i, o) => {
                     if i.len() != arg_types.len() {
                         return Err(Error::new(
@@ -290,8 +290,8 @@ fn unify_expression(
                     return Err(Error::new(
                         ErrorType::Type,
                         format!("cannot call type \"{t:?}\" as function"),
-                        caller.start,
-                        caller.end,
+                        func.start,
+                        func.end,
                     ))
                 }
             }
@@ -329,41 +329,62 @@ pub fn unify(
                     Err(error) => errors.push(error),
                 }
             }
-            S::Assign(place, val) => {
-                match unify_expression(val, &mut result.eq_classes[0], &context, constraints) {
+            S::Assign { place, value } => {
+                match unify_expression(value, &mut result.eq_classes[0], &context, constraints) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
 
                 match context.get(&place.inner) {
                     Some(ScopeEntry { t, .. }) => {
-                        result.eq_classes[0].add(val.start, &val.t, t, val.end)
+                        result.eq_classes[0].add(value.start, &value.t, t, value.end)
                     }
                     None => unreachable!(),
                 }
             }
-            S::Let(name, mutable, ann, val_adj_type, val) => {
-                result.eq_classes[0].add_single(val.start, val_adj_type, val.end);
+            S::Let {
+                name,
+                mutable,
+                annotation,
+                bound_type,
+                value,
+            } => {
+                result.eq_classes[0].add_single(value.start, bound_type, value.end);
 
-                match unify_expression(val, &mut result.eq_classes[0], &context, constraints) {
+                match unify_expression(value, &mut result.eq_classes[0], &context, constraints) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
 
                 if *mutable {
-                    result.eq_classes[0].add_must_demote(val.start, val_adj_type, &val.t, val.end);
+                    result.eq_classes[0].add_must_demote(
+                        value.start,
+                        bound_type,
+                        &value.t,
+                        value.end,
+                    );
                 } else {
-                    result.eq_classes[0].add_must_promote(val.start, val_adj_type, &val.t, val.end);
+                    result.eq_classes[0].add_must_promote(
+                        value.start,
+                        bound_type,
+                        &value.t,
+                        value.end,
+                    );
                 }
 
-                if let Some(ann) = ann {
-                    result.eq_classes[0].add(ann.start, val_adj_type, &ann.inner, ann.end);
+                if let Some(annotation) = annotation {
+                    result.eq_classes[0].add(
+                        annotation.start,
+                        bound_type,
+                        &annotation.inner,
+                        annotation.end,
+                    );
                 }
 
                 context.insert(
                     name.inner.clone(),
                     ScopeEntry {
-                        t: val_adj_type.clone(),
+                        t: bound_type.clone(),
                         mutable: *mutable,
                         decl_site: Some(name.start),
                     },
@@ -391,13 +412,28 @@ pub fn unify(
                     );
                 }
             }
-            S::If(cond, _, (true_inner, true_inner_constraints), false_inner) => {
-                match unify_expression(cond, &mut result.eq_classes[0], &context, constraints) {
+            S::If {
+                condition,
+                true_inner:
+                    Block {
+                        statements: true_inner,
+                        post_constraints: true_inner_constraints,
+                    },
+                false_inner,
+                ..
+            } => {
+                match unify_expression(condition, &mut result.eq_classes[0], &context, constraints)
+                {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }
 
-                result.eq_classes[0].add_owned(cond.start, &cond.t, Type::Bool, cond.end);
+                result.eq_classes[0].add_owned(
+                    condition.start,
+                    &condition.t,
+                    Type::Bool,
+                    condition.end,
+                );
 
                 let mut inner_result = unify(
                     true_inner,
@@ -411,7 +447,11 @@ pub fn unify(
                 result.any_changes |= inner_result.any_changes;
                 result.eq_classes.append(&mut inner_result.eq_classes);
 
-                if let Some((false_inner, false_inner_constraints)) = false_inner {
+                if let Some(Block {
+                    statements: false_inner,
+                    post_constraints: false_inner_constraints,
+                }) = false_inner
+                {
                     let mut inner_result = unify(
                         false_inner,
                         context.clone(),
@@ -425,7 +465,18 @@ pub fn unify(
                     result.eq_classes.append(&mut inner_result.eq_classes);
                 }
             }
-            S::For(iterator, iter_type, _, from, to, (inner, inner_constraints)) => {
+            S::For {
+                iterator,
+                iterator_type,
+                from,
+                to,
+                inner:
+                    Block {
+                        statements: inner,
+                        post_constraints: inner_constraints,
+                    },
+                ..
+            } => {
                 match unify_expression(from, &mut result.eq_classes[0], &context, constraints) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
@@ -453,7 +504,7 @@ pub fn unify(
                 context.insert(
                     iterator.inner.clone(),
                     ScopeEntry {
-                        t: Rc::new(iter_type.clone()),
+                        t: Rc::new(iterator_type.clone()),
                         mutable: false,
                         decl_site: Some(iterator.start),
                     },

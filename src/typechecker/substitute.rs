@@ -1,5 +1,5 @@
 use super::eq_classes::EqClasses;
-use crate::parser::{Expression, Statement, E, S};
+use crate::parser::{Block, Expression, Statement, E, S};
 
 fn substitute_expression(expression: &mut Expression, eq_classes: &EqClasses) {
     if let Some(t) = eq_classes.find_replacement(&expression.t) {
@@ -7,19 +7,19 @@ fn substitute_expression(expression: &mut Expression, eq_classes: &EqClasses) {
     }
 
     match &mut expression.data {
-        E::Accessor(lhs, rhs) => {
+        E::Accessor { target, index } => {
+            substitute_expression(target, eq_classes);
+            substitute_expression(index, eq_classes);
+        }
+        E::BinaryOp { lhs, rhs, .. } => {
             substitute_expression(lhs, eq_classes);
             substitute_expression(rhs, eq_classes);
         }
-        E::BinaryOp(lhs, _, rhs) => {
-            substitute_expression(lhs, eq_classes);
-            substitute_expression(rhs, eq_classes);
-        }
-        E::UnaryOp(_, inner) => {
+        E::UnaryOp { inner, .. } => {
             substitute_expression(inner, eq_classes);
         }
-        E::FnCall(caller, args) => {
-            substitute_expression(caller, eq_classes);
+        E::FnCall { func, args } => {
+            substitute_expression(func, eq_classes);
             for arg in args {
                 substitute_expression(arg, eq_classes);
             }
@@ -30,7 +30,7 @@ fn substitute_expression(expression: &mut Expression, eq_classes: &EqClasses) {
             }
         }
 
-        E::F64(_) | E::I64(_) | E::Bool(_) | E::Ident(_, _) => (),
+        E::F64(_) | E::I64(_) | E::Bool(_) | E::Ident { .. } => (),
 
         E::OpenTuple(_) => unreachable!(),
     }
@@ -40,29 +40,53 @@ pub fn substitute(block: &mut [Statement], eq_classes: &EqClasses) {
     for statement in block.iter_mut() {
         match &mut statement.data {
             S::Print(val) => substitute_expression(val, eq_classes),
-            S::Assign(_, val) => substitute_expression(val, eq_classes),
-            S::Let(_, _, ann, val_adj_type, val) => {
-                if let Some(t) = eq_classes.find_replacement(val_adj_type) {
-                    *val_adj_type = t;
+            S::Assign { value, .. } => substitute_expression(value, eq_classes),
+            S::Let {
+                annotation,
+                bound_type,
+                value,
+                ..
+            } => {
+                if let Some(t) = eq_classes.find_replacement(bound_type) {
+                    *bound_type = t;
                 }
 
-                substitute_expression(val, eq_classes);
+                substitute_expression(value, eq_classes);
 
-                if let Some(ann) = ann {
-                    if let Some(t) = eq_classes.find_replacement(&ann.inner) {
-                        ann.inner = t;
+                if let Some(annotation) = annotation {
+                    if let Some(t) = eq_classes.find_replacement(&annotation.inner) {
+                        annotation.inner = t;
                     }
                 }
             }
-            S::If(cond, _, (true_inner, _), false_inner) => {
-                substitute_expression(cond, eq_classes);
+            S::If {
+                condition,
+                true_inner:
+                    Block {
+                        statements: true_inner,
+                        ..
+                    },
+                false_inner,
+                ..
+            } => {
+                substitute_expression(condition, eq_classes);
                 substitute(true_inner, eq_classes);
                 match false_inner {
-                    Some((false_inner, _)) => substitute(false_inner, eq_classes),
+                    Some(Block {
+                        statements: false_inner,
+                        ..
+                    }) => substitute(false_inner, eq_classes),
                     None => (),
                 }
             }
-            S::For(_, _, _, from, to, (inner, _)) => {
+            S::For {
+                from,
+                to,
+                inner: Block {
+                    statements: inner, ..
+                },
+                ..
+            } => {
                 substitute_expression(from, eq_classes);
                 substitute_expression(to, eq_classes);
                 substitute(inner, eq_classes);

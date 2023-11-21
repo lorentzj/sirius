@@ -115,7 +115,7 @@ pub fn interpret_expression<'a>(
         E::F64(val) => Value::F64(*val),
         E::I64(val) => Value::I64(*val),
         E::Bool(val) => Value::Bool(*val),
-        E::BinaryOp(lhs, op, rhs) => {
+        E::BinaryOp { lhs, op, rhs } => {
             let (lhs, rhs) = (
                 interpret_expression(lhs, scope, globals, output),
                 interpret_expression(rhs, scope, globals, output),
@@ -123,28 +123,32 @@ pub fn interpret_expression<'a>(
             execute_bin_op(lhs, rhs, op)
         }
 
-        E::UnaryOp(UnaryOp::ArithNeg, inner) => {
-            match interpret_expression(inner, scope, globals, output) {
-                Value::F64(val) => Value::F64(-val),
-                Value::I64(val) => Value::I64(-val),
-                _ => unreachable!(),
-            }
-        }
+        E::UnaryOp {
+            op: UnaryOp::ArithNeg,
+            inner,
+        } => match interpret_expression(inner, scope, globals, output) {
+            Value::F64(val) => Value::F64(-val),
+            Value::I64(val) => Value::I64(-val),
+            _ => unreachable!(),
+        },
 
-        E::UnaryOp(UnaryOp::BoolNeg, inner) => {
-            match interpret_expression(inner, scope, globals, output) {
-                Value::Bool(val) => Value::Bool(!val),
-                _ => unreachable!(),
-            }
-        }
+        E::UnaryOp {
+            op: UnaryOp::BoolNeg,
+            inner,
+        } => match interpret_expression(inner, scope, globals, output) {
+            Value::Bool(val) => Value::Bool(!val),
+            _ => unreachable!(),
+        },
 
-        E::UnaryOp(UnaryOp::Tick, _) => unreachable!(),
+        E::UnaryOp {
+            op: UnaryOp::Tick, ..
+        } => unreachable!(),
 
-        E::Accessor(_, _) => {
+        E::Accessor { .. } => {
             unreachable!()
         }
 
-        E::Ident(name, _) => match scope.get(name) {
+        E::Ident { name, .. } => match scope.get(name) {
             Some(val) => val.clone(),
             None => match globals.get(name) {
                 Some(val) => val.clone(),
@@ -159,7 +163,7 @@ pub fn interpret_expression<'a>(
             }
             Value::Tuple(members)
         }
-        E::FnCall(caller, args) => match interpret_expression(caller, scope, globals, output) {
+        E::FnCall { func, args } => match interpret_expression(func, scope, globals, output) {
             Value::Function(arg_names, body) => {
                 let mut inner_scope = Scope::default();
 
@@ -198,34 +202,45 @@ fn interpret_block<'a>(
 
     for statement in block {
         match &statement.data {
-            S::Let(name, _, _, _, val) => {
-                let val = interpret_expression(val, scope, globals, output);
-                scope.insert(name.inner.clone(), val);
+            S::Let { name, value, .. } => {
+                let value = interpret_expression(value, scope, globals, output);
+                scope.insert(name.inner.clone(), value);
             }
-            S::Assign(place, val) => {
-                let val = interpret_expression(val, scope, globals, output);
-                scope.assign(&place.inner, val);
+            S::Assign { place, value } => {
+                let value = interpret_expression(value, scope, globals, output);
+                scope.assign(&place.inner, value);
             }
             S::Print(val) => {
                 let val = interpret_expression(val, scope, globals, output);
                 output.stdout.push_str(&print_value(val));
                 output.stdout.push('\n');
             }
-            S::If(cond, _, true_inner, false_inner) => {
-                if let Value::Bool(true) = interpret_expression(cond, scope, globals, output) {
-                    if !interpret_block(&true_inner.0, scope, globals, output) {
+            S::If {
+                condition,
+                true_inner,
+                false_inner,
+                ..
+            } => {
+                if let Value::Bool(true) = interpret_expression(condition, scope, globals, output) {
+                    if !interpret_block(&true_inner.statements, scope, globals, output) {
                         scope.pop();
                         return false;
                     }
                 } else if let Some(false_inner) = false_inner {
-                    if !interpret_block(&false_inner.0, scope, globals, output) {
+                    if !interpret_block(&false_inner.statements, scope, globals, output) {
                         scope.pop();
                         return false;
                     }
                 }
             }
 
-            S::For(iterator, _, _, from, to, inner) => {
+            S::For {
+                iterator,
+                from,
+                to,
+                inner,
+                ..
+            } => {
                 let mut i_val = match interpret_expression(from, scope, globals, output) {
                     Value::I64(v) => v,
                     _ => unreachable!(),
@@ -240,7 +255,7 @@ fn interpret_block<'a>(
                 scope.insert(iterator.inner.clone(), Value::I64(i_val));
 
                 while i_val < target {
-                    if !interpret_block(&inner.0, scope, globals, output) {
+                    if !interpret_block(&inner.statements, scope, globals, output) {
                         scope.pop();
                         scope.pop();
                         return false;
@@ -281,7 +296,7 @@ pub fn interpret(ast: AST) -> InterpreterOutput<'static> {
     for (name, function) in ast.iter() {
         globals.insert(
             name.clone(),
-            Value::Function(function.arg_names(), &function.body.0),
+            Value::Function(function.arg_names(), &function.body.statements),
         );
     }
 

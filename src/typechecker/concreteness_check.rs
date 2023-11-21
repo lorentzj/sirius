@@ -17,22 +17,22 @@ fn check_expr_for_foralls(expression: &Expression) -> Vec<Error> {
     }
 
     match &expression.data {
-        E::Accessor(lhs, rhs) => {
+        E::Accessor { target, index } => {
+            errors.extend(check_expr_for_foralls(target));
+            errors.extend(check_expr_for_foralls(index));
+        }
+
+        E::BinaryOp { lhs, rhs, .. } => {
             errors.extend(check_expr_for_foralls(lhs));
             errors.extend(check_expr_for_foralls(rhs));
         }
 
-        E::BinaryOp(lhs, _, rhs) => {
-            errors.extend(check_expr_for_foralls(lhs));
-            errors.extend(check_expr_for_foralls(rhs));
-        }
-
-        E::UnaryOp(_, inner) => {
+        E::UnaryOp { inner, .. } => {
             errors.extend(check_expr_for_foralls(inner));
         }
 
-        E::FnCall(caller, args) => {
-            errors.extend(check_expr_for_foralls(caller));
+        E::FnCall { func, args } => {
+            errors.extend(check_expr_for_foralls(func));
             for arg in args {
                 errors.extend(check_expr_for_foralls(arg));
             }
@@ -44,7 +44,7 @@ fn check_expr_for_foralls(expression: &Expression) -> Vec<Error> {
             }
         }
 
-        E::F64(_) | E::Bool(_) | E::I64(_) | E::Ident(_, _) => (),
+        E::F64(_) | E::Bool(_) | E::I64(_) | E::Ident { .. } => (),
 
         E::OpenTuple(_) => panic!(),
     }
@@ -57,38 +57,47 @@ fn check_stmt_for_foralls(statement: &Statement) -> Vec<Error> {
 
     match &statement.data {
         S::Print(val) => errors.extend(check_expr_for_foralls(val)),
-        S::Assign(_, val) => errors.extend(check_expr_for_foralls(val)),
+        S::Assign { value, .. } => errors.extend(check_expr_for_foralls(value)),
         S::Return(Some(val)) => errors.extend(check_expr_for_foralls(val)),
         S::Return(None) => (),
-        S::Let(_, _, _, val_adj_type, val) => {
-            if !val_adj_type.forall_vars().is_empty() {
+        S::Let {
+            bound_type, value, ..
+        } => {
+            if !bound_type.forall_vars().is_empty() {
                 errors.push(Error::new(
                     ErrorType::Type,
                     format!(
                         "type \"{:?}\" is not concrete; try adding annotations or type arguments",
-                        val_adj_type
+                        bound_type
                     ),
-                    val.start,
-                    val.end,
+                    value.start,
+                    value.end,
                 ));
             }
-            errors.extend(check_expr_for_foralls(val))
+            errors.extend(check_expr_for_foralls(value))
         }
-        S::If(cond, _, true_inner, false_inner) => {
-            errors.extend(check_expr_for_foralls(cond));
-            for stmt in &true_inner.0 {
+        S::If {
+            condition,
+            true_inner,
+            false_inner,
+            ..
+        } => {
+            errors.extend(check_expr_for_foralls(condition));
+            for stmt in &true_inner.statements {
                 errors.extend(check_stmt_for_foralls(stmt));
             }
             if let Some(false_inner) = false_inner {
-                for stmt in &false_inner.0 {
+                for stmt in &false_inner.statements {
                     errors.extend(check_stmt_for_foralls(stmt));
                 }
             }
         }
-        S::For(_, _, _, from, to, inner) => {
+        S::For {
+            from, to, inner, ..
+        } => {
             errors.extend(check_expr_for_foralls(from));
             errors.extend(check_expr_for_foralls(to));
-            for stmt in &inner.0 {
+            for stmt in &inner.statements {
                 errors.extend(check_stmt_for_foralls(stmt));
             }
         }
@@ -100,7 +109,7 @@ fn check_stmt_for_foralls(statement: &Statement) -> Vec<Error> {
 pub fn concreteness_check(function: &Function) -> Vec<Error> {
     let mut errors = vec![];
 
-    for statement in &function.body.0 {
+    for statement in &function.body.statements {
         errors.extend(check_stmt_for_foralls(statement))
     }
 
