@@ -253,6 +253,24 @@ fn main():
     }
 
     #[test]
+    fn generic_ints() {
+        let code = "
+fn apply{A, B}(x: A, f: A->B) -> B:
+    return f(x)
+
+fn lambda(x: f64) -> i64:
+    return 1
+
+fn main():
+    print apply(0., lambda)";
+
+        let mut state = parse(code);
+        typecheck(&mut state, HashMap::default());
+
+        assert_eq!(state.errors, vec![]);
+    }
+
+    #[test]
     fn arg_demote() {
         let code = "
 fn untracked() -> i64:
@@ -280,6 +298,7 @@ fn factorial(x: i64) -> i64:
         return 1
     else:
         return x * factorial(x - 1)
+        
 fn main():
     print factorial((1, 1))
 ";
@@ -295,8 +314,10 @@ fn main():
         let code = "
 fn three_tuple_map{A, B}(x: (A, A, A), f: A->B) -> (B, B, B):
     return (f(x.0), f(x.1), f(x.2))
+
 fn map_test(x: i64) -> bool:
     return x > 0
+
 fn main():
     let z = (1., -1., -0.34)
     print three_tuple_map(z, map_test)

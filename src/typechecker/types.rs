@@ -91,6 +91,31 @@ impl Type {
         }
     }
 
+    pub fn forall_var_in_function(&self, var: usize) -> bool {
+        match self {
+            Type::Function(_, args, ret) => {
+                args.iter().any(|arg| arg.forall_var_in_type(var)) || ret.forall_var_in_type(var)
+            }
+            Type::Tuple(inner) => {
+                inner.iter().any(|i| i.forall_var_in_function(var))
+            }
+            _ => false
+        }
+    }
+
+    pub fn forall_var_in_type(&self, var: usize) -> bool {
+        match self {
+            Type::Function(_, args, ret) => {
+                args.iter().any(|arg| arg.forall_var_in_type(var)) || ret.forall_var_in_type(var)
+            }
+            Type::Tuple(inner) => {
+                inner.iter().any(|i| i.forall_var_in_type(var))
+            }
+            Type::ForAll(v) => *v == var,
+            _ => false
+        }
+    }
+
     pub fn unify(
         &self,
         other: &Type,

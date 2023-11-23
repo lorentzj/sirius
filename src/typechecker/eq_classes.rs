@@ -366,7 +366,13 @@ impl EqClasses {
                             constraints.extend(cs);
 
                             for sub in &mut subs {
-                                sub.1 = sub.1.allow_possible_promotion(curr_forall_var);
+                                // don't allow possible promotion if we're substituting in a function type
+                                // see typechecker::tests::generic_int and typechecker::tests::arg_demote for the two cases
+
+                                if !tree_repr.forall_var_in_function(sub.0) && !b.forall_var_in_function(sub.0) {
+                                    sub.1 = sub.1.allow_possible_promotion(curr_forall_var);
+                                }
+
                                 tree_repr = tree_repr.substitute(sub);
                             }
 
