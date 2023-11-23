@@ -96,10 +96,8 @@ impl Type {
             Type::Function(_, args, ret) => {
                 args.iter().any(|arg| arg.forall_var_in_type(var)) || ret.forall_var_in_type(var)
             }
-            Type::Tuple(inner) => {
-                inner.iter().any(|i| i.forall_var_in_function(var))
-            }
-            _ => false
+            Type::Tuple(inner) => inner.iter().any(|i| i.forall_var_in_function(var)),
+            _ => false,
         }
     }
 
@@ -108,11 +106,9 @@ impl Type {
             Type::Function(_, args, ret) => {
                 args.iter().any(|arg| arg.forall_var_in_type(var)) || ret.forall_var_in_type(var)
             }
-            Type::Tuple(inner) => {
-                inner.iter().any(|i| i.forall_var_in_type(var))
-            }
+            Type::Tuple(inner) => inner.iter().any(|i| i.forall_var_in_type(var)),
             Type::ForAll(v) => *v == var,
-            _ => false
+            _ => false,
         }
     }
 
