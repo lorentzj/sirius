@@ -222,6 +222,7 @@ impl EqClasses {
 
     pub fn generate(
         &mut self,
+        curr_forall_var: &mut usize,
         curr_ind_forall_var: &mut usize,
     ) -> Result<(bool, Vec<Constraint>), Error> {
         let mut constraints = vec![];
@@ -364,7 +365,8 @@ impl EqClasses {
                             Constraint::apply_pos(&mut cs, *start, *end);
                             constraints.extend(cs);
 
-                            for sub in &subs {
+                            for sub in &mut subs {
+                                sub.1 = sub.1.allow_possible_promotion(curr_forall_var);
                                 tree_repr = tree_repr.substitute(sub);
                             }
 
@@ -452,7 +454,7 @@ impl EqClasses {
                                 ),
                                 *start,
                                 *end,
-                            ))
+                            ));
                         }
                     }
                 }

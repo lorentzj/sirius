@@ -2,6 +2,7 @@ use serde::{Serialize, Serializer};
 use std::cmp::Ordering;
 use std::fmt;
 
+use crate::parser::TypeArg;
 use crate::solver::poly::Poly;
 use crate::solver::rational::Rat;
 use crate::solver::Constraint;
@@ -14,7 +15,7 @@ pub enum Type {
     I64(Option<Poly<Rat>>),
     Bool,
     Tuple(Vec<Type>),
-    Function(Vec<String>, Vec<Type>, Box<Type>),
+    Function(Vec<TypeArg>, Vec<Type>, Box<Type>),
     TypeVar(String),
     ForAll(usize),
 }
@@ -74,7 +75,7 @@ impl Type {
         }
     }
 
-    pub fn instantiate_fn(&self, vars: &[String], subs: &[Type]) -> Type {
+    pub fn instantiate_fn(&self, vars: &Vec<TypeArg>, subs: &[Type]) -> Type {
         match self {
             Type::Tuple(v) => Type::Tuple(v.iter().map(|t| t.instantiate_fn(vars, subs)).collect()),
             Type::Function(t_args, i, o) => Type::Function(
@@ -82,7 +83,7 @@ impl Type {
                 i.iter().map(|t| t.instantiate_fn(vars, subs)).collect(),
                 Box::new(o.instantiate_fn(vars, subs)),
             ),
-            Type::TypeVar(name) => match vars.iter().position(|n| n == name) {
+            Type::TypeVar(name) => match vars.iter().position(|n| &n.name() == name) {
                 Some(i) => subs[i].clone(),
                 None => self.clone(),
             },
@@ -281,6 +282,23 @@ impl Type {
                 let mut new_inner = vec![];
                 for t in inner.iter() {
                     new_inner.push(t.promote_inds(curr_ind_forall_var))
+                }
+                Type::Tuple(new_inner)
+            }
+            _ => self.clone(),
+        }
+    }
+
+    pub fn allow_possible_promotion(&self, curr_forall_var: &mut usize) -> Type {
+        match self {
+            Type::I64(None) => {
+                *curr_forall_var += 1;
+                Type::ForAll(*curr_forall_var - 1)
+            }
+            Type::Tuple(inner) => {
+                let mut new_inner = vec![];
+                for t in inner.iter() {
+                    new_inner.push(t.allow_possible_promotion(curr_forall_var))
                 }
                 Type::Tuple(new_inner)
             }

@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::lexer::Op;
-use crate::parser::{Block, Expression, Positioned, Statement, E, S};
+use crate::parser::{Block, Expression, Positioned, Statement, TypeArg, E, S};
 
 pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> {
     match &annotation.data {
@@ -122,7 +122,7 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> 
 pub fn populate_annotation(
     t: &Type,
     curr_forall_var: &mut Option<&mut usize>,
-    type_vars: &[String],
+    type_vars: &Vec<TypeArg>,
 ) -> Result<Type, Error> {
     match t {
         Type::Unknown => Ok(Type::Unknown),
@@ -144,16 +144,27 @@ pub fn populate_annotation(
             }
         }
         Type::TypeVar(name) => {
-            if type_vars.contains(name) {
-                Ok(Type::TypeVar(name.clone()))
-            } else {
-                Err(Error::new(
-                    ErrorType::Type,
-                    format!("type \"{name}\" not found in context"),
-                    0,
-                    0,
-                ))
+            for type_var in type_vars {
+                match type_var {
+                    TypeArg::Type(s) => {
+                        if s == name {
+                            return Ok(Type::TypeVar(name.clone()));
+                        }
+                    }
+                    TypeArg::Ind(s) => {
+                        if s == name {
+                            return Ok(Type::I64(Some(Poly::var(name.clone(), 1))));
+                        }
+                    }
+                }
             }
+
+            Err(Error::new(
+                ErrorType::Type,
+                format!("type \"{name}\" not found in context"),
+                0,
+                0,
+            ))
         }
         Type::Tuple(inner) => {
             let mut populated_inner = vec![];
@@ -183,7 +194,7 @@ fn initialize_expression_types(
     expression: &mut Expression,
     curr_forall_var: &mut usize,
     context: &Scope<ScopeEntry>,
-    type_vars: &[String],
+    type_vars: &Vec<TypeArg>,
     errors: &mut Vec<Error>,
     highlight_map: &mut HashMap<usize, Vec<usize>>,
 ) {
@@ -374,7 +385,7 @@ pub fn initialize_statement_types(
     curr_ind_forall_var: &mut usize,
     context: &mut Scope<ScopeEntry>,
     errors: &mut Vec<Error>,
-    type_vars: &[String],
+    type_vars: &Vec<TypeArg>,
     highlight_map: &mut HashMap<usize, Vec<usize>>,
 ) {
     match &mut statement.data {

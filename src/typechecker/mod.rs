@@ -175,6 +175,7 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
                 scope.clone(),
                 &function.return_type.inner,
                 &mut function_errors,
+                &mut curr_forall_var,
                 &mut curr_ind_forall_var,
                 &mut function.body.post_constraints,
             );
@@ -229,25 +230,41 @@ mod tests {
     use crate::solver::rational::Rat;
 
     #[test]
-    fn basic_typecheck() {
+    fn generic_typecheck() {
         let code = "
 fn three_tuple_map{A, B}(x: (A, A, A), f: A->B) -> (B, B, B):
     return (f(x.0), f(x.1), f(x.2))
-fn map_test_1(x: f64) -> bool:
+
+fn lambda(x: f64) -> bool:
     return x > 0
-fn map_test_2(x: f64) -> i64:
-    if x > 0:
-        return 1
-    else:
-        return -1
+
 fn main():
     let a = (1., -1., -0.34)
-    print three_tuple_map(a, map_test_1)
-    print three_tuple_map{f64}(a, map_test_1)
-    print three_tuple_map{f64, bool}(a, map_test_1)
-    print three_tuple_map{_, bool}(a, map_test_1)
-    print three_tuple_map(a, map_test_2)
-        ";
+    print three_tuple_map(a, lambda)
+    print three_tuple_map{f64}(a, lambda)
+    print three_tuple_map{f64, bool}(a, lambda)
+    print three_tuple_map{_, bool}(a, lambda)
+    print three_tuple_map(a, lambda)";
+
+        let mut state = parse(code);
+        typecheck(&mut state, HashMap::default());
+
+        assert_eq!(state.errors, vec![]);
+    }
+
+    #[test]
+    fn arg_demote() {
+        let code = "
+fn untracked() -> i64:
+    return 1
+    
+fn test(a: i64):
+    return
+
+fn main():
+    let b = untracked()
+    print test(2*b + 1)
+";
 
         let mut state = parse(code);
         typecheck(&mut state, HashMap::default());

@@ -252,17 +252,32 @@ impl Statement {
     }
 }
 
+#[derive(Serialize, Debug, Clone, PartialEq)]
+pub enum TypeArg {
+    Type(String),
+    Ind(String),
+}
+
+impl TypeArg {
+    pub fn name(&self) -> String {
+        match self {
+            TypeArg::Type(s) => s.clone(),
+            TypeArg::Ind(s) => s.clone(),
+        }
+    }
+}
+
 #[derive(Serialize, Debug)]
 pub struct Function {
     pub name: Positioned<String>,
-    pub type_args: Vec<Positioned<String>>,
+    pub type_args: Vec<Positioned<TypeArg>>,
     pub args: Vec<(Positioned<String>, Positioned<Type>)>,
     pub return_type: Positioned<Rc<Type>>,
     pub body: Block,
 }
 
 impl Function {
-    pub fn type_arg_names(&self) -> Vec<String> {
+    pub fn type_arg_names(&self) -> Vec<TypeArg> {
         self.type_args.iter().map(|n| n.inner.clone()).collect()
     }
 
@@ -339,8 +354,7 @@ pub fn parse(code: &str) -> CompilerState {
                             Tok::Identifier(n) => format!("unexpected identifier \"{n}\""),
                             Tok::Op(op) => format!("unexpected operator \"{op:?}\""),
                             Tok::Keyword(k) => format!("unexpected keyword \"{k:?}\""),
-                            Tok::Float(_) => "unexpected constant".into(),
-                            Tok::Int(_) => "unexpected constant".into(),
+                            Tok::Float(_) | Tok::Int(_) => "unexpected constant".into(),
                             Tok::Indent => "unexpected indent".into(),
                             Tok::Dedent => "unexpected dedent".into(),
                             Tok::Error(m) => m,

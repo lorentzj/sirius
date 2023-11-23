@@ -102,6 +102,7 @@ export type Constraint = Positioned<{
 export type Function = {
     name: Positioned<string>,
     type_args: Positioned<string>[],
+    ind_args: Positioned<string>[],
     args: [Positioned<string>, Positioned<string>][],
     return_type: Positioned<string>,
     body: Block

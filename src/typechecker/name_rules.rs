@@ -10,7 +10,7 @@ pub fn check_fn_args(function: &Function) -> Vec<Error> {
         if type_arg_names.contains(&type_arg.inner) {
             errors.push(Error::new(
                 ErrorType::Name,
-                format!("duplicate type argument name \"{}\"", type_arg.inner),
+                format!("duplicate type argument name \"{}\"", type_arg.inner.name()),
                 type_arg.start,
                 type_arg.end,
             ));
@@ -30,7 +30,7 @@ pub fn check_fn_args(function: &Function) -> Vec<Error> {
             ));
         }
 
-        if type_arg_names.contains(&arg.inner) {
+        if type_arg_names.iter().any(|a| a.name() == arg.inner) {
             errors.push(Error::new(
                 ErrorType::Name,
                 format!("duplicate argument/type argument name \"{}\"", arg.inner),

@@ -312,6 +312,7 @@ pub fn unify(
     mut context: Scope<ScopeEntry>,
     return_type: &Rc<Type>,
     errors: &mut Vec<Error>,
+    curr_forall_var: &mut usize,
     curr_ind_forall_var: &mut usize,
     constraints: &mut Vec<Constraint>,
 ) -> UnificationResult {
@@ -440,6 +441,7 @@ pub fn unify(
                     context.clone(),
                     return_type,
                     errors,
+                    curr_forall_var,
                     curr_ind_forall_var,
                     true_inner_constraints,
                 );
@@ -457,6 +459,7 @@ pub fn unify(
                         context.clone(),
                         return_type,
                         errors,
+                        curr_forall_var,
                         curr_ind_forall_var,
                         false_inner_constraints,
                     );
@@ -515,6 +518,7 @@ pub fn unify(
                     context.clone(),
                     return_type,
                     errors,
+                    curr_forall_var,
                     curr_ind_forall_var,
                     inner_constraints,
                 );
@@ -528,7 +532,7 @@ pub fn unify(
     }
     context.pop();
 
-    match result.eq_classes[0].generate(curr_ind_forall_var) {
+    match result.eq_classes[0].generate(curr_forall_var, curr_ind_forall_var) {
         Ok((block_changes, mut cs)) => {
             constraints.append(&mut cs);
             result.any_changes |= block_changes;

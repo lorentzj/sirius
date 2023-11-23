@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::lexer::Op;
-use crate::parser::{Function, Block, Statement, E, Expression, UnaryOp, Positioned, expr_to_pos_type};
+use crate::parser::{Function, Block, Statement, E, Expression, UnaryOp, TypeArg, Positioned, expr_to_pos_type};
 use crate::typechecker::Type;
 use crate::error::Error;
 
@@ -42,9 +42,11 @@ pub Fn: Function = {
             }));
         }
 
+        let type_args = type_args.unwrap_or(vec![]);
+
         Function {
             name: Positioned::new(name_place, name, name_place + 1),
-            type_args: type_args.unwrap_or(vec![]),
+            type_args,
             args: args_typed,
             return_type: return_type.unwrap_or(Positioned::new(ret_place, Rc::new(Type::Void), ret_place + 1)),
             body: Block { statements: inner, post_constraints: vec![] }
@@ -70,7 +72,7 @@ FnSigParamsInner: Vec<(Positioned<String>, Expression)> = {
     }
 }
 
-FnTypeParams: Vec<Positioned<String>> = {
+FnTypeParams: Vec<Positioned<TypeArg>> = {
     <start: @L> "{" <params: FnTypeParamsInner> "}" <end: @R> => {
         highlight_map.insert(start, vec![start, end - 1]);
         highlight_map.insert(end - 1, vec![start, end - 1]);
@@ -79,19 +81,32 @@ FnTypeParams: Vec<Positioned<String>> = {
     }
 }
 
-FnTypeParamsInner: Vec<Positioned<String>> = {
+FnTypeParamsInner: Vec<Positioned<TypeArg>> = {
     () => vec![],
     <start: @L> <name: "identifier"> <end: @R> => {
         let curr_type_tokens: Vec<usize> = (start..end).collect();
         type_tokens.extend(curr_type_tokens);
 
-        vec![Positioned::new(start, name, end)]
+        vec![Positioned::new(start, TypeArg::Type(name), end)]
+    },
+    <start: @L> "#" <name: "identifier"> <end: @R> => {
+        let curr_type_tokens: Vec<usize> = (start..end).collect();
+        type_tokens.extend(curr_type_tokens);
+
+        vec![Positioned::new(start, TypeArg::Ind(name), end)]
     },
     <mut head: FnTypeParamsInner> "," <start: @L> <name: "identifier"> <end: @R> => {
         let curr_type_tokens: Vec<usize> = (start..end).collect();
         type_tokens.extend(curr_type_tokens);
 
-        head.push(Positioned::new(start, name, end));
+        head.push(Positioned::new(start, TypeArg::Type(name), end));
+        head
+    },
+    <mut head: FnTypeParamsInner> "," <start: @L> "#" <name: "identifier"> <end: @R> => {
+        let curr_type_tokens: Vec<usize> = (start..end).collect();
+        type_tokens.extend(curr_type_tokens);
+
+        head.push(Positioned::new(start, TypeArg::Ind(name), end));
         head
     }
 }
@@ -431,6 +446,7 @@ extern {
         "newline"    => crate::lexer::Tok::NewLine,
         "indent"     => crate::lexer::Tok::Indent,
         "dedent"     => crate::lexer::Tok::Dedent,        
+        "#"          => crate::lexer::Tok::Pound,
         "."          => crate::lexer::Tok::Op(Op::Dot),
         "^"          => crate::lexer::Tok::Op(Op::Exp),
         "'"          => crate::lexer::Tok::Op(Op::Tick),
