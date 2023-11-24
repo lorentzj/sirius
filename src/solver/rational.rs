@@ -271,7 +271,16 @@ impl ops::Mul<Rat> for Rat {
 impl ops::Mul<i64> for Rat {
     type Output = Self;
 
-    fn mul(mut self, rhs: i64) -> Self {
+    fn mul(mut self, mut rhs: i64) -> Self {
+        if rhs < 0 {
+            rhs *= -1;
+            if self.num == i64::MIN {
+                self.num >>= 1;
+                self.den >>= 1;
+            }
+            self.num *= -1;
+        }
+
         if self.den % rhs == 0 {
             self.den /= rhs;
         } else {

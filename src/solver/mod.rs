@@ -6,11 +6,55 @@ use crate::error::{Error, ErrorType};
 use rational::Rat;
 
 pub mod field;
+pub mod interval;
 pub mod poly;
 pub mod rational;
 pub mod univariate;
 
-type Poly = poly::Poly<Rat>;
+#[derive(Serialize, Clone, PartialEq, Eq, Debug)]
+pub enum Truth {
+    True,
+    False,
+    Undetermined,
+}
+
+impl Truth {
+    pub fn or(&self, other: Truth) -> Truth {
+        match self {
+            Truth::True => Truth::True,
+            Truth::Undetermined => match other {
+                Truth::True => Truth::True,
+                _ => Truth::Undetermined,
+            },
+            Truth::False => other,
+        }
+    }
+
+    pub fn and(&self, other: Truth) -> Truth {
+        match self {
+            Truth::True => other,
+            Truth::Undetermined => match other {
+                Truth::False => Truth::False,
+                _ => Truth::Undetermined,
+            },
+            Truth::False => Truth::False,
+        }
+    }
+
+    pub fn is_true(&self) -> bool {
+        matches! {self, Truth::True}
+    }
+
+    pub fn is_false(&self) -> bool {
+        matches! {self, Truth::False}
+    }
+
+    pub fn is_undetermined(&self) -> bool {
+        matches! {self, Truth::Undetermined}
+    }
+}
+
+pub(crate) type Poly = poly::Poly<Rat>;
 
 #[allow(clippy::enum_variant_names)]
 #[derive(Serialize, Clone, PartialEq, Eq, Debug)]
@@ -114,7 +158,8 @@ fn filter_constants(lst: &mut Vec<Constraint>) -> Vec<Error> {
 
     lst.retain(|c| {
         let rel_zero = c.get_rel_zero();
-        if let Some(v) = rel_zero.get_constant_val() {
+
+        if let Some(v) = rel_zero.get_constant_i64() {
             if let C::Eq(a, b) = &c.data && v != 0 {
                 errors.push(Error::new(
                     ErrorType::Constraint,

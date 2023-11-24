@@ -84,7 +84,7 @@ pub fn arith_coerce(
                                     let (qs, rem) =
                                         lval.clone().compound_divide(&vec![rval.clone()]);
 
-                                    if let Some(0) = rem.get_constant_val() {
+                                    if rem.is_zero() {
                                         qs[0].clone()
                                     } else {
                                         return Ok(Type::I64(None));
@@ -92,7 +92,7 @@ pub fn arith_coerce(
                                 }
                             }
                             Op::Exp => {
-                                if let Some(exp) = rval.get_constant_val() {
+                                if let Some(exp) = rval.get_constant_i64() {
                                     if exp < 0 {
                                         return Err(Error::new(
                                             ErrorType::Constraint,

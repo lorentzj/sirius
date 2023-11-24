@@ -2,13 +2,21 @@ use super::types::Type;
 use super::ScopeEntry;
 use crate::error::{Error, ErrorType};
 use crate::scope::Scope;
-use crate::solver::poly::Poly;
 use crate::solver::rational::Rat;
+use crate::solver::Poly;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::lexer::Op;
 use crate::parser::{Block, Expression, Positioned, Statement, TypeArg, E, S};
+
+fn annotation_type_possible_ind(annotation: &Type) -> Option<Poly> {
+    match annotation {
+        Type::TypeVar(name) => Some(Poly::var(name.clone(), 1)),
+        Type::I64(Some(i)) => Some(i.clone()),
+        _ => None,
+    }
+}
 
 pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> {
     match &annotation.data {
@@ -76,7 +84,10 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> 
             let lhs = annotation_type(lhs)?;
             let rhs = annotation_type(rhs)?;
 
-            if let (Type::I64(Some(lhs_ind)), Type::I64(Some(rhs_ind))) = (lhs, rhs) {
+            let lhs_coerced_ind = annotation_type_possible_ind(&lhs);
+            let rhs_coerced_ind = annotation_type_possible_ind(&rhs);
+
+            if let (Some(lhs_ind), Some(rhs_ind)) = (lhs_coerced_ind, rhs_coerced_ind) {
                 Ok(Type::I64(Some(lhs_ind + rhs_ind)))
             } else {
                 Err((annotation.start, annotation.end))
@@ -91,7 +102,10 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> 
             let lhs = annotation_type(lhs)?;
             let rhs = annotation_type(rhs)?;
 
-            if let (Type::I64(Some(lhs_ind)), Type::I64(Some(rhs_ind))) = (lhs, rhs) {
+            let lhs_coerced_ind = annotation_type_possible_ind(&lhs);
+            let rhs_coerced_ind = annotation_type_possible_ind(&rhs);
+
+            if let (Some(lhs_ind), Some(rhs_ind)) = (lhs_coerced_ind, rhs_coerced_ind) {
                 Ok(Type::I64(Some(lhs_ind - rhs_ind)))
             } else {
                 Err((annotation.start, annotation.end))
@@ -106,7 +120,10 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> 
             let lhs = annotation_type(lhs)?;
             let rhs = annotation_type(rhs)?;
 
-            if let (Type::I64(Some(lhs_ind)), Type::I64(Some(rhs_ind))) = (lhs, rhs) {
+            let lhs_coerced_ind = annotation_type_possible_ind(&lhs);
+            let rhs_coerced_ind = annotation_type_possible_ind(&rhs);
+
+            if let (Some(lhs_ind), Some(rhs_ind)) = (lhs_coerced_ind, rhs_coerced_ind) {
                 Ok(Type::I64(Some(lhs_ind * rhs_ind)))
             } else {
                 Err((annotation.start, annotation.end))
@@ -129,7 +146,45 @@ pub fn populate_annotation(
         Type::Void => Ok(Type::Void),
         Type::Bool => Ok(Type::Bool),
         Type::F64 => Ok(Type::F64),
-        Type::I64(i) => Ok(Type::I64(i.clone())),
+        Type::I64(i) => {
+            if let Some(i) = i {
+                for var in &i.var_list() {
+                    let mut found = false;
+                    for t_var in type_vars {
+                        match t_var {
+                            TypeArg::Ind(x) => {
+                                if x == var {
+                                    found = true
+                                }
+                            }
+                            TypeArg::Type(x) => {
+                                if x == var {
+                                    return Err(Error::new(
+                                        ErrorType::Type,
+                                        format!("type \"{var}\" is not a poly type"),
+                                        0,
+                                        0,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+
+                    if !found {
+                        return Err(Error::new(
+                            ErrorType::Type,
+                            format!("poly type \"{var}\" not found in context"),
+                            0,
+                            0,
+                        ));
+                    }
+                }
+
+                Ok(Type::I64(Some(i.clone())))
+            } else {
+                Ok(Type::I64(None))
+            }
+        }
         Type::ForAll(_) => {
             if let Some(curr_forall_var) = curr_forall_var.as_deref_mut() {
                 *curr_forall_var += 1;

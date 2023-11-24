@@ -531,4 +531,17 @@ fn main():
             panic!("main should have let, let, if")
         }
     }
+
+    #[test]
+    fn basic_constraint_violation() {
+        let code = "
+fn test{#A}(a: A) -> A:
+    let x = a + 1
+    return x";
+
+        let mut state = parse(code);
+        typecheck(&mut state, HashMap::default());
+
+        assert!(state.errors[0].error_type == ErrorType::Constraint);
+    }
 }

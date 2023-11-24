@@ -20,6 +20,14 @@ impl<T: Field> Mono<T> {
             .unwrap_or(0)
     }
 
+    pub fn max_deg(&self) -> usize {
+        self.vars
+            .iter()
+            .map(|(_, pow)| *pow as usize)
+            .max()
+            .unwrap_or(0)
+    }
+
     pub fn coef(&self, var: &str) -> (usize, Mono<T>) {
         let mut new_vars = vec![];
         let mut deg = 0;

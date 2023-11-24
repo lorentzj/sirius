@@ -189,3 +189,12 @@ macro_rules! system {
 
     ( $($t:tt)* ) => { $crate::system! { @accumulate [] [] $($t)* } }
 }
+
+#[macro_export]
+macro_rules! poly {
+    ($($t:tt)*) => ({
+        let mut sys = $crate::system!{ $($t)* };
+        assert!(sys.members.len() == 1);
+        sys.members.pop().unwrap()
+    })
+}

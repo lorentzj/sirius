@@ -6,6 +6,7 @@ pub mod system;
 use super::field::Field;
 use super::poly::mono::*;
 use super::rational::{gcd, Rat};
+use super::Truth;
 use serde::{Serialize, Serializer};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -14,12 +15,18 @@ pub struct Poly<T: Field> {
 }
 
 impl Poly<Rat> {
-    pub fn get_constant_val(&self) -> Option<i64> {
+    pub fn get_constant_i64(&self) -> Option<i64> {
+        self.get_constant_val().and_then(|s| s.try_into().ok())
+    }
+}
+
+impl<T: Field> Poly<T> {
+    pub fn get_constant_val(&self) -> Option<T> {
         if self.terms.is_empty() {
-            Some(0)
+            Some(T::zero())
         } else if self.terms.len() == 1 {
             if self.terms[0].vars.is_empty() {
-                self.terms[0].val.try_into().ok()
+                Some(self.terms[0].val.clone())
             } else {
                 None
             }
@@ -27,9 +34,7 @@ impl Poly<Rat> {
             None
         }
     }
-}
 
-impl<T: Field> Poly<T> {
     pub fn constant(val: T) -> Self {
         Self {
             terms: if val.is_zero() {
@@ -105,6 +110,13 @@ impl<T: Field> Poly<T> {
             .fold(0, |acc, v| acc.max(v))
     }
 
+    pub fn max_deg(&self) -> usize {
+        self.terms
+            .iter()
+            .map(|term| term.max_deg())
+            .fold(0, |acc, v| acc.max(v))
+    }
+
     pub fn coefs(&self, var: &str) -> Vec<Poly<T>> {
         let deg = self.deg(var);
         let mut coefs: Vec<_> = std::iter::repeat(Poly::constant(T::zero()))
@@ -158,6 +170,56 @@ impl<T: Field> Poly<T> {
         }
 
         new
+    }
+
+    pub fn greater(&self, other: Self) -> Truth {
+        match (self.clone() - other).get_constant_val() {
+            Some(v) => {
+                if v > T::zero() {
+                    Truth::True
+                } else {
+                    Truth::False
+                }
+            }
+            None => Truth::Undetermined,
+        }
+    }
+
+    pub fn less(&self, other: Self) -> Truth {
+        match (self.clone() - other).get_constant_val() {
+            Some(v) => {
+                if v < T::zero() {
+                    Truth::True
+                } else {
+                    Truth::False
+                }
+            }
+            None => Truth::Undetermined,
+        }
+    }
+
+    pub fn equal(&self, other: Self) -> Truth {
+        if self == &other {
+            Truth::True
+        } else if (self.clone() - other).max_deg() == 0 {
+            Truth::False
+        } else {
+            Truth::Undetermined
+        }
+    }
+
+    pub fn var_list(&self) -> Vec<String> {
+        let mut r = vec![];
+
+        for term in &self.terms {
+            for (var, _) in &term.vars {
+                if !r.contains(var) {
+                    r.push(var.clone())
+                }
+            }
+        }
+
+        r
     }
 }
 
