@@ -38,7 +38,7 @@ export function parseErrorMessage(errorMessage: string): HTMLElement {
     return messageElement;
 }
 
-export function updateErrorELement(displayErrorsElem: HTMLElement, errorElem: HTMLElement, errors: types.Error[], tokens: types.Token[]) {
+export function updateErrorElement(displayErrorsElem: HTMLElement, errorElem: HTMLElement, errors: types.Error[], tokens: types.Token[]) {
     displayErrorsElem.innerHTML = `Errors (${errors.length})`;
     errorElem.innerHTML = '';
     if(errors.length !== 0) {

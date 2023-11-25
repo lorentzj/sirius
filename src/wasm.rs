@@ -8,10 +8,16 @@ use wasm_bindgen::prelude::*;
 extern crate console_error_panic_hook;
 
 #[wasm_bindgen]
+pub fn lex(code: String) -> String {
+    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+    serde_json::to_string(&parser::parse(&code, true)).unwrap()
+}
+
+#[wasm_bindgen]
 pub fn parse(code: String) -> String {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-    let mut state = parser::parse(&code);
+    let mut state = parser::parse(&code, false);
 
     typechecker::typecheck(&mut state, stdlib());
 
@@ -22,7 +28,7 @@ pub fn parse(code: String) -> String {
 pub fn interpret(code: String) -> String {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-    let mut state = parser::parse(&code);
+    let mut state = parser::parse(&code, false);
     let stdlib = stdlib();
 
     typechecker::typecheck(&mut state, stdlib);

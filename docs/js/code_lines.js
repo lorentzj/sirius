@@ -46,12 +46,14 @@ export class CodeLines {
         }
     };
     code;
+    editId;
     lastCaretPosition;
     history;
     constructor() {
         this.code = [''];
         this.lastCaretPosition = { line: 0, offset: 0 };
         this.history = new ActionHistory(50);
+        this.editId = 0;
     }
     insertWithoutRecord(at, content) {
         this.lastCaretPosition.line = at.line;
@@ -83,12 +85,15 @@ export class CodeLines {
         this.lastCaretPosition.offset = from.offset;
     }
     insert(at, content) {
+        this.editId += 1;
         this.history.executeAction(new CodeLines.InsertAction(this, at, content));
     }
     delete(from, to) {
+        this.editId += 1;
         this.history.executeAction(new CodeLines.DeleteAction(this, from, to));
     }
     deleteAndInsert(from, to, content) {
+        this.editId += 1;
         this.history.executeAction(new CompositeAction([
             new CodeLines.DeleteAction(this, from, to),
             new CodeLines.InsertAction(this, from, content)
@@ -116,10 +121,15 @@ export class CodeLines {
             return ret.join('\n');
         }
     }
+    toString() {
+        return this.code.join('\n') + '\n';
+    }
     undo() {
+        this.editId -= 1;
         this.history.undoAction();
     }
     redo() {
+        this.editId += 1;
         this.history.redoAction();
     }
 }

@@ -4,6 +4,11 @@
 * @param {string} code
 * @returns {string}
 */
+export function lex(code: string): string;
+/**
+* @param {string} code
+* @returns {string}
+*/
 export function parse(code: string): string;
 /**
 * @param {string} code
@@ -15,6 +20,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
+  readonly lex: (a: number, b: number, c: number) => void;
   readonly parse: (a: number, b: number, c: number) => void;
   readonly interpret: (a: number, b: number, c: number) => void;
   readonly __wbindgen_add_to_stack_pointer: (a: number) => number;

@@ -59,7 +59,8 @@ export class CodeLines {
         }
     }
 
-    code: string[]
+    code: string[];
+    editId: number;
     lastCaretPosition: CodePosition;
     private history: ActionHistory<CodeLines>;
 
@@ -67,6 +68,7 @@ export class CodeLines {
         this.code = [''];
         this.lastCaretPosition = {line: 0, offset: 0};
         this.history = new ActionHistory(50);
+        this.editId = 0;
     }
 
     private insertWithoutRecord(at: CodePosition, content: string) {
@@ -109,14 +111,17 @@ export class CodeLines {
     }
 
     insert(at: CodePosition, content: string) {
+        this.editId += 1;
         this.history.executeAction(new CodeLines.InsertAction(this, at, content));
     }
 
     delete(from: CodePosition, to: CodePosition) {
+        this.editId += 1;
         this.history.executeAction(new CodeLines.DeleteAction(this, from, to));
     }
 
     deleteAndInsert(from: CodePosition, to: CodePosition, content: string) {
+        this.editId += 1;
         this.history.executeAction(new CompositeAction([
             new CodeLines.DeleteAction(this, from, to),
             new CodeLines.InsertAction(this, from, content)
@@ -146,11 +151,17 @@ export class CodeLines {
         }
     }
 
+    toString(): string {
+        return this.code.join('\n') + '\n';
+    }
+
     undo() {
+        this.editId -= 1;
         this.history.undoAction();
     }
 
     redo() {
+        this.editId += 1;
         this.history.redoAction();
     }
 }

@@ -243,7 +243,7 @@ fn main():
     print three_tuple_map{_, bool}(a, lambda)
     print three_tuple_map(a, lambda)";
 
-        let mut state = parse(code);
+        let mut state = parse(code, false);
         typecheck(&mut state, HashMap::default());
 
         assert_eq!(state.errors, vec![]);
@@ -261,7 +261,7 @@ fn lambda(x: f64) -> i64:
 fn main():
     print apply(0., lambda)";
 
-        let mut state = parse(code);
+        let mut state = parse(code, false);
         typecheck(&mut state, HashMap::default());
 
         assert_eq!(state.errors, vec![]);
@@ -281,7 +281,7 @@ fn main():
     print test(2*b + 1)
 ";
 
-        let mut state = parse(code);
+        let mut state = parse(code, false);
         typecheck(&mut state, HashMap::default());
 
         assert_eq!(state.errors, vec![]);
@@ -300,7 +300,7 @@ fn main():
     print factorial((1, 1))
 ";
 
-        let mut state = parse(code);
+        let mut state = parse(code, false);
         typecheck(&mut state, HashMap::default());
 
         assert_eq!(ErrorType::Type, state.errors[0].error_type);
@@ -320,7 +320,7 @@ fn main():
     print three_tuple_map(z, map_test)
 ";
 
-        let mut state = parse(code);
+        let mut state = parse(code, false);
         typecheck(&mut state, HashMap::default());
 
         assert_eq!(ErrorType::Type, state.errors[0].error_type);
@@ -333,7 +333,7 @@ fn main():
     let x = 1 + 1 + 1
 ";
 
-        let mut state = parse(code);
+        let mut state = parse(code, false);
         typecheck(&mut state, HashMap::default());
 
         assert!(
@@ -355,7 +355,7 @@ fn main():
     print x
 ";
 
-        let mut state = parse(code);
+        let mut state = parse(code, false);
         typecheck(&mut state, HashMap::default());
 
         assert_eq!(ErrorType::Type, state.errors[0].error_type);
@@ -370,7 +370,7 @@ fn main():
     let f = double
 ";
 
-        let mut state = parse(code);
+        let mut state = parse(code, false);
         typecheck(&mut state, HashMap::default());
 
         assert_eq!(ErrorType::Type, state.errors[0].error_type);
@@ -387,7 +387,7 @@ fn main():
     let e = d.0.1
 ";
 
-        let mut state = parse(code);
+        let mut state = parse(code, false);
         typecheck(&mut state, HashMap::default());
 
         assert!(state.errors.is_empty());
@@ -477,7 +477,7 @@ fn main():
             let z = x + y
 ";
 
-        let mut state = parse(code);
+        let mut state = parse(code, false);
         typecheck(&mut state, HashMap::default());
 
         assert!(state.errors.is_empty());
@@ -497,7 +497,7 @@ fn main():
         let z = x + y
 ";
 
-        let mut state = parse(code);
+        let mut state = parse(code, false);
         typecheck(&mut state, HashMap::default());
 
         let first_let_stmt = &state.ast["main"].body.statements[0].data;
@@ -535,7 +535,7 @@ fn main():
 fn test{#A}(a: A) -> A:
     return a + 1";
 
-        let mut state = parse(code);
+        let mut state = parse(code, false);
         typecheck(&mut state, HashMap::default());
 
         assert!(state.errors[0].error_type == ErrorType::Constraint);

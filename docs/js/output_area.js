@@ -29,7 +29,7 @@ export function parseErrorMessage(errorMessage) {
     messageElement.appendChild(document.createTextNode(errorMessage.substring(i)));
     return messageElement;
 }
-export function updateErrorELement(displayErrorsElem, errorElem, errors, tokens) {
+export function updateErrorElement(displayErrorsElem, errorElem, errors, tokens) {
     displayErrorsElem.innerHTML = `Errors (${errors.length})`;
     errorElem.innerHTML = '';
     if (errors.length !== 0) {

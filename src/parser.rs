@@ -302,53 +302,75 @@ pub struct CompilerState {
     pub ast: AST,
 }
 
-pub fn parse(code: &str) -> CompilerState {
-    let tokens: Vec<_> = tokenize(code);
-    let mut errors: Vec<Error> = vec![];
-    let mut type_tokens: Vec<usize> = vec![];
-    let mut highlight_map: HashMap<usize, Vec<usize>> = HashMap::default();
+pub fn parse(code: &str, only_lex: bool) -> CompilerState {
+    let tokens = tokenize(code);
 
-    match grammar::ASTParser::new().parse(
-        &mut highlight_map,
-        &mut type_tokens,
-        &mut errors,
-        tokens
-            .iter()
-            .enumerate()
-            .filter(|(_, token)| {
-                !matches!(
-                    token,
-                    Token {
-                        data: Tok::Comment,
-                        ..
-                    }
-                )
-            })
-            .map(|(i, token)| Ok((i, token.data.clone(), i + 1))),
-    ) {
-        Ok(ast) => CompilerState {
+    let mut token_errors: Vec<_> = tokens
+        .iter()
+        .enumerate()
+        .filter_map(|(i, t)| match &t.data {
+            Tok::Error(msg) => Some(Error::new(ErrorType::Syntax, msg.clone(), i, i + 1)),
+            Tok::IndentError(msg) => Some(Error::new(ErrorType::Syntax, msg.clone(), i, i + 1)),
+            _ => None,
+        })
+        .collect();
+
+    token_errors.truncate(1);
+
+    if only_lex {
+        CompilerState {
             tokens,
-            errors,
-            type_tokens,
-            highlight_map,
-            ast,
-        },
-        Err(err) => {
-            let error = match err {
-                ParseError::InvalidToken { location } => Error::new(
-                    ErrorType::Syntax,
-                    "invalid token".into(),
-                    location,
-                    location + 1,
-                ),
-                ParseError::UnrecognizedEOF { location, .. } => Error::new(
-                    ErrorType::Syntax,
-                    "unexpected EOF".into(),
-                    location - 1,
-                    location,
-                ),
-                ParseError::UnrecognizedToken { token, .. } | ParseError::ExtraToken { token } => {
-                    Error::new(
+            errors: token_errors,
+            type_tokens: vec![],
+            highlight_map: HashMap::default(),
+            ast: HashMap::default(),
+        }
+    } else {
+        let mut errors: Vec<Error> = vec![];
+        let mut type_tokens: Vec<usize> = vec![];
+        let mut highlight_map: HashMap<usize, Vec<usize>> = HashMap::default();
+
+        match grammar::ASTParser::new().parse(
+            &mut highlight_map,
+            &mut type_tokens,
+            &mut errors,
+            tokens
+                .iter()
+                .enumerate()
+                .filter(|(_, token)| {
+                    !matches!(
+                        token,
+                        Token {
+                            data: Tok::Comment,
+                            ..
+                        }
+                    )
+                })
+                .map(|(i, token)| Ok((i, token.data.clone(), i + 1))),
+        ) {
+            Ok(ast) => CompilerState {
+                tokens,
+                errors,
+                type_tokens,
+                highlight_map,
+                ast,
+            },
+            Err(err) => {
+                let error = match err {
+                    ParseError::InvalidToken { location } => Error::new(
+                        ErrorType::Syntax,
+                        "invalid token".into(),
+                        location,
+                        location + 1,
+                    ),
+                    ParseError::UnrecognizedEOF { location, .. } => Error::new(
+                        ErrorType::Syntax,
+                        "unexpected EOF".into(),
+                        location - 1,
+                        location,
+                    ),
+                    ParseError::UnrecognizedToken { token, .. }
+                    | ParseError::ExtraToken { token } => Error::new(
                         ErrorType::Syntax,
                         match token.1 {
                             Tok::Identifier(n) => format!("unexpected identifier \"{n}\""),
@@ -363,18 +385,18 @@ pub fn parse(code: &str) -> CompilerState {
                         },
                         token.0,
                         token.2,
-                    )
-                }
-                ParseError::User { error } => error,
-            };
+                    ),
+                    ParseError::User { error } => error,
+                };
 
-            errors.push(error);
-            CompilerState {
-                tokens,
-                errors,
-                type_tokens: vec![],
-                highlight_map: HashMap::default(),
-                ast: HashMap::default(),
+                errors.push(error);
+                CompilerState {
+                    tokens,
+                    errors,
+                    type_tokens: vec![],
+                    highlight_map: HashMap::default(),
+                    ast: HashMap::default(),
+                }
             }
         }
     }
