@@ -4,15 +4,7 @@ import * as types from './types.js';
 import * as output_area from './output_area.js';
 import { CodeLines } from './code_lines.js';
 import { load_demo_programs } from './demo_programs.js';
-async function testAs() {
-    let a = new Promise(r => setTimeout(() => { console.log('200'); return r; }, 200));
-    let b = new Promise(r => setTimeout(() => { console.log('400'); return r; }, 400));
-    await a;
-}
 document.body.onload = () => {
-    testAs().then(() => {
-        console.log('exited testas');
-    });
     const parserDelayMs = 200;
     let runId = 0;
     Promise.all([init(), load_demo_programs()]).then(([_, demo_programs]) => {
@@ -29,8 +21,11 @@ document.body.onload = () => {
         if (!window.Worker) {
             console.error('No WebWorkers!');
         }
-        const parserWorker = new Worker('../js/parser_worker.js', { 'type': 'module' });
-        const interpreterWorker = new Worker('../js/interpreter_worker.js', { 'type': 'module' });
+        const currURL = new URL(import.meta.url);
+        const currURLPathPieces = currURL.pathname.split('/');
+        const currURLParentParent = currURLPathPieces.slice(undefined, currURLPathPieces.length - 2).join('/');
+        const parserWorker = new Worker(`${currURLParentParent}/js/parser_worker.js`, { 'type': 'module' });
+        const interpreterWorker = new Worker(`${currURLParentParent}/js/interpreter_worker.js`, { 'type': 'module' });
         if (editorElem !== null
             && tooltipElem !== null
             && displayErrorsElem !== null
