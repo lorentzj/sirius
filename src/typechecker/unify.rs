@@ -321,6 +321,10 @@ pub fn unify(
         eq_classes: vec![EqClasses::new()],
     };
 
+    if !errors.is_empty() {
+        return result;
+    }
+
     context.push();
     for statement in block {
         match &mut statement.data {

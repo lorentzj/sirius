@@ -121,7 +121,6 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
         //     - checks assignment & annotation legality
 
         // if this pass succeeds, we can try unification
-
         let mut function_errors = vec![];
 
         let mut curr_forall_var = 0;
@@ -195,7 +194,6 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
         }
 
         // concreteness check - no unbound type vars should be left in the function body
-
         function_errors.extend(concreteness_check(function));
 
         if !function_errors.is_empty() {
@@ -207,7 +205,6 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
         add_preconditions::add_preconditions(&mut function.body.statements);
 
         // constraint check - pass value constraints to solver
-
         function_errors.extend(constraint_check(function));
 
         if !function_errors.is_empty() {
@@ -536,12 +533,12 @@ fn main():
     fn basic_constraint_violation() {
         let code = "
 fn test{#A}(a: A) -> A:
-    let x = a + 1
-    return x";
+    return a + 1";
 
         let mut state = parse(code);
         typecheck(&mut state, HashMap::default());
 
         assert!(state.errors[0].error_type == ErrorType::Constraint);
+        assert!(state.errors.len() == 1);
     }
 }

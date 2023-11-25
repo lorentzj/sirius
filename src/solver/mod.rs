@@ -1,5 +1,3 @@
-// with thanks to Prof. Emre Sertöz for the great lectures on Computational Algebraic Geometry on YouTube.
-
 use serde::Serialize;
 
 use crate::error::{Error, ErrorType};
@@ -9,6 +7,7 @@ pub mod field;
 pub mod interval;
 pub mod poly;
 pub mod rational;
+pub mod system;
 pub mod univariate;
 
 #[derive(Serialize, Clone, PartialEq, Eq, Debug)]
@@ -150,6 +149,13 @@ pub fn solve(preconditions: &[Constraint], postconditions: &[Constraint]) -> Vec
     errors.extend(filter_constants(&mut preconditions));
     errors.extend(filter_constants(&mut postconditions));
 
+    if !errors.is_empty() {
+        return errors;
+    }
+
+    let _postconditions = system::System::new(preconditions.iter().chain(postconditions.iter()));
+    let _preconditions = system::System::new(preconditions.iter());
+
     errors
 }
 
@@ -202,5 +208,12 @@ fn filter_constants(lst: &mut Vec<Constraint>) -> Vec<Error> {
         }
     });
 
-    errors
+    let mut dedup_errors = vec![];
+    for error in &errors {
+        if !dedup_errors.contains(error) {
+            dedup_errors.push(error.clone());
+        }
+    }
+
+    dedup_errors
 }

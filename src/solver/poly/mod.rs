@@ -1,3 +1,5 @@
+// with thanks to Prof. Emre Sertöz for the great lectures on Computational Algebraic Geometry on YouTube.
+
 pub mod macros;
 pub mod mono;
 pub mod poly_arithmetic;

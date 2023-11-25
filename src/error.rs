@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub enum ErrorType {
     Syntax,
     Type,
@@ -13,7 +13,7 @@ pub enum ErrorType {
     NotImplemented,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Error {
     pub error_type: ErrorType,
     pub message: String,
