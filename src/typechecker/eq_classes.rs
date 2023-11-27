@@ -280,6 +280,69 @@ impl EqClasses {
                 start,
                 inner: (a, b),
                 end,
+            } in &self.must_promote
+            {
+                if tree.contains(a) {
+                    let promoted_type = b.promote_inds(curr_ind_forall_var);
+                    match promoted_type.unify(&tree_repr, false, &mut None) {
+                        Some((mut subs, mut cs)) => {
+                            let a_forall_vars = tree_repr.forall_vars();
+                            let b_forall_vars = b.forall_vars();
+                            subs.retain(|sub| {
+                                if a_forall_vars.contains(&sub.0) {
+                                    for var in &sub.1.forall_vars() {
+                                        if b_forall_vars.contains(var) {
+                                            return false;
+                                        }
+                                    }
+                                }
+                                true
+                            });
+
+                            if !subs.is_empty() {
+                                any_changes = true;
+                            }
+                            Constraint::apply_pos(&mut cs, *start, *end);
+                            constraints.extend(cs);
+
+                            for sub in &subs {
+                                tree_repr = tree_repr.substitute(sub);
+                            }
+
+                            match all_subs.extend(subs) {
+                                Ok(_) => (),
+                                Err(bad_match) => {
+                                    return Err(Error::new(
+                                        ErrorType::Type,
+                                        format!(
+                                            "cannot unify types \"{:?}\" and \"{:?}\"",
+                                            tree_repr, bad_match
+                                        ),
+                                        *start,
+                                        *end,
+                                    ))
+                                }
+                            }
+                        }
+                        None => {
+                            return Err(Error::new(
+                                ErrorType::Type,
+                                format!(
+                                    "cannot unify types \"{:?}\" and \"{:?}\"",
+                                    promoted_type, tree_repr
+                                ),
+                                *start,
+                                *end,
+                            ));
+                        }
+                    }
+                }
+            }
+
+            for Positioned {
+                start,
+                inner: (a, b),
+                end,
             } in &self.must_demote
             {
                 if tree.contains(a) {
@@ -400,69 +463,6 @@ impl EqClasses {
                                 *start,
                                 *end,
                             ))
-                        }
-                    }
-                }
-            }
-
-            for Positioned {
-                start,
-                inner: (a, b),
-                end,
-            } in &self.must_promote
-            {
-                if tree.contains(a) {
-                    let promoted_type = b.promote_inds(curr_ind_forall_var);
-                    match promoted_type.unify(&tree_repr, false, &mut None) {
-                        Some((mut subs, mut cs)) => {
-                            let a_forall_vars = tree_repr.forall_vars();
-                            let b_forall_vars = b.forall_vars();
-                            subs.retain(|sub| {
-                                if a_forall_vars.contains(&sub.0) {
-                                    for var in &sub.1.forall_vars() {
-                                        if b_forall_vars.contains(var) {
-                                            return false;
-                                        }
-                                    }
-                                }
-                                true
-                            });
-
-                            if !subs.is_empty() {
-                                any_changes = true;
-                            }
-                            Constraint::apply_pos(&mut cs, *start, *end);
-                            constraints.extend(cs);
-
-                            for sub in &subs {
-                                tree_repr = tree_repr.substitute(sub);
-                            }
-
-                            match all_subs.extend(subs) {
-                                Ok(_) => (),
-                                Err(bad_match) => {
-                                    return Err(Error::new(
-                                        ErrorType::Type,
-                                        format!(
-                                            "cannot unify types \"{:?}\" and \"{:?}\"",
-                                            tree_repr, bad_match
-                                        ),
-                                        *start,
-                                        *end,
-                                    ))
-                                }
-                            }
-                        }
-                        None => {
-                            return Err(Error::new(
-                                ErrorType::Type,
-                                format!(
-                                    "cannot unify types \"{:?}\" and \"{:?}\"",
-                                    promoted_type, tree_repr
-                                ),
-                                *start,
-                                *end,
-                            ));
                         }
                     }
                 }

@@ -155,17 +155,8 @@ pub fn solve(preconditions: &[Constraint], postconditions: &[Constraint]) -> Vec
     let mut postconditions = system::System::new(preconditions.iter().chain(postconditions.iter()));
     let mut preconditions = system::System::new(preconditions.iter());
 
-    let pre_errors = preconditions.check();
-
-    if !pre_errors.is_empty() {
-        return pre_errors;
-    }
-
-    let post_errors = postconditions.check();
-
-    if !post_errors.is_empty() {
-        return post_errors;
-    }
+    let mut errors = preconditions.check();
+    errors.extend(postconditions.check());
 
     preconditions.groebner_basis();
     postconditions.groebner_basis();
@@ -173,12 +164,12 @@ pub fn solve(preconditions: &[Constraint], postconditions: &[Constraint]) -> Vec
     let preconditions_dim = preconditions.groebner_basis();
     let postconditions_dim = postconditions.groebner_basis();
 
-    let additional_degs_of_freedom = postconditions
+    let _additional_degs_of_freedom = postconditions
         .free_eq_vars()
         .difference(&preconditions.free_eq_vars())
         .count();
 
-    if postconditions_dim - preconditions_dim > additional_degs_of_freedom {
+    if postconditions_dim > preconditions_dim {
         let preconditions_eqs = preconditions.gen_eq_zs();
         let overdetermined_eqs_errs: Vec<_> = postconditions
             .0
@@ -199,7 +190,7 @@ pub fn solve(preconditions: &[Constraint], postconditions: &[Constraint]) -> Vec
                     Error::new(
                         ErrorType::Constraint,
                         format!(
-                            "overdetermined system: cannot satisfy constraint \"{:?} {:?}\"",
+                            "overdetermined system; cannot satisfy constraint \"{:?} {:?}\"",
                             r.data, r.provenance
                         ),
                         r.provenance[0].start,
@@ -209,8 +200,8 @@ pub fn solve(preconditions: &[Constraint], postconditions: &[Constraint]) -> Vec
             })
             .collect();
 
-        overdetermined_eqs_errs
-    } else {
-        vec![]
+        errors.extend(overdetermined_eqs_errs);
     }
+
+    errors
 }
