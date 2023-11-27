@@ -272,6 +272,8 @@ fn interpret_block<'a>(
             S::Return(val) => {
                 if let Some(val) = val {
                     output.value = Some(interpret_expression(val, scope, globals, output))
+                } else {
+                    output.value = None
                 }
 
                 scope.pop();
