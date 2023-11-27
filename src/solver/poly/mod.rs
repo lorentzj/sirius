@@ -174,6 +174,18 @@ impl<T: Field> Poly<T> {
         new
     }
 
+    pub fn eval_poly(&self, var: &str, val: Poly<T>) -> Self {
+        let mut new = Poly { terms: vec![] };
+        let mut val_pow = Poly::constant(T::one());
+        for coef in self.coefs(var).into_iter().rev() {
+            new = new + coef * val_pow.clone();
+
+            val_pow = val_pow * val.clone();
+        }
+
+        new
+    }
+
     pub fn greater(&self, other: Self) -> Truth {
         match (self.clone() - other).get_constant_val() {
             Some(v) => {
@@ -223,9 +235,29 @@ impl<T: Field> Poly<T> {
 
         r
     }
+
+    pub fn solve_for(&self, var: &str) -> Option<Self> {
+        let coefs = self.coefs(var);
+        if coefs.len() == 2 {
+            if let Some(c) = coefs.first().unwrap().get_constant_val() {
+                let minus_reciprocal = (T::one() / c) * -1;
+
+                let res = coefs[1].clone().mul(Self::constant(minus_reciprocal));
+                Some(res)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
 }
 
 impl Poly<Rat> {
+    pub fn int_coefs(&self) -> bool {
+        self.terms.iter().all(|t| t.val.den == 1)
+    }
+
     pub fn norm(&self) -> Poly<Rat> {
         let mut new = self.clone();
 
@@ -319,6 +351,7 @@ impl Serialize for Poly<Rat> {
 #[cfg(test)]
 mod tests {
     use super::{Poly, Rat};
+    use crate::poly;
 
     #[test]
     fn coefs() {
@@ -372,5 +405,28 @@ mod tests {
             "20z^3 + 8y + z + 30",
             format!("{:?}", g.eval("x", Rat::from(2)))
         );
+    }
+
+    #[test]
+    fn eval_poly() {
+        let x = poly!(a ^ 2 + 3 * a * b + 2 * b + 3);
+        let y = poly!(c + 10);
+
+        assert_eq!(
+            poly!(a ^ 2 + 3 * a * c + 30 * a + 2 * c + 23),
+            x.eval_poly("b", y)
+        );
+    }
+
+    #[test]
+    fn solve_for() {
+        let x = poly!(2 * a - 4 * b - 6);
+        assert_eq!(Some(poly!(2 * b + 3)), x.solve_for("a"));
+
+        let x = poly!(2 * a - 4 * a * b - 6);
+        assert_eq!(None, x.solve_for("a"));
+
+        let x = poly!(2 * a ^ 2 + 6);
+        assert_eq!(None, x.solve_for("a"));
     }
 }

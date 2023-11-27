@@ -95,9 +95,12 @@ export type S =
 
 export type Statement = Positioned<S>;
 
-export type Constraint = Positioned<{
-    Eq: [string, string]
-}>;
+export type Constraint = Positioned<
+    { Eq: [string, string] } |
+    { Neq: [string, string] } |
+    { Gt: [string, string] } |
+    { GtEq: [string, string] } 
+>;
 
 export type Function = {
     name: Positioned<string>,
@@ -124,8 +127,14 @@ export type InterpreterOutput = {
 };
 
 export function constraint_name(constraint: Constraint): string {
-    if(constraint.data.Eq !== undefined) {
+    if('Eq' in constraint.data) {
         return `${constraint.data.Eq[0]} == ${constraint.data.Eq[1]}`;
+    } else if('Neq' in constraint.data) {
+        return `${constraint.data.Neq[0]} != ${constraint.data.Neq[1]}`;
+    } else if('Gt' in constraint.data) {
+        return `${constraint.data.Gt[0]} > ${constraint.data.Gt[1]}`;
+    } else if('GtEq' in constraint.data) {
+        return `${constraint.data.GtEq[0]} >= ${constraint.data.GtEq[1]}`;
     } else {
         return '[Internal Error]';
     }

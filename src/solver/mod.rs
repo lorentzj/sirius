@@ -56,7 +56,7 @@ impl Truth {
 pub(crate) type Poly = poly::Poly<Rat>;
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Serialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Clone, PartialEq, Eq)]
 enum C {
     Eq(Poly, Poly),
     NEq(Poly, Poly),
@@ -64,16 +64,27 @@ enum C {
     Gt(Poly, Poly),
 }
 
-#[derive(Serialize, Clone, Debug)]
+impl std::fmt::Debug for C {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            C::Eq(a, b) => write!(f, "{a:?} = {b:?}"),
+            C::NEq(a, b) => write!(f, "{a:?} != {b:?}"),
+            C::GtEq(a, b) => write!(f, "{a:?} >= {b:?}"),
+            C::Gt(a, b) => write!(f, "{a:?} > {b:?}"),
+        }
+    }
+}
+
+#[derive(Serialize, Clone, PartialEq)]
 pub struct Constraint {
     data: C,
     pub start: usize,
     pub end: usize,
 }
 
-impl PartialEq for Constraint {
-    fn eq(&self, other: &Self) -> bool {
-        self.data == other.data
+impl std::fmt::Debug for Constraint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.data)
     }
 }
 
@@ -141,79 +152,65 @@ impl Constraint {
 }
 
 pub fn solve(preconditions: &[Constraint], postconditions: &[Constraint]) -> Vec<Error> {
-    let mut errors = vec![];
+    let mut postconditions = system::System::new(preconditions.iter().chain(postconditions.iter()));
+    let mut preconditions = system::System::new(preconditions.iter());
 
-    let mut preconditions = preconditions.to_vec();
-    let mut postconditions = postconditions.to_vec();
+    let pre_errors = preconditions.check();
 
-    errors.extend(filter_constants(&mut preconditions));
-    errors.extend(filter_constants(&mut postconditions));
-
-    if !errors.is_empty() {
-        return errors;
+    if !pre_errors.is_empty() {
+        return pre_errors;
     }
 
-    let _postconditions = system::System::new(preconditions.iter().chain(postconditions.iter()));
-    let _preconditions = system::System::new(preconditions.iter());
+    let post_errors = postconditions.check();
 
-    errors
-}
-
-fn filter_constants(lst: &mut Vec<Constraint>) -> Vec<Error> {
-    let mut errors = vec![];
-
-    lst.retain(|c| {
-        let rel_zero = c.get_rel_zero();
-
-        if let Some(v) = rel_zero.get_constant_i64() {
-            if let C::Eq(a, b) = &c.data && v != 0 {
-                errors.push(Error::new(
-                    ErrorType::Constraint,
-                    format!("cannot satisfy constraint \"{a:?} == {b:?}\""),
-                    c.start,
-                    c.end,
-                ));
-            }
-
-            if let C::NEq(a, b) = &c.data && v == 0 {
-                errors.push(Error::new(
-                    ErrorType::Constraint,
-                    format!("cannot satisfy constraint \"{a:?} != {b:?}\""),
-                    c.start,
-                    c.end,
-                ));
-            }
-
-            if let C::Gt(a, b) = &c.data && v <= 0 {
-                errors.push(Error::new(
-                    ErrorType::Constraint,
-                    format!("cannot satisfy constraint \"{a:?} > {b:?}\""),
-                    c.start,
-                    c.end,
-                ));
-            }
-
-            if let C::GtEq(a, b) = &c.data && v < 0 {
-                errors.push(Error::new(
-                    ErrorType::Constraint,
-                    format!("cannot satisfy constraint \"{a:?} >= {b:?}\""),
-                    c.start,
-                    c.end,
-                ));
-            }
-
-            false
-        } else {
-            true
-        }
-    });
-
-    let mut dedup_errors = vec![];
-    for error in &errors {
-        if !dedup_errors.contains(error) {
-            dedup_errors.push(error.clone());
-        }
+    if !post_errors.is_empty() {
+        return post_errors;
     }
 
-    dedup_errors
+    preconditions.groebner_basis();
+    postconditions.groebner_basis();
+
+    let preconditions_dim = preconditions.groebner_basis();
+    let postconditions_dim = postconditions.groebner_basis();
+
+    let additional_degs_of_freedom = postconditions
+        .free_eq_vars()
+        .difference(&preconditions.free_eq_vars())
+        .count();
+
+    if postconditions_dim - preconditions_dim > additional_degs_of_freedom {
+        let preconditions_eqs = preconditions.gen_eq_zs();
+        let overdetermined_eqs_errs: Vec<_> = postconditions
+            .0
+            .iter()
+            .filter(|r| r.data.1 == system::ToZero::Eq && !preconditions_eqs.contains(&r.data.0))
+            .map(|r| {
+                if r.check() == Truth::False {
+                    Error::new(
+                        ErrorType::Constraint,
+                        format!(
+                            "cannot satisfy constraint \"{:?} {:?}\"",
+                            r.data, r.provenance
+                        ),
+                        r.provenance[0].start,
+                        r.provenance[0].end,
+                    )
+                } else {
+                    Error::new(
+                        ErrorType::Constraint,
+                        format!(
+                            "overdetermined system: cannot satisfy constraint \"{:?} {:?}\"",
+                            r.data, r.provenance
+                        ),
+                        r.provenance[0].start,
+                        r.provenance[0].end,
+                    )
+                }
+            })
+            .collect();
+
+        overdetermined_eqs_errs
+    } else {
+        vec![]
+    }
 }

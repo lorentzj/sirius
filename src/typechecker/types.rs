@@ -2,6 +2,7 @@ use serde::{Serialize, Serializer};
 use std::cmp::Ordering;
 use std::fmt;
 
+use crate::error::{Error, ErrorType};
 use crate::parser::TypeArg;
 use crate::solver::poly::Poly;
 use crate::solver::rational::Rat;
@@ -75,19 +76,48 @@ impl Type {
         }
     }
 
-    pub fn instantiate_fn(&self, vars: &Vec<TypeArg>, subs: &[Type]) -> Type {
+    pub fn instantiate_fn(&self, vars: &Vec<TypeArg>, subs: &[Type]) -> Result<Type, Error> {
         match self {
-            Type::Tuple(v) => Type::Tuple(v.iter().map(|t| t.instantiate_fn(vars, subs)).collect()),
-            Type::Function(t_args, i, o) => Type::Function(
+            Type::Tuple(v) => Ok(Type::Tuple(
+                v.iter()
+                    .flat_map(|t| t.instantiate_fn(vars, subs))
+                    .collect(),
+            )),
+            Type::Function(t_args, i, o) => Ok(Type::Function(
                 t_args.clone(),
-                i.iter().map(|t| t.instantiate_fn(vars, subs)).collect(),
-                Box::new(o.instantiate_fn(vars, subs)),
-            ),
+                i.iter()
+                    .flat_map(|t| t.instantiate_fn(vars, subs))
+                    .collect(),
+                Box::new(o.instantiate_fn(vars, subs)?),
+            )),
             Type::TypeVar(name) => match vars.iter().position(|n| &n.name() == name) {
-                Some(i) => subs[i].clone(),
-                None => self.clone(),
+                Some(i) => Ok(subs[i].clone()),
+                None => Ok(self.clone()),
             },
-            _ => self.clone(),
+            Type::I64(Some(ind)) => {
+                let mut new_ind = ind.clone();
+                for var in ind.var_list() {
+                    if let Some(i) = vars.iter().position(|n| n.name() == var) {
+                        match &subs[i] {
+                            Type::I64(Some(s)) => {
+                                new_ind = new_ind.eval_poly(&var, s.clone());
+                            }
+                            Type::ForAll(_) => (),
+                            t => {
+                                return Err(Error::new(
+                                    ErrorType::Type,
+                                    format!("type argument {var} must be poly; found {t:?}"),
+                                    0,
+                                    0,
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                Ok(Type::I64(Some(new_ind)))
+            }
+            _ => Ok(self.clone()),
         }
     }
 
@@ -288,7 +318,7 @@ impl Type {
         Type::I64(Some(Poly::var(name, 1)))
     }
 
-    pub fn ind_var_is_universal(ind_var_name: &str) -> bool {
+    pub fn ind_var_is_free(ind_var_name: &str) -> bool {
         let mut cs = ind_var_name.chars();
         match cs.next() {
             Some('\'') => cs.next().unwrap().is_lowercase(),

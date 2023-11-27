@@ -427,8 +427,12 @@ pub fn unify(
                 false_inner,
                 ..
             } => {
-                match unify_expression(condition, &mut result.eq_classes[0], &context, constraints)
-                {
+                match unify_expression(
+                    condition,
+                    &mut result.eq_classes[0],
+                    &context,
+                    true_inner_constraints,
+                ) {
                     Ok(()) => (),
                     Err(error) => errors.push(error),
                 }

@@ -130,6 +130,32 @@ pub fn annotation_type(annotation: &Expression) -> Result<Type, (usize, usize)> 
             }
         }
 
+        E::BinaryOp {
+            lhs,
+            op: Op::Exp,
+            rhs,
+        } => {
+            let lhs = annotation_type(lhs)?;
+            let rhs = annotation_type(rhs)?;
+
+            let lhs_coerced_ind = annotation_type_possible_ind(&lhs);
+            let rhs_coerced_ind = annotation_type_possible_ind(&rhs);
+
+            if let (Some(lhs_ind), Some(rhs_ind)) = (lhs_coerced_ind, rhs_coerced_ind) {
+                if let Some(rhs_const) = rhs_ind.get_constant_i64() {
+                    if rhs_const >= 0 {
+                        let mut v = Poly::constant(Rat::from(1));
+                        for _ in 0..rhs_const {
+                            v = v * lhs_ind.clone();
+                        }
+
+                        return Ok(Type::I64(Some(v)));
+                    }
+                }
+            }
+            Err((annotation.start, annotation.end))
+        }
+
         E::I64(val) => Ok(Type::I64(Some(Poly::constant(Rat::from(*val))))),
 
         _ => Err((annotation.start, annotation.end)),
@@ -248,6 +274,7 @@ pub fn populate_annotation(
 fn initialize_expression_types(
     expression: &mut Expression,
     curr_forall_var: &mut usize,
+    curr_ind_forall_var: &mut usize,
     context: &Scope<ScopeEntry>,
     type_vars: &Vec<TypeArg>,
     errors: &mut Vec<Error>,
@@ -264,6 +291,7 @@ fn initialize_expression_types(
             initialize_expression_types(
                 &mut *inner,
                 curr_forall_var,
+                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -277,6 +305,7 @@ fn initialize_expression_types(
             initialize_expression_types(
                 &mut *lhs,
                 curr_forall_var,
+                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -286,6 +315,7 @@ fn initialize_expression_types(
             initialize_expression_types(
                 &mut *rhs,
                 curr_forall_var,
+                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -299,6 +329,7 @@ fn initialize_expression_types(
             initialize_expression_types(
                 &mut *target,
                 curr_forall_var,
+                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -308,6 +339,7 @@ fn initialize_expression_types(
             initialize_expression_types(
                 &mut *index,
                 curr_forall_var,
+                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -321,6 +353,7 @@ fn initialize_expression_types(
                 initialize_expression_types(
                     e,
                     curr_forall_var,
+                    curr_ind_forall_var,
                     context,
                     type_vars,
                     errors,
@@ -335,6 +368,7 @@ fn initialize_expression_types(
             initialize_expression_types(
                 &mut *func,
                 curr_forall_var,
+                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -345,6 +379,7 @@ fn initialize_expression_types(
                 initialize_expression_types(
                     e,
                     curr_forall_var,
+                    curr_ind_forall_var,
                     context,
                     type_vars,
                     errors,
@@ -360,11 +395,19 @@ fn initialize_expression_types(
 
                 expression.t = match t.as_ref() {
                     Type::Function(function_type_vars, _, _) => {
-                        let mut subs: Vec<_> = (*curr_forall_var
-                            ..(*curr_forall_var + function_type_vars.len()))
-                            .map(Type::ForAll)
-                            .collect();
-                        *curr_forall_var += function_type_vars.len();
+                        let mut subs: Vec<Type> = vec![];
+
+                        for type_var in function_type_vars {
+                            match type_var {
+                                TypeArg::Ind(_) => {
+                                    subs.push(Type::new_free_ind(curr_ind_forall_var, true))
+                                }
+                                TypeArg::Type(_) => {
+                                    *curr_forall_var += 1;
+                                    subs.push(Type::ForAll(*curr_forall_var - 1))
+                                }
+                            }
+                        }
 
                         if let Some(type_args) = type_args {
                             if function_type_vars.len() < type_args.len() {
@@ -403,7 +446,15 @@ fn initialize_expression_types(
                             }
                         }
 
-                        Rc::new(t.instantiate_fn(function_type_vars, &subs))
+                        match t.instantiate_fn(function_type_vars, &subs) {
+                            Ok(t) => Rc::new(t),
+                            Err(mut error) => {
+                                error.start = expression.start;
+                                error.end = expression.end;
+                                errors.push(error);
+                                Rc::new(Type::Unknown)
+                            }
+                        }
                     }
                     _ => {
                         if type_args.is_some() {
@@ -448,6 +499,7 @@ pub fn initialize_statement_types(
             initialize_expression_types(
                 val,
                 curr_forall_var,
+                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -466,6 +518,7 @@ pub fn initialize_statement_types(
             initialize_expression_types(
                 value,
                 curr_forall_var,
+                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -501,6 +554,7 @@ pub fn initialize_statement_types(
             initialize_expression_types(
                 value,
                 curr_forall_var,
+                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -540,6 +594,7 @@ pub fn initialize_statement_types(
             initialize_expression_types(
                 condition,
                 curr_forall_var,
+                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -594,6 +649,7 @@ pub fn initialize_statement_types(
             initialize_expression_types(
                 from,
                 curr_forall_var,
+                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -602,6 +658,7 @@ pub fn initialize_statement_types(
             initialize_expression_types(
                 to,
                 curr_forall_var,
+                curr_ind_forall_var,
                 context,
                 type_vars,
                 errors,
@@ -637,6 +694,7 @@ pub fn initialize_statement_types(
                 initialize_expression_types(
                     val,
                     curr_forall_var,
+                    curr_ind_forall_var,
                     context,
                     type_vars,
                     errors,

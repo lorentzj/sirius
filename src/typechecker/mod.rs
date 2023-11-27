@@ -14,7 +14,7 @@ mod flow;
 mod initialize_ast;
 mod name_rules;
 mod substitute;
-mod types;
+pub(crate) mod types;
 mod unify;
 
 use crate::solver::Constraint;
@@ -540,5 +540,36 @@ fn test{#A}(a: A) -> A:
 
         assert!(state.errors[0].error_type == ErrorType::Constraint);
         assert!(state.errors.len() == 1);
+    }
+
+    #[test]
+    fn flow_constraints() {
+        let code = "
+fn test(x: i64):
+    if x == 0:
+        print true
+    if x == 1:
+        print false
+";
+
+        let mut state = parse(code, false);
+        typecheck(&mut state, HashMap::default());
+
+        assert!(state.errors.is_empty());
+    }
+
+    #[test]
+    fn constraint_eqs_violation() {
+        let code = "
+fn test{#A, #B}(x: A, y: B, z: A + B):
+    return
+
+fn main():
+    print test(1, 2, 4)";
+
+        let mut state = parse(code, false);
+        typecheck(&mut state, HashMap::default());
+
+        assert!(state.errors[0].error_type == ErrorType::Constraint);
     }
 }
