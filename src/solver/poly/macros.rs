@@ -126,6 +126,7 @@ macro_rules! system {
 
     (@accumulate [ $($accumulated:tt)* ] [ ]) => {{
         use std::collections::{HashSet, VecDeque};
+        use std::rc::Rc;
         use $crate::solver::rational::Rat;
         use $crate::solver::poly::mono::Mono;
         use $crate::solver::poly::Poly;
@@ -153,7 +154,7 @@ macro_rules! system {
                         vars.sort_by(|a, b| a.0.cmp(b.0));
                         Mono {
                             val: Rat::new(coef),
-                            vars: vars.iter().map(|(v, p)| (v.to_string(), *p)).collect()
+                            vars: vars.iter().map(|(v, p)| (Rc::new(v.to_string()), *p)).collect()
                         }}
                     ).collect::<VecDeque<_>>();
 

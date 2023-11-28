@@ -5,6 +5,8 @@ pub mod mono;
 pub mod poly_arithmetic;
 pub mod system;
 
+use std::rc::Rc;
+
 use super::field::Field;
 use super::poly::mono::*;
 use super::rational::{gcd, Rat};
@@ -59,7 +61,7 @@ impl<T: Field> Poly<T> {
             Self {
                 terms: vec![Mono {
                     val: T::one(),
-                    vars: vec![(var, pow)],
+                    vars: vec![(Rc::new(var), pow)],
                 }],
             }
         }
@@ -148,7 +150,7 @@ impl<T: Field> Poly<T> {
                 let var_pow = Poly {
                     terms: vec![Mono {
                         val: T::one(),
-                        vars: vec![(var.to_string(), (deg - i) as u64)],
+                        vars: vec![(Rc::new(var.to_string()), (deg - i) as u64)],
                     }],
                 };
 
@@ -227,8 +229,8 @@ impl<T: Field> Poly<T> {
 
         for term in &self.terms {
             for (var, _) in &term.vars {
-                if !r.contains(var) {
-                    r.push(var.clone())
+                if !r.contains(var.as_ref()) {
+                    r.push(var.as_ref().clone())
                 }
             }
         }

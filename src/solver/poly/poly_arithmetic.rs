@@ -176,7 +176,7 @@ impl<T: Field> Poly<T> {
             };
             let mut found = false;
             for (var, pow) in &term.vars {
-                if *var == by {
+                if var.as_ref() == by {
                     found = true;
                     if *pow > 1 {
                         new_term.val = new_term.val * *pow as i64;

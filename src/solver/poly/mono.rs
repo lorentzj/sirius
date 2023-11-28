@@ -1,11 +1,11 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, rc::Rc};
 
 use super::Field;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Mono<T: Field> {
     pub val: T,
-    pub vars: Vec<(String, u64)>,
+    pub vars: Vec<(Rc<String>, u64)>,
 }
 
 impl<T: Field> Mono<T> {
@@ -33,7 +33,7 @@ impl<T: Field> Mono<T> {
         let mut deg = 0;
 
         for (v, pow) in &self.vars {
-            if *v == var {
+            if v.as_ref() == var {
                 deg = *pow as usize;
             } else {
                 new_vars.push((v.clone(), *pow));
@@ -250,13 +250,13 @@ mod tests {
                 for k in 0..4 {
                     let mut vars = vec![];
                     if i > 0 {
-                        vars.push(("x".to_string(), i))
+                        vars.push((Rc::new("x".to_string()), i))
                     }
                     if j > 0 {
-                        vars.push(("y".to_string(), j))
+                        vars.push((Rc::new("y".to_string()), j))
                     }
                     if k > 0 {
-                        vars.push(("z".to_string(), k))
+                        vars.push((Rc::new("z".to_string()), k))
                     }
 
                     terms.push(Mono {
@@ -354,22 +354,22 @@ z
 
             let wpow = rng.gen_range(0..3);
             if wpow > 0 {
-                vars.push(("w".to_string(), wpow));
+                vars.push((Rc::new("w".to_string()), wpow));
             }
 
             let xpow = rng.gen_range(0..1);
             if xpow > 0 {
-                vars.push(("x".to_string(), xpow));
+                vars.push((Rc::new("x".to_string()), xpow));
             }
 
             let ypow = rng.gen_range(0..1);
             if ypow > 0 {
-                vars.push(("y".to_string(), ypow));
+                vars.push((Rc::new("y".to_string()), ypow));
             }
 
             let zpow = rng.gen_range(0..2);
             if zpow > 0 {
-                vars.push(("z".to_string(), zpow));
+                vars.push((Rc::new("z".to_string()), zpow));
             }
 
             Mono {
