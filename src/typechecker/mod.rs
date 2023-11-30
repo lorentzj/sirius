@@ -174,7 +174,6 @@ pub fn typecheck(state: &mut CompilerState, externals: ExternalGlobals) {
                 scope.clone(),
                 &function.return_type.inner,
                 &mut function_errors,
-                &mut curr_forall_var,
                 &mut curr_ind_forall_var,
                 &mut function.body.post_constraints,
             );
@@ -284,7 +283,7 @@ fn main():
         let mut state = parse(code, false);
         typecheck(&mut state, HashMap::default());
 
-        assert_eq!(state.errors, vec![]);
+        assert!(state.errors.is_empty());
     }
 
     #[test]
@@ -517,10 +516,13 @@ fn main():
         {
             let inner_let_stmt = &inner[0].data;
             if let S::Let { bound_type: t3, .. } = inner_let_stmt {
-                assert_eq!(
-                    "i64(p='a), i64(p='b), i64(p='a + 'b)",
-                    format!("{t1:?}, {t2:?}, {t3:?}")
-                )
+                if let (Type::I64(Some(v1)), Type::I64(Some(v2)), Type::I64(Some(v3))) =
+                    (t1.as_ref(), t2.as_ref(), t3.as_ref())
+                {
+                    assert_eq!(&(v1.clone() + v2.clone()), v3);
+                } else {
+                    panic!("t1, t2, t3 should be i64(some)")
+                }
             } else {
                 panic!("if should have one let")
             }
@@ -571,5 +573,40 @@ fn main():
         typecheck(&mut state, HashMap::default());
 
         assert!(state.errors[0].error_type == ErrorType::Constraint);
+    }
+
+    #[test]
+    fn mutation_easy() {
+        let code = "
+fn main():
+    let mut y = 4
+    y = 3
+    y = 2";
+
+        let mut state = parse(code, false);
+        typecheck(&mut state, HashMap::default());
+
+        assert!(state.errors.is_empty());
+    }
+
+    #[test]
+    fn arg_promote() {
+        let code = "
+fn untracked() -> i64:
+    return 1
+    
+fn test(a: i64):
+    return
+
+fn main():
+    let mut b = untracked()
+    print test(2*b + 1)
+
+";
+
+        let mut state = parse(code, false);
+        typecheck(&mut state, HashMap::default());
+
+        assert!(state.errors.is_empty());
     }
 }

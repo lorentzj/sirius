@@ -312,7 +312,6 @@ pub fn unify(
     mut context: Scope<ScopeEntry>,
     return_type: &Rc<Type>,
     errors: &mut Vec<Error>,
-    curr_forall_var: &mut usize,
     curr_ind_forall_var: &mut usize,
     constraints: &mut Vec<Constraint>,
 ) -> UnificationResult {
@@ -342,7 +341,7 @@ pub fn unify(
 
                 match context.get(&place.inner) {
                     Some(ScopeEntry { t, .. }) => {
-                        result.eq_classes[0].add(value.start, &value.t, t, value.end)
+                        result.eq_classes[0].add_must_demote(value.start, t, &value.t, value.end)
                     }
                     None => unreachable!(),
                 }
@@ -362,6 +361,17 @@ pub fn unify(
                 }
 
                 if *mutable {
+                    if let Some(annotation) = annotation {
+                        if annotation.inner.as_ref() != &annotation.inner.demote_inds() {
+                            errors.push(Error::new(
+                                ErrorType::Mutation,
+                                format!("mutable type {:?} cannot contain polys", annotation.inner),
+                                annotation.start,
+                                annotation.end,
+                            ));
+                        }
+                    }
+
                     result.eq_classes[0].add_must_demote(
                         value.start,
                         bound_type,
@@ -449,7 +459,6 @@ pub fn unify(
                     context.clone(),
                     return_type,
                     errors,
-                    curr_forall_var,
                     curr_ind_forall_var,
                     true_inner_constraints,
                 );
@@ -467,7 +476,6 @@ pub fn unify(
                         context.clone(),
                         return_type,
                         errors,
-                        curr_forall_var,
                         curr_ind_forall_var,
                         false_inner_constraints,
                     );
@@ -526,7 +534,6 @@ pub fn unify(
                     context.clone(),
                     return_type,
                     errors,
-                    curr_forall_var,
                     curr_ind_forall_var,
                     inner_constraints,
                 );
@@ -540,7 +547,7 @@ pub fn unify(
     }
     context.pop();
 
-    match result.eq_classes[0].generate(curr_forall_var, curr_ind_forall_var) {
+    match result.eq_classes[0].generate(curr_ind_forall_var) {
         Ok((block_changes, mut cs)) => {
             constraints.append(&mut cs);
             result.any_changes |= block_changes;

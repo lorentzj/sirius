@@ -210,24 +210,26 @@ impl System {
         for (i, rel) in self.0.iter().enumerate() {
             if rel.data.1 == ToZero::Eq {
                 for var in rel.data.0.var_list() {
-                    if let Some(new_sub_val) = rel.data.0.solve_for(&var) {
-                        if !subbed.contains(&var) {
-                            subbed.insert(var.clone());
-                            for new_rel in &mut new_rels {
-                                let old_rel_val = new_rel.data.0.clone();
-                                new_rel.data.0 =
-                                    new_rel.data.0.eval_poly(&var, new_sub_val.clone());
-                                if old_rel_val != new_rel.data.0 {
-                                    for c in &rel.provenance {
-                                        if !new_rel.provenance.contains(c) {
-                                            new_rel.provenance.push(c.clone());
+                    if crate::typechecker::types::Type::ind_var_is_free(&var) {
+                        if let Some(new_sub_val) = rel.data.0.solve_for(&var) {
+                            if !subbed.contains(&var) {
+                                subbed.insert(var.clone());
+                                for new_rel in &mut new_rels {
+                                    let old_rel_val = new_rel.data.0.clone();
+                                    new_rel.data.0 =
+                                        new_rel.data.0.eval_poly(&var, new_sub_val.clone());
+                                    if old_rel_val != new_rel.data.0 {
+                                        for c in &rel.provenance {
+                                            if !new_rel.provenance.contains(c) {
+                                                new_rel.provenance.push(c.clone());
+                                            }
                                         }
                                     }
                                 }
-                            }
 
-                            to_remove.push(i);
-                            break;
+                                to_remove.push(i);
+                                break;
+                            }
                         }
                     }
                 }

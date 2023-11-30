@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::error::{Error, ErrorType};
+use crate::error::Error;
 use rational::Rat;
 
 pub mod field;
@@ -158,50 +158,50 @@ pub fn solve(preconditions: &[Constraint], postconditions: &[Constraint]) -> Vec
     let mut errors = preconditions.check();
     errors.extend(postconditions.check());
 
-    preconditions.groebner_basis();
-    postconditions.groebner_basis();
+    // preconditions.groebner_basis();
+    // postconditions.groebner_basis();
 
-    let preconditions_dim = preconditions.groebner_basis();
-    let postconditions_dim = postconditions.groebner_basis();
+    // let preconditions_dim = preconditions.groebner_basis();
+    // let postconditions_dim = postconditions.groebner_basis();
 
-    let _additional_degs_of_freedom = postconditions
-        .free_eq_vars()
-        .difference(&preconditions.free_eq_vars())
-        .count();
+    // let additional_degs_of_freedom = postconditions
+    //     .free_eq_vars()
+    //     .difference(&preconditions.free_eq_vars())
+    //     .count();
 
-    if postconditions_dim > preconditions_dim {
-        let preconditions_eqs = preconditions.gen_eq_zs();
-        let overdetermined_eqs_errs: Vec<_> = postconditions
-            .0
-            .iter()
-            .filter(|r| r.data.1 == system::ToZero::Eq && !preconditions_eqs.contains(&r.data.0))
-            .map(|r| {
-                if r.check() == Truth::False {
-                    Error::new(
-                        ErrorType::Constraint,
-                        format!(
-                            "cannot satisfy constraint \"{:?} {:?}\"",
-                            r.data, r.provenance
-                        ),
-                        r.provenance[0].start,
-                        r.provenance[0].end,
-                    )
-                } else {
-                    Error::new(
-                        ErrorType::Constraint,
-                        format!(
-                            "overdetermined system; cannot satisfy constraint \"{:?} {:?}\"",
-                            r.data, r.provenance
-                        ),
-                        r.provenance[0].start,
-                        r.provenance[0].end,
-                    )
-                }
-            })
-            .collect();
+    // if postconditions_dim > preconditions_dim + additional_degs_of_freedom {
+    //     let preconditions_eqs = preconditions.gen_eq_zs();
+    //     let overdetermined_eqs_errs: Vec<_> = postconditions
+    //         .0
+    //         .iter()
+    //         .filter(|r| r.data.1 == system::ToZero::Eq && !preconditions_eqs.contains(&r.data.0))
+    //         .map(|r| {
+    //             if r.check() == Truth::False {
+    //                 Error::new(
+    //                     ErrorType::Constraint,
+    //                     format!(
+    //                         "cannot satisfy constraint \"{:?} {:?}\"",
+    //                         r.data, r.provenance
+    //                     ),
+    //                     r.provenance[0].start,
+    //                     r.provenance[0].end,
+    //                 )
+    //             } else {
+    //                 Error::new(
+    //                     ErrorType::Constraint,
+    //                     format!(
+    //                         "overdetermined system; cannot satisfy constraint \"{:?} {:?}\"",
+    //                         r.data, r.provenance
+    //                     ),
+    //                     r.provenance[0].start,
+    //                     r.provenance[0].end,
+    //                 )
+    //             }
+    //         })
+    //         .collect();
 
-        errors.extend(overdetermined_eqs_errs);
-    }
+    //     errors.extend(overdetermined_eqs_errs);
+    // }
 
     errors
 }

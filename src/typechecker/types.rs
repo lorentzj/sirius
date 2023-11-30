@@ -154,48 +154,23 @@ impl Type {
 
         match self {
             Type::Unknown => Some((vec![], vec![])),
-            Type::ForAll(self_i) => match other {
-                Type::ForAll(other_i) => match self_i.cmp(other_i) {
-                    Ordering::Less => Some((vec![(*self_i, other.clone())], vec![])),
-                    Ordering::Greater => Some((vec![(*other_i, self.clone())], vec![])),
-                    Ordering::Equal => Some((vec![], vec![])),
+            Type::ForAll(self_i) => match (allow_demote, allow_promote) {
+                (false, None) => match other {
+                    Type::ForAll(other_i) => match self_i.cmp(other_i) {
+                        Ordering::Less => Some((vec![(*self_i, other.clone())], vec![])),
+                        Ordering::Greater => Some((vec![(*other_i, self.clone())], vec![])),
+                        Ordering::Equal => Some((vec![], vec![])),
+                    },
+                    _ => Some((vec![(*self_i, other.clone())], vec![])),
                 },
-                _ => Some((vec![(*self_i, other.clone())], vec![])),
+                _ => Some((vec![], vec![])),
             },
             _ => match other {
                 Type::Unknown => Some((vec![], vec![])),
-                Type::Void => {
-                    if matches!(self, Type::Void) {
-                        Some((vec![], vec![]))
-                    } else {
-                        None
-                    }
-                }
-                Type::Bool => {
-                    if matches!(self, Type::Bool) {
-                        Some((vec![], vec![]))
-                    } else {
-                        None
-                    }
-                }
-                Type::F64 => {
-                    if matches!(self, Type::F64) {
-                        Some((vec![], vec![]))
-                    } else {
-                        None
-                    }
-                }
-                Type::TypeVar(l_name) => {
-                    if let Type::TypeVar(r_name) = self {
-                        if l_name == r_name {
-                            Some((vec![], vec![]))
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                }
+                Type::Void => None,
+                Type::Bool => None,
+                Type::F64 => None,
+                Type::TypeVar(_) => None,
                 Type::I64(Some(other_i)) => match self {
                     Type::I64(Some(self_i)) => Some((
                         vec![],
@@ -223,9 +198,17 @@ impl Type {
                     }
                     _ => None,
                 },
-                Type::ForAll(i) => Some((vec![(*i, self.clone())], vec![])),
-                Type::Tuple(l_types) => {
-                    if let Type::Tuple(r_types) = self {
+
+                Type::ForAll(i) => {
+                    if allow_demote {
+                        Some((vec![(*i, self.demote_inds())], vec![]))
+                    } else {
+                        Some((vec![(*i, self.clone())], vec![]))
+                    }
+                }
+
+                Type::Tuple(r_types) => {
+                    if let Type::Tuple(l_types) = self {
                         if l_types.len() != r_types.len() {
                             None
                         } else {
@@ -256,8 +239,8 @@ impl Type {
                         None
                     }
                 }
-                Type::Function(_, l_i, l_o) => {
-                    if let Type::Function(_, r_i, r_o) = self {
+                Type::Function(_, r_i, r_o) => {
+                    if let Type::Function(_, l_i, l_o) = self {
                         if l_i.len() != r_i.len() {
                             None
                         } else {
@@ -265,13 +248,13 @@ impl Type {
                             let mut constraints = vec![];
                             for (l_type, r_type) in l_i.iter().zip(r_i) {
                                 let (mut inner_subs, mut inner_constraints) =
-                                    Type::unify(l_type, r_type, allow_demote, allow_promote)?;
+                                    Type::unify(l_type, r_type, false, &mut None)?;
                                 let mut combined_subs = vec![];
                                 for (s_var, s) in &subs {
                                     for (i_s_var, i_s) in &inner_subs {
                                         if s_var == i_s_var {
                                             let (comb_subs, comb_constraints) =
-                                                s.unify(i_s, allow_demote, allow_promote)?;
+                                                s.unify(i_s, false, &mut None)?;
                                             combined_subs.extend(comb_subs);
                                             inner_constraints.extend(comb_constraints);
                                         }
@@ -283,14 +266,14 @@ impl Type {
                             }
 
                             let (mut o_subs, mut o_constraints) =
-                                Type::unify(l_o, r_o, allow_demote, allow_promote)?;
+                                Type::unify(l_o, r_o, false, &mut None)?;
                             let mut combined_subs = vec![];
 
                             for (s_var, s) in &subs {
                                 for (o_s_var, o_s) in &o_subs {
                                     if s_var == o_s_var {
                                         let (comb_subs, comb_constraints) =
-                                            s.unify(o_s, allow_demote, allow_promote)?;
+                                            s.unify(o_s, false, &mut None)?;
                                         combined_subs.extend(comb_subs);
                                         o_constraints.extend(comb_constraints);
                                     }
@@ -328,7 +311,7 @@ impl Type {
 
     pub fn promote_inds(&self, curr_ind_forall_var: &mut usize) -> Type {
         match self {
-            Type::I64(None) => Type::new_free_ind(curr_ind_forall_var, true),
+            Type::I64(None) => Type::new_free_ind(curr_ind_forall_var, false),
             Type::Tuple(inner) => {
                 let mut new_inner = vec![];
                 for t in inner.iter() {
@@ -350,6 +333,40 @@ impl Type {
                 let mut new_inner = vec![];
                 for t in inner.iter() {
                     new_inner.push(t.allow_possible_promotion(curr_forall_var))
+                }
+                Type::Tuple(new_inner)
+            }
+            _ => self.clone(),
+        }
+    }
+
+    pub fn allow_possible_demotion(&self, curr_forall_var: &mut usize) -> Type {
+        match self {
+            Type::I64(Some(_)) => {
+                *curr_forall_var += 1;
+                Type::ForAll(*curr_forall_var - 1)
+            }
+            Type::Tuple(inner) => {
+                let mut new_inner = vec![];
+                for t in inner.iter() {
+                    new_inner.push(t.allow_possible_demotion(curr_forall_var))
+                }
+                Type::Tuple(new_inner)
+            }
+            _ => self.clone(),
+        }
+    }
+
+    pub fn allow_possible_promotion_or_demotion(&self, curr_forall_var: &mut usize) -> Type {
+        match self {
+            Type::I64(_) => {
+                *curr_forall_var += 1;
+                Type::ForAll(*curr_forall_var - 1)
+            }
+            Type::Tuple(inner) => {
+                let mut new_inner = vec![];
+                for t in inner.iter() {
+                    new_inner.push(t.allow_possible_promotion_or_demotion(curr_forall_var))
                 }
                 Type::Tuple(new_inner)
             }

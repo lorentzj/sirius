@@ -6,7 +6,7 @@ use crate::{
 use std::cmp::Ordering;
 use std::rc::{Rc, Weak};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct EqClasses {
     trees: Vec<(Option<Rc<Type>>, TypeTree)>,
     owned: Vec<Rc<Type>>,
@@ -171,15 +171,16 @@ impl EqClasses {
 
         match (merge, insert) {
             (Some((i, j)), _) => {
-                let prefix = self.trees.split_at(i).0.to_owned();
-                let suffix = self.trees.split_at(j + 1).1.to_owned();
-                let inner = self.trees.split_at(j).0.split_at(i + 1).1.to_owned();
+                let prefix = self.trees.split_at(i).0;
                 let merged = (None, self.trees[i].1.clone().merge(self.trees[j].1.clone()));
+                let inner = self.trees.split_at(j).0.split_at(i + 1).1;
+                let suffix = self.trees.split_at(j + 1).1;
                 self.trees = prefix
-                    .into_iter()
-                    .chain([merged])
+                    .iter()
+                    .chain(&[merged])
                     .chain(inner)
                     .chain(suffix)
+                    .cloned()
                     .collect();
             }
 
@@ -222,7 +223,6 @@ impl EqClasses {
 
     pub fn generate(
         &mut self,
-        curr_forall_var: &mut usize,
         curr_ind_forall_var: &mut usize,
     ) -> Result<(bool, Vec<Constraint>), Error> {
         let mut constraints = vec![];
@@ -280,77 +280,18 @@ impl EqClasses {
                 start,
                 inner: (a, b),
                 end,
-            } in &self.must_promote
-            {
-                if tree.contains(a) {
-                    let promoted_type = b.promote_inds(curr_ind_forall_var);
-                    match promoted_type.unify(&tree_repr, false, &mut None) {
-                        Some((mut subs, mut cs)) => {
-                            let a_forall_vars = tree_repr.forall_vars();
-                            let b_forall_vars = b.forall_vars();
-                            subs.retain(|sub| {
-                                if a_forall_vars.contains(&sub.0) {
-                                    for var in &sub.1.forall_vars() {
-                                        if b_forall_vars.contains(var) {
-                                            return false;
-                                        }
-                                    }
-                                }
-                                true
-                            });
-
-                            if !subs.is_empty() {
-                                any_changes = true;
-                            }
-                            Constraint::apply_pos(&mut cs, *start, *end);
-                            constraints.extend(cs);
-
-                            for sub in &subs {
-                                tree_repr = tree_repr.substitute(sub);
-                            }
-
-                            match all_subs.extend(subs) {
-                                Ok(_) => (),
-                                Err(bad_match) => {
-                                    return Err(Error::new(
-                                        ErrorType::Type,
-                                        format!(
-                                            "cannot unify types \"{:?}\" and \"{:?}\"",
-                                            tree_repr, bad_match
-                                        ),
-                                        *start,
-                                        *end,
-                                    ))
-                                }
-                            }
-                        }
-                        None => {
-                            return Err(Error::new(
-                                ErrorType::Type,
-                                format!(
-                                    "cannot unify types \"{:?}\" and \"{:?}\"",
-                                    promoted_type, tree_repr
-                                ),
-                                *start,
-                                *end,
-                            ));
-                        }
-                    }
-                }
-            }
-
-            for Positioned {
-                start,
-                inner: (a, b),
-                end,
             } in &self.must_demote
             {
                 if tree.contains(a) {
-                    match tree_repr.unify(&b.demote_inds(), true, &mut None) {
+                    match tree_repr.unify(&b.demote_inds(), false, &mut None) {
                         Some((mut subs, _)) => {
                             let a_forall_vars = tree_repr.forall_vars();
                             let b_forall_vars = b.forall_vars();
                             subs.retain(|sub| {
+                                if !sub.1.forall_vars().is_empty() {
+                                    return false;
+                                }
+
                                 if a_forall_vars.contains(&sub.0) {
                                     for var in &sub.1.forall_vars() {
                                         if b_forall_vars.contains(var) {
@@ -428,16 +369,7 @@ impl EqClasses {
                             Constraint::apply_pos(&mut cs, *start, *end);
                             constraints.extend(cs);
 
-                            for sub in &mut subs {
-                                // don't allow possible promotion if we're substituting in a function type
-                                // see typechecker::tests::generic_int and typechecker::tests::arg_demote for the two cases
-
-                                if !tree_repr.forall_var_in_function(sub.0)
-                                    && !b.forall_var_in_function(sub.0)
-                                {
-                                    sub.1 = sub.1.allow_possible_promotion(curr_forall_var);
-                                }
-
+                            for sub in &subs {
                                 tree_repr = tree_repr.substitute(sub);
                             }
 
@@ -463,6 +395,72 @@ impl EqClasses {
                                 *start,
                                 *end,
                             ))
+                        }
+                    }
+                }
+            }
+
+            for Positioned {
+                start,
+                inner: (a, b),
+                end,
+            } in &self.must_promote
+            {
+                if tree.contains(a) {
+                    let promoted_type = b.promote_inds(curr_ind_forall_var);
+                    match promoted_type.unify(&tree_repr, false, &mut None) {
+                        Some((mut subs, mut cs)) => {
+                            let a_forall_vars = tree_repr.forall_vars();
+                            let b_forall_vars = b.forall_vars();
+                            subs.retain(|sub| {
+                                if !sub.1.forall_vars().is_empty() {
+                                    return false;
+                                }
+                                if a_forall_vars.contains(&sub.0) {
+                                    for var in &sub.1.forall_vars() {
+                                        if b_forall_vars.contains(var) {
+                                            return false;
+                                        }
+                                    }
+                                }
+                                true
+                            });
+
+                            if !subs.is_empty() {
+                                any_changes = true;
+                            }
+                            Constraint::apply_pos(&mut cs, *start, *end);
+                            constraints.extend(cs);
+
+                            for sub in &subs {
+                                tree_repr = tree_repr.substitute(sub);
+                            }
+
+                            match all_subs.extend(subs) {
+                                Ok(_) => (),
+                                Err(bad_match) => {
+                                    return Err(Error::new(
+                                        ErrorType::Type,
+                                        format!(
+                                            "cannot unify types \"{:?}\" and \"{:?}\"",
+                                            tree_repr, bad_match
+                                        ),
+                                        *start,
+                                        *end,
+                                    ))
+                                }
+                            }
+                        }
+                        None => {
+                            return Err(Error::new(
+                                ErrorType::Type,
+                                format!(
+                                    "cannot unify types \"{:?}\" and \"{:?}\"",
+                                    promoted_type, tree_repr
+                                ),
+                                *start,
+                                *end,
+                            ));
                         }
                     }
                 }
@@ -603,6 +601,17 @@ impl TypeTree {
             self.insert(t.start, &t.inner, t.end);
         }
         self
+    }
+}
+
+impl std::fmt::Debug for TypeTree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.val.upgrade() {
+            Some(val) => write!(f, "{{ val: {:?}, ", val)?,
+            None => write!(f, "{{ val: err, ")?,
+        }
+
+        write!(f, "{:?}, {:?} }}", self.lhs, self.rhs)
     }
 }
 

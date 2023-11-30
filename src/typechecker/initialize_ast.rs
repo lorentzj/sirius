@@ -561,7 +561,13 @@ pub fn initialize_statement_types(
                 highlight_map,
             );
             match context.get(&place.inner) {
-                Some(ScopeEntry { mutable, .. }) => {
+                Some(ScopeEntry {
+                    mutable, decl_site, ..
+                }) => {
+                    if let Some(decl_site) = decl_site {
+                        highlight_map.insert(place.start, vec![place.start, *decl_site]);
+                    }
+
                     if !mutable {
                         errors.push(Error::new(
                             ErrorType::Mutation,
