@@ -111,7 +111,7 @@ function constraintLevels(parseOutput) {
 export function updateBlockConstraintsElem(blockConstraintsElem, editorElem, parseOutput) {
     const levels = constraintLevels(parseOutput);
     let res = [];
-    const maxDepth = levels.map(v => v.length).reduce((a, b) => a > b ? a : b);
+    const maxDepth = levels.map(v => v.length).reduce((a, b) => a > b ? a : b, 0);
     for (let i = 1; i < levels.length; i++) {
         if (levels[i].length === 0) {
             res.push(createConstraintLineDiv(blockConstraintsElem, editorElem, []));

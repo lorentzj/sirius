@@ -127,7 +127,7 @@ export function updateBlockConstraintsElem(blockConstraintsElem: HTMLElement, ed
     const levels = constraintLevels(parseOutput);
     let res: HTMLElement[] = [];
 
-    const maxDepth = levels.map(v => v.length).reduce((a, b) => a > b ? a : b);
+    const maxDepth = levels.map(v => v.length).reduce((a, b) => a > b ? a : b, 0);
 
     for(let i = 1; i < levels.length; i++) {
         if(levels[i].length === 0) {
@@ -179,7 +179,7 @@ export function updateBlockConstraintsElem(blockConstraintsElem: HTMLElement, ed
                     for(let j = 1; j < levels[i].length; ++j) {
                         l.push({text: '┻', ...levels[i][j]});
                     }
-                    
+
                     if(l.length < maxDepth) {
                         l[l.length - 1].text += '━'.repeat(maxDepth - l.length);
                     }
