@@ -110,6 +110,10 @@ ul, ol {
     line-height: 1.5;
 }
 
+ol {
+    margin: 0;
+}
+
 span.asp {
     font-style: italic;
     color: rgb(252, 220, 132);
@@ -236,7 +240,7 @@ code.doc {
     font-size: var(--normal-font-size);
 }
 
-#tooltip, code, #editor, .parsed_code_block {
+#tooltip, code, #editor, #block_constraints, .parsed_code_block {
     font-size: var(--normal-font-size);
     line-height: 1;
     padding: 3px;
@@ -248,9 +252,31 @@ code.doc {
     caret-color: var(--whiteish);
 }
 
+#editor {
+    flex: 30;
+}
+
+#block_constraints {
+    user-select: none;
+    flex: 1;
+    white-space: pre-wrap;
+}
+
 li.code_line {
     list-style: none;
-    padding-bottom: 5px;
+}
+
+li.code_line, .block_constraint_line {
+    padding: 3px;
+}
+
+/* 
+span.block_info:last-child {
+    border: 1px solid red;
+} */
+
+span.block_info.highlight {
+    color: rgb(37, 255, 146);
 }
 
 li.code_line::before {

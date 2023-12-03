@@ -1,14 +1,16 @@
 import init, * as bindings from '../js/sirius.js';
+import * as blockConstraints from './block_constraints.js';
 import * as editor from './editor.js';
 import * as types from './types.js';
-import * as output_area from './output_area.js';
+import * as outputArea from './output_area.js';
 import { CodeLines } from './code_lines.js';
 import { load_demo_programs } from './demo_programs.js';
 document.body.onload = () => {
-    const parserDelayMs = 200;
+    const parserDelayMs = 0;
     let runId = 0;
     Promise.all([init(), load_demo_programs()]).then(([_, demo_programs]) => {
         const editorElem = document.getElementById('editor');
+        const blockConstraintsElem = document.getElementById('block_constraints');
         const tooltipElem = document.getElementById('tooltip');
         const runButtonElem = document.getElementById('run');
         const displayErrorsElem = document.getElementById('display_errors');
@@ -34,6 +36,7 @@ document.body.onload = () => {
             && logElem !== null
             && runButtonElem !== null
             && progSelectorElem !== null
+            && blockConstraintsElem !== null
             && compilerRunningSpinnerElem !== null) {
             for (const demo_program in demo_programs) {
                 const programOption = document.createElement('option');
@@ -53,7 +56,7 @@ document.body.onload = () => {
                 }
                 updateEditor(false, parserDelayMs);
             });
-            output_area.initializeOutputArea(displayErrorsElem, displayLogElem, errorElem, logElem);
+            outputArea.initializeOutputArea(displayErrorsElem, displayLogElem, errorElem, logElem);
             editorElem.addEventListener('keydown', e => {
                 if (e.key === 'Tab') {
                     editor.insertTab(editorElem, codeLines);
@@ -75,7 +78,7 @@ document.body.onload = () => {
                 editor.updateEditorWithCode(editorElem, tooltipElem, codeLines.code, lex_output);
                 editor.updateEditorWithErrors(lex_output.errors, editorElem);
                 editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem, scrollTop, scrollBottom);
-                output_area.updateErrorElement(displayErrorsElem, errorElem, lex_output.errors, lex_output.tokens);
+                outputArea.updateErrorElement(displayErrorsElem, errorElem, lex_output.errors, lex_output.tokens);
             };
             parserWorker.onmessage = (e) => {
                 if (e.data.id == codeLines.editId) {
@@ -83,8 +86,9 @@ document.body.onload = () => {
                     const scrollBottom = scrollTop + editorElem.parentElement.clientHeight;
                     editor.updateEditorWithCode(editorElem, tooltipElem, codeLines.code, e.data.parsed);
                     editor.updateEditorWithErrors(e.data.parsed.errors, editorElem);
+                    blockConstraints.updateBlockConstraintsElem(blockConstraintsElem, editorElem, e.data.parsed);
                     editor.updateCaretPosition(codeLines.lastCaretPosition, editorElem, scrollTop, scrollBottom);
-                    output_area.updateErrorElement(displayErrorsElem, errorElem, e.data.parsed.errors, e.data.parsed.tokens);
+                    outputArea.updateErrorElement(displayErrorsElem, errorElem, e.data.parsed.errors, e.data.parsed.tokens);
                     if (e.data.andExecute && e.data.parsed.errors.length === 0) {
                         interpreterWorker.postMessage({
                             code: codeLines.toString(),
@@ -99,10 +103,10 @@ document.body.onload = () => {
             };
             interpreterWorker.onmessage = (e) => {
                 if (e.data.id === runId) {
-                    output_area.updateLogELement(displayLogElem, logElem, e.data.output);
+                    outputArea.updateLogELement(displayLogElem, logElem, e.data.output);
                     if (e.data.output.error) {
                         editor.updateEditorWithErrors([e.data.output.error], editorElem);
-                        output_area.updateErrorElement(displayErrorsElem, errorElem, [e.data.output.error], e.data.tokens);
+                        outputArea.updateErrorElement(displayErrorsElem, errorElem, [e.data.output.error], e.data.tokens);
                     }
                     compilerRunningSpinnerElem.dataset['active'] = 'false';
                 }

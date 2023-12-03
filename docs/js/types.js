@@ -1,16 +1,16 @@
 ;
 export function constraint_name(constraint) {
-    if ('Eq' in constraint.data) {
-        return `${constraint.data.Eq[0]} == ${constraint.data.Eq[1]}`;
+    if ('Eq' in constraint.inner) {
+        return `${constraint.inner.Eq[0]} == ${constraint.inner.Eq[1]}`;
     }
-    else if ('Neq' in constraint.data) {
-        return `${constraint.data.Neq[0]} != ${constraint.data.Neq[1]}`;
+    else if ('Neq' in constraint.inner) {
+        return `${constraint.inner.Neq[0]} != ${constraint.inner.Neq[1]}`;
     }
-    else if ('Gt' in constraint.data) {
-        return `${constraint.data.Gt[0]} > ${constraint.data.Gt[1]}`;
+    else if ('Gt' in constraint.inner) {
+        return `${constraint.inner.Gt[0]} > ${constraint.inner.Gt[1]}`;
     }
-    else if ('GtEq' in constraint.data) {
-        return `${constraint.data.GtEq[0]} >= ${constraint.data.GtEq[1]}`;
+    else if ('GtEq' in constraint.inner) {
+        return `${constraint.inner.GtEq[0]} >= ${constraint.inner.GtEq[1]}`;
     }
     else {
         return '[Internal Error]';

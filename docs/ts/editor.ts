@@ -237,8 +237,7 @@ export function updateEditorWithCode(editorElem: HTMLElement, tooltipElem: HTMLE
 }
 
 function setMouseOverHLHandler(editorElem: HTMLElement, codeSpan: HTMLElement, tokenId: number, highlightMap: Map<number, number[]>) {
-    let highlightMatches: number[] = [];
-    highlightMatches.push(...highlightMap.get(tokenId) || []);
+    let highlightMatches = highlightMap.get(tokenId) || [];
 
     codeSpan.addEventListener('mouseenter', (_) => {
         highlightMatches.forEach(tokenId => {

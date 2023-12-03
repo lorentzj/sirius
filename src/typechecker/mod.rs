@@ -294,7 +294,7 @@ fn factorial(x: i64) -> i64:
         return 1
     else:
         return x * factorial(x - 1)
-        
+
 fn main():
     print factorial((1, 1))
 ";

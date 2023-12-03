@@ -88,6 +88,7 @@ pub enum E {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct Expression {
+    pub id: usize,
     pub start: usize,
     pub data: E,
     pub t: Rc<Type>,
@@ -95,8 +96,10 @@ pub struct Expression {
 }
 
 impl Expression {
-    pub fn fresh(start: usize, data: E, end: usize) -> Box<Self> {
+    pub fn fresh(start: usize, data: E, end: usize, id: &mut usize) -> Box<Self> {
+        *id += 1;
         Box::new(Expression {
+            id: *id - 1,
             start,
             data,
             t: Rc::new(Type::ForAll(0)),
@@ -144,6 +147,7 @@ pub enum S {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct Statement {
+    pub id: usize,
     pub start: usize,
     pub data: S,
     pub end: usize,
@@ -155,10 +159,13 @@ impl Statement {
         mutable: bool,
         annotation: Option<Positioned<Rc<Type>>>,
         value: Expression,
+        id: &mut usize,
     ) -> Self {
         let start = name.start - 1;
         let end = value.end;
+        *id += 1;
         Statement {
+            id: *id - 1,
             start,
             data: S::Let {
                 name,
@@ -171,30 +178,35 @@ impl Statement {
         }
     }
 
-    pub fn new_assign(name: Positioned<String>, value: Expression) -> Self {
+    pub fn new_assign(name: Positioned<String>, value: Expression, id: &mut usize) -> Self {
         let start = name.start;
         let end = value.end;
+        *id += 1;
         Statement {
+            id: *id - 1,
             start,
             data: S::Assign { place: name, value },
             end,
         }
     }
 
-    pub fn new_print(val: Expression) -> Self {
+    pub fn new_print(val: Expression, id: &mut usize) -> Self {
         let start = val.start - 1;
         let end = val.end;
+        *id += 1;
         Statement {
+            id: *id - 1,
             start,
             data: S::Print(val),
             end,
         }
     }
 
-    pub fn new_return(start: usize, val: Option<Expression>) -> Self {
+    pub fn new_return(start: usize, val: Option<Expression>, id: &mut usize) -> Self {
         let end = val.as_ref().map(|val| val.end).unwrap_or(start + 1);
-
+        *id += 1;
         Statement {
+            id: *id - 1,
             start,
             data: S::Return(val),
             end,
@@ -207,8 +219,11 @@ impl Statement {
         true_block: Vec<Statement>,
         false_block: Option<Vec<Statement>>,
         end: usize,
+        id: &mut usize,
     ) -> Self {
+        *id += 1;
         Statement {
+            id: *id - 1,
             start,
             data: S::If {
                 condition,
@@ -233,8 +248,11 @@ impl Statement {
         to: Expression,
         inner: Vec<Statement>,
         end: usize,
+        id: &mut usize,
     ) -> Self {
+        *id += 1;
         Statement {
+            id: *id - 1,
             start,
             data: S::For {
                 iterator,
@@ -269,6 +287,7 @@ impl TypeArg {
 
 #[derive(Serialize, Debug)]
 pub struct Function {
+    pub id: usize,
     pub name: Positioned<String>,
     pub type_args: Vec<Positioned<TypeArg>>,
     pub args: Vec<(Positioned<String>, Positioned<Type>)>,
@@ -329,11 +348,12 @@ pub fn parse(code: &str, only_lex: bool) -> CompilerState {
         let mut errors: Vec<Error> = vec![];
         let mut type_tokens: Vec<usize> = vec![];
         let mut highlight_map: HashMap<usize, Vec<usize>> = HashMap::default();
-
+        let mut id = 0;
         match grammar::ASTParser::new().parse(
             &mut highlight_map,
             &mut type_tokens,
             &mut errors,
+            &mut id,
             tokens
                 .iter()
                 .enumerate()
