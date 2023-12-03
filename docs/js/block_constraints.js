@@ -173,6 +173,9 @@ export function updateBlockConstraintsElem(blockConstraintsElem, editorElem, par
                 for (let j = 0; j < levels[i].length; ++j) {
                     l.push({ text: '┃', ...levels[i][j] });
                 }
+                if (l.length < maxDepth) {
+                    l[l.length - 1].text += ' '.repeat(maxDepth - l.length);
+                }
                 res.push(createConstraintLineDiv(blockConstraintsElem, editorElem, l));
             }
         }
