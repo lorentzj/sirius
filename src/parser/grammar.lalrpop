@@ -1,0 +1,245 @@
+use std::collections::HashMap;
+
+use crate::parser::{UnaryOp, Pos, Expr, AccessDim, Stmt, Block, TypeArg, Function, Tree, add_highlight_pair};
+use crate::parser::lexer;
+use lexer::{Tok, Op, AssnOp};
+
+grammar(highlight_map: &mut HashMap<usize, Vec<usize>>, type_tokens: &mut Vec<usize>);
+
+pub Tree: Tree = {
+    "newline"* <fns: (Fn "newline"*)*> => {
+        Tree(fns.into_iter().map(|s| s.0).collect())
+    }
+}
+
+Fn: Function = {
+    "fn" <name: PosString> <type_args: SigTypeArgs?> <args: SigArgs> <ret: ("->" TypeAnn)?> ":" "newline" <body: Block> => {
+        let ret = ret.map(|(_, r)| r);
+        let type_args = type_args.unwrap_or(vec![]);
+        Function { name, type_args, args, ret, body }
+    }
+}
+
+SigTypeArgs: Vec<TypeArg> = {
+    <start: @L> "{" <args: CommaSep<PosString>> "}" <end: @R> => {
+        add_highlight_pair(highlight_map, start, end - 1);
+        
+        let mut type_args = vec![];
+        
+        for arg in args {
+            type_tokens.extend(arg.start..arg.end);
+            type_args.push(TypeArg::PName(arg));
+        }
+
+        type_args
+    }
+}
+
+SigArgs: Vec<(Pos<String>, Expr)> = {
+    <start: @L> "(" <args: CommaSep<(PosString ":" TypeAnn)>> ")" <end: @R> => {
+        add_highlight_pair(highlight_map, start, end - 1);
+        args.into_iter().map(|s| (s.0, s.2)).collect()
+    }
+}
+
+Block: Block = {
+    "newline"* "indent" <ss: (Stmt "newline"*)+> "dedent" => {
+        Block { stmts: ss.into_iter().map(|s| s.0).collect() }
+    }
+}
+
+Stmt: Stmt = {
+    <start: @L> "print" <e: Expr> <end: @R> "newline" => Stmt::print(start, e, end),
+    <start: @L> "return" <e: Expr> <end: @R> "newline" => Stmt::return_stmt(start, e, end),
+    <start: @L> "yield" <e: Expr> <end: @R> "newline" => Stmt::yield_stmt(start, e, end),
+
+    <start: @L> "let" <m: "mut"?> <p: PosString> <ann: (":" TypeAnn)?> "=" <e: Expr> <end: @R> "newline" => {
+        let ann = ann.map(|(_, a)| a);
+
+        Stmt::let_stmt(start, m.is_some(), p, ann, e, end)
+    },
+
+    <start: @L> <place: Expr> <op: AssignOrAssignOp> <val: Expr> <end: @R> "newline" => Stmt::assign(start, place, op, val, end),
+
+    <start: @L> "if" <cond: Expr> ":" "newline" <true_body: Block> <false_body: ("else" ":" "newline" Block)?> <end: @R> => {
+        let false_body = false_body.map(|(_, _, _, b)| b);
+        Stmt::if_stmt(start, cond, true_body, false_body, end)
+    },
+
+    <start: @L> "for" <iter: PosString> "from" <lower: Expr> "to" <upper: Expr> ":" "newline" <body: Block> <end: @R> => {
+        Stmt::for_stmt(start, iter, lower, upper, body, end)
+    }
+}
+
+AssignOrAssignOp: AssnOp = {
+    <op: "?="> => op,
+    "=" => AssnOp::Eq
+}
+
+PosString: Pos<String> = {
+    <start: @L> <name: "identifier"> <end: @R> => Pos::new(start, name, end)
+}
+
+TypeAnn: Expr = {
+    <e: Expr> => {
+        type_tokens.extend(e.start..e.end);
+        e
+    }
+}
+
+Expr: Expr = {
+    #[precedence(level="1")]
+    <t: Term> => t,
+
+    #[precedence(level="3")] #[assoc(side="left")]
+    <start: @L> <caller: Expr> <args: FnCallArgs> <end: @R> => Expr::fn_call(start, caller, args, end),
+    <start: @L> <arr: Expr> <dims: AccessDims> <end: @R> =>    Expr::access(start, arr, dims, end),
+    <start: @L> <lhs: Expr> "." <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Dot, rhs, end),
+    <start: @L> <inner: Expr> "'" <end: @R> =>                 Expr::un_op(start, UnaryOp::Tick, inner, end),
+
+    #[precedence(level="3")] #[assoc(side="left")]
+    <start: @L> <lhs: Expr> "^" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Exp, rhs, end),
+        
+    #[precedence(level="4")] #[assoc(side="left")]
+    <start: @L> "!" <inner: Expr> <end: @R> =>                 Expr::un_op(start, UnaryOp::BoolNeg, inner, end),
+    <start: @L> "-" <inner: Expr> <end: @R> =>                 Expr::un_op(start, UnaryOp::ArithNeg, inner, end),
+
+    #[precedence(level="6")] #[assoc(side="left")]
+    <start: @L> <lhs: Expr> "*" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Mul, rhs, end),
+    <start: @L> <lhs: Expr> "/" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Div, rhs, end),
+
+    #[precedence(level="7")] #[assoc(side="left")]
+    <start: @L> <lhs: Expr> "+" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Add, rhs, end),
+    <start: @L> <lhs: Expr> "-" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Sub, rhs, end),
+
+    #[precedence(level="8")] #[assoc(side="left")]
+    <start: @L> <lhs: Expr> ">" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Greater, rhs, end),
+    <start: @L> <lhs: Expr> "<" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Less, rhs, end),
+    <start: @L> <lhs: Expr> ">=" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::GreaterOrEq, rhs, end),
+    <start: @L> <lhs: Expr> "<=" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::LessOrEq, rhs, end),
+    <start: @L> <lhs: Expr> "==" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::Eq, rhs, end),
+    <start: @L> <lhs: Expr> "!=" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::NotEq, rhs, end),
+
+    #[precedence(level="9")] #[assoc(side="left")]
+    <start: @L> <lhs: Expr> "and" <rhs: Expr> <end: @R> =>     Expr::bin_op(start, lhs, Op::And, rhs, end),
+    <start: @L> <lhs: Expr> "or" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::Or, rhs, end),
+    <start: @L> <lhs: Expr> "->" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::Apply, rhs, end),
+}
+
+FnCallArgs: Vec<Expr> = {
+    <start: @L> "(" <args: CommaSep<Expr>> ")" <end: @R> => {
+        add_highlight_pair(highlight_map, start, end - 1);
+        args
+    }
+}
+
+AccessDims: Vec<AccessDim> = {
+    <start: @L> "[" <inner: CommaSepNonZ<AccessDim>> "]" <end: @R> => {
+        add_highlight_pair(highlight_map, start, end - 1);
+        inner
+    }
+}
+
+AccessDim: AccessDim = {
+    <start: @L> <e: Expr> <end: @R> => {
+        AccessDim::new_point(start, e, end)
+    },
+    <start: @L> <from: Expr?> ":" <to: Expr?> <end: @R> => {
+        AccessDim::new_range(start, from.map(Box::new), to.map(Box::new), end)
+    }
+}
+
+Term: Expr = {
+    <start: @L> "true" <end: @R> => Expr::bool(start, true, end),
+    <start: @L> "false" <end: @R> => Expr::bool(start, false, end),
+    <start: @L> <val: "float"> <end: @R> => Expr::float(start, val, end),
+    <start: @L> <val: "int"> <end: @R> => Expr::int(start, val, end),
+    <start: @L> <ident: "identifier"> <end: @R> => Expr::ident(start, ident, end),
+
+    <start: @L> "(" <mut inner: CommaSep<Expr>> ")" <end: @R> => {
+        add_highlight_pair(highlight_map, start, end - 1);
+        if inner.len() == 1 {
+            let mut inner = inner.pop().unwrap();
+            inner.start = start;
+            inner.end = end;
+            inner
+        } else {
+            Expr::tuple(start, inner, end)
+        }
+    },
+
+    <start: @L> "[" <inner: CommaSep<Expr>> "]" <end: @R> => {
+        add_highlight_pair(highlight_map, start, end - 1);
+        Expr::array(start, inner, end)
+    }
+}
+
+CommaSepNonZ<T>: Vec<T> = {
+    <t: T> => vec![t],
+    <mut lhs: CommaSepNonZ<T>> "," <rhs: T> => {
+        lhs.push(rhs);
+        lhs
+    }
+}
+
+CommaSep<T>: Vec<T> = {
+    => vec![],
+    <ts: CommaSepNonZ<T>> => ts
+}
+
+extern {
+    type Location = usize;
+    type Error = crate::error::Error;
+
+    enum Tok {
+        "("          => Tok::OpenParen,
+        ")"          => Tok::CloseParen,
+        "{"          => Tok::OpenCurly,
+        "}"          => Tok::CloseCurly,
+        "["          => Tok::OpenSqBracket,
+        "]"          => Tok::CloseSqBracket,
+        "newline"    => Tok::NewLine,
+        "indent"     => Tok::Indent,
+        "dedent"     => Tok::Dedent,        
+        "#"          => Tok::Pound,
+        "?="         => Tok::AssignOp(<lexer::AssnOp>),
+        "="         => Tok::AssignOp(lexer::AssnOp::Eq),
+        "."          => Tok::Op(Op::Dot),
+        "^"          => Tok::Op(Op::Exp),
+        "*"          => Tok::Op(Op::Mul),
+        "/"          => Tok::Op(Op::Div),
+        "+"          => Tok::Op(Op::Add),
+        "-"          => Tok::Op(Op::Sub),
+        "!"          => Tok::Op(Op::Not),
+        "'"          => Tok::Op(Op::Tick),
+        ">"          => Tok::Op(Op::Greater),
+        "<"          => Tok::Op(Op::Less),
+        ">="         => Tok::Op(Op::GreaterOrEq),
+        "<="         => Tok::Op(Op::LessOrEq),
+        "=="         => Tok::Op(Op::Eq),
+        "!="         => Tok::Op(Op::NotEq),
+        "->"         => Tok::Op(Op::Apply),
+        ","          => Tok::Op(Op::Comma),
+        "float"      => Tok::Float(<f64>),
+        "int"        => Tok::Int(<i64>),
+        "identifier" => Tok::Identifier(<String>),
+        "let"        => Tok::Keyword(lexer::Keyword::Let),
+        "print"      => Tok::Keyword(lexer::Keyword::Print),
+        "if"         => Tok::Keyword(lexer::Keyword::If),
+        "else"       => Tok::Keyword(lexer::Keyword::Else),
+        "true"       => Tok::Keyword(lexer::Keyword::True),
+        "false"      => Tok::Keyword(lexer::Keyword::False),
+        "and"        => Tok::Keyword(lexer::Keyword::And),
+        "or"         => Tok::Keyword(lexer::Keyword::Or),
+        "fn"         => Tok::Keyword(lexer::Keyword::Fn),
+        "for"        => Tok::Keyword(lexer::Keyword::For),
+        "from"       => Tok::Keyword(lexer::Keyword::From),
+        "to"         => Tok::Keyword(lexer::Keyword::To),
+        "return"     => Tok::Keyword(lexer::Keyword::Return),
+        "yield"      => Tok::Keyword(lexer::Keyword::Yield),
+        "mut"        => Tok::Keyword(lexer::Keyword::Mut),
+        ";"          => Tok::Semicolon,
+        ":"          => Tok::Colon,
+        "error"      => Tok::Error(<String>),
+    }
+}

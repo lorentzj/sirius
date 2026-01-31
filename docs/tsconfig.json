@@ -1,0 +1,10 @@
+{
+    "compilerOptions": {
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "target": "ES2021",
+        "strict": true,
+        "outDir": "public/js",
+        "rootDir": "ts"
+    },
+}

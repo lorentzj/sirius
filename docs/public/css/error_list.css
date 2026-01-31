@@ -1,0 +1,45 @@
+:root {
+    --triangle-svg: url("data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpolygon points='10 10 90 50 10 90' fill='black' stroke='black' stroke-width='10'/%3E%3C/svg%3E");
+    --empty-triangle-svg: url("data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpolygon points='10 10 90 50 10 90' fill='none' stroke='black' stroke-width='10'/%3E%3C/svg%3E");
+}
+
+.error_type {
+    color: red;
+    font-weight: bold;
+}
+
+details {
+    font-size: x-large;
+    font-family: monospace;
+}
+
+summary {
+    list-style: none;   
+    user-select: none;
+}
+
+details > summary::before {
+    content: var(--empty-triangle-svg);
+    display: inline-block;
+    -webkit-text-fill-color: black;
+    width: 0.75em;
+    padding: 5px;
+}
+
+details > summary:focus::before, details > summary:hover::before {
+    content: var(--triangle-svg);
+}
+
+details[open] > summary::before {
+    transform: rotate(90deg);
+    transition: 0.25s ease;
+}
+
+summary:focus {
+    outline: none;
+}
+
+details:not([open]) > summary::before {
+    transform: rotate(0deg);
+    transition: 0.25s ease;
+}
