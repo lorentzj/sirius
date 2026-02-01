@@ -1,5 +1,5 @@
-use std::cmp::Ordering;
 use super::super::Rat;
+use std::cmp::Ordering;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Mono {

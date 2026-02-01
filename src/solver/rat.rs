@@ -1,6 +1,6 @@
-use num::{Zero, BigInt, BigRational, ToPrimitive};
-use std::ops;
+use num::{BigInt, BigRational, ToPrimitive, Zero};
 use std::fmt;
+use std::ops;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Rat(pub BigRational);

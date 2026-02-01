@@ -1,5 +1,5 @@
-pub mod rat;
 pub mod poly;
+pub mod rat;
 
-pub use rat::Rat;
 pub use poly::Poly;
+pub use rat::Rat;

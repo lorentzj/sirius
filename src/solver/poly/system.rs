@@ -1,8 +1,8 @@
-use super::mono::{grevlex, monomial_div};
 use super::Poly;
+use super::Rat;
+use super::mono::{grevlex, monomial_div};
 use std::fmt;
 use std::rc::Rc;
-use super::Rat;
 
 #[derive(Clone)]
 pub struct System {
@@ -96,7 +96,7 @@ impl System {
                     .iter()
                     .enumerate()
                     .filter_map(|(j, p)| if j != i { Some(p.clone()) } else { None })
-                    .collect(),
+                    .collect::<Vec<_>>(),
             );
             keep2.push(rem);
         }

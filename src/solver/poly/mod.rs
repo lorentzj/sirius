@@ -1,17 +1,17 @@
+pub mod macros;
 pub mod mono;
 pub mod poly_arithmetic;
 pub mod system;
-pub mod macros;
 
 use std::fmt::Write;
 
+use super::Rat;
 use mono::*;
 use num::Signed;
-use super::Rat;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Poly {
-   pub terms: Vec<Mono>,
+    pub terms: Vec<Mono>,
 }
 
 impl Poly {
@@ -108,9 +108,7 @@ impl Poly {
 
     pub fn coefs(&self, var: usize) -> Vec<Poly> {
         let deg = self.deg(var);
-        let mut coefs: Vec<_> = std::iter::repeat(Poly::constant(Rat::zero()))
-            .take(deg + 1)
-            .collect();
+        let mut coefs: Vec<_> = std::iter::repeat_n(Poly::constant(Rat::zero()), deg + 1).collect();
 
         for term in self.terms.iter().rev() {
             let (term_deg, term_coef) = term.coef(var);
@@ -132,7 +130,12 @@ impl Poly {
             if i == deg {
                 new = new + term
             } else {
-                let var_pow = Poly { terms: vec![Mono { val: Rat::one(), vars: vec![(var, (deg - i) as u64)] }] };
+                let var_pow = Poly {
+                    terms: vec![Mono {
+                        val: Rat::one(),
+                        vars: vec![(var, (deg - i) as u64)],
+                    }],
+                };
 
                 new = new + term * var_pow;
             }
@@ -157,7 +160,7 @@ impl Poly {
     }
 
     pub fn norm(&self) -> Poly {
-        use num::{BigRational, BigInt, integer::gcd};
+        use num::{BigInt, BigRational, integer::gcd};
         let mut new = self.clone();
 
         let mut all_terms_den_gcd = BigInt::from(1);
@@ -173,16 +176,16 @@ impl Poly {
             all_terms_num_gcd = gcd(all_terms_num_gcd, term.val.0.numer().clone());
         }
 
-        if let Some(t) = new.terms.last() {
-            if t.val.0.is_negative() {
-                all_terms_num_gcd = -all_terms_num_gcd;
-            }
+        if let Some(t) = new.terms.last()
+            && t.val.0.is_negative()
+        {
+            all_terms_num_gcd = -all_terms_num_gcd;
         }
- 
+
         for term in &mut new.terms {
             term.val.0 = BigRational::new(
                 term.val.0.numer().clone() / all_terms_num_gcd.clone(),
-                term.val.0.denom().clone() / all_terms_den_gcd.clone()
+                term.val.0.denom().clone() / all_terms_den_gcd.clone(),
             );
         }
 
@@ -290,10 +293,7 @@ mod tests {
 
         assert_eq!(
             "20z^3 + 8y + z + 30",
-            format!(
-                "{}",
-                g.eval(0, Rat::from(2)).format(&var_dict)
-            )
+            format!("{}", g.eval(0, Rat::from(2)).format(&var_dict))
         );
     }
 }

@@ -1,5 +1,3 @@
-use std::fmt;
-use std::fmt::Write;
 use crate::solver::Poly;
 
 #[derive(PartialEq, Clone)]
@@ -60,13 +58,13 @@ impl Type {
             }
             res.push_str(" . ");
         }
-    
+
         res.push_str(&priv_print(self, p_vars));
         res
     }
 
     pub fn fmt_novars(&self) -> String {
-        self.fmt(&vec![])
+        self.fmt(&[])
     }
 }
 
@@ -155,7 +153,7 @@ fn priv_print(t: &Type, p_vars: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{FunctionType, usize_name, Type, Poly};
+    use super::{FunctionType, Poly, Type, usize_name};
     use crate::solver::Rat;
 
     #[test]
@@ -185,24 +183,28 @@ mod tests {
         );
         assert_eq!(
             Type::Function(Box::new(FunctionType {
-                    p_args: vec![],
-                    args: vec![Type::I64(None)],
-                    ret: Type::Bool,
-                })
-            ).fmt_novars(),
+                p_args: vec![],
+                args: vec![Type::I64(None)],
+                ret: Type::Bool,
+            }))
+            .fmt_novars(),
             "i64->bool"
         );
 
         assert_eq!(
             Type::Function(Box::new(FunctionType {
                 p_args: vec![],
-                args: vec![Type::Tuple(vec![Type::ForAll(0), Type::ForAll(0), Type::ForAll(0)]), Type::Function(Box::new(FunctionType {
-                    p_args: vec![],
-                    args: vec![Type::ForAll(0)],
-                    ret: Type::ForAll(1),
-                }))],
+                args: vec![
+                    Type::Tuple(vec![Type::ForAll(0), Type::ForAll(0), Type::ForAll(0)]),
+                    Type::Function(Box::new(FunctionType {
+                        p_args: vec![],
+                        args: vec![Type::ForAll(0)],
+                        ret: Type::ForAll(1),
+                    }))
+                ],
                 ret: Type::Tuple(vec![Type::ForAll(1), Type::ForAll(1), Type::ForAll(1)]),
-            })).fmt_novars(),
+            }))
+            .fmt_novars(),
             "forall a, b . (('a, 'a, 'a), 'a->'b)->('b, 'b, 'b)"
         )
     }

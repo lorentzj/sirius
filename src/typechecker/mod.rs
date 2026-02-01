@@ -1,8 +1,8 @@
 mod types;
 use crate::error::{Error, ErrorType};
 use crate::parser::ast::{E, Expr};
-pub use types::Type;
 use crate::solver::Poly;
+pub use types::Type;
 
 fn standard_type(name: &str) -> Option<Type> {
     match name {
@@ -17,12 +17,20 @@ fn standard_type(name: &str) -> Option<Type> {
 pub fn parse_annotation(ann: &Expr, p_vars: &Vec<String>) -> Result<Type, Error> {
     match &ann.data {
         E::Ident(s) => {
-            if let Some(t) = standard_type(&s) {
+            if let Some(t) = standard_type(s) {
                 Ok(t)
-            } else if p_vars.contains(&s) {
-                Ok(Type::I64(Some(Poly::var(p_vars.iter().position(|v| v == s).unwrap(), 1))))
+            } else if p_vars.contains(s) {
+                Ok(Type::I64(Some(Poly::var(
+                    p_vars.iter().position(|v| v == s).unwrap(),
+                    1,
+                ))))
             } else {
-                Err(Error::new(ErrorType::Type, "Unknown type".to_string(), ann.start, ann.end))
+                Err(Error::new(
+                    ErrorType::Type,
+                    "Unknown type".to_string(),
+                    ann.start,
+                    ann.end,
+                ))
             }
         }
         E::Tuple(inner) => {
@@ -33,8 +41,11 @@ pub fn parse_annotation(ann: &Expr, p_vars: &Vec<String>) -> Result<Type, Error>
             Ok(Type::Tuple(types))
         }
 
-        _ => {
-            Err(Error::new(ErrorType::Type, "Invalid annotation".to_string(), ann.start, ann.end))
-        }
+        _ => Err(Error::new(
+            ErrorType::Type,
+            "Invalid annotation".to_string(),
+            ann.start,
+            ann.end,
+        )),
     }
 }

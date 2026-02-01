@@ -1,8 +1,8 @@
 use crate::parser::ParserOutput;
 
+use super::error::Error;
 use super::parser::lexer::{Tok, Token, tokenize};
 use super::parser::parse;
-use super::error::Error;
 use wasm_bindgen::prelude::*;
 
 extern crate console_error_panic_hook;
@@ -32,12 +32,42 @@ pub fn serialize_token(t: &Token) -> Option<JsValue> {
 
 pub fn serialize_error(e: &Error, tokens: &[Token]) -> Option<JsValue> {
     let obj = js_sys::Object::new();
-    js_sys::Reflect::set(&obj, &JsValue::from("type"), &JsValue::from(e.error_type.to_string())).ok()?;
-    js_sys::Reflect::set(&obj, &JsValue::from("message"), &JsValue::from(e.message.clone())).ok()?;
-    js_sys::Reflect::set(&obj, &JsValue::from("start_line"), &JsValue::from(tokens[e.start].line)).ok()?;
-    js_sys::Reflect::set(&obj, &JsValue::from("start_column"), &JsValue::from(tokens[e.start].start)).ok()?;
-    js_sys::Reflect::set(&obj, &JsValue::from("end_line"), &JsValue::from(tokens[e.end].line)).ok()?;
-    js_sys::Reflect::set(&obj, &JsValue::from("end_column"), &JsValue::from(tokens[e.end].end)).ok()?;
+    js_sys::Reflect::set(
+        &obj,
+        &JsValue::from("type"),
+        &JsValue::from(e.error_type.to_string()),
+    )
+    .ok()?;
+    js_sys::Reflect::set(
+        &obj,
+        &JsValue::from("message"),
+        &JsValue::from(e.message.clone()),
+    )
+    .ok()?;
+    js_sys::Reflect::set(
+        &obj,
+        &JsValue::from("start_line"),
+        &JsValue::from(tokens[e.start].line),
+    )
+    .ok()?;
+    js_sys::Reflect::set(
+        &obj,
+        &JsValue::from("start_column"),
+        &JsValue::from(tokens[e.start].start),
+    )
+    .ok()?;
+    js_sys::Reflect::set(
+        &obj,
+        &JsValue::from("end_line"),
+        &JsValue::from(tokens[e.end].line),
+    )
+    .ok()?;
+    js_sys::Reflect::set(
+        &obj,
+        &JsValue::from("end_column"),
+        &JsValue::from(tokens[e.end].end),
+    )
+    .ok()?;
     Some(obj.into())
 }
 
@@ -49,8 +79,13 @@ pub fn serialize_type_tokens(c: &ParserOutput) -> Option<JsValue> {
             let obj = js_sys::Object::new();
             js_sys::Reflect::set(&obj, &JsValue::from("line"), &JsValue::from(t.line)).ok()?;
             js_sys::Reflect::set(&obj, &JsValue::from("start"), &JsValue::from(t.start)).ok()?;
-            if i < c.tokens.len() - 1  && c.tokens[i + 1].is_type_ann {
-                js_sys::Reflect::set(&obj, &JsValue::from("end"), &JsValue::from(c.tokens[i + 1].start)).ok()?;
+            if i < c.tokens.len() - 1 && c.tokens[i + 1].is_type_ann {
+                js_sys::Reflect::set(
+                    &obj,
+                    &JsValue::from("end"),
+                    &JsValue::from(c.tokens[i + 1].start),
+                )
+                .ok()?;
             } else {
                 js_sys::Reflect::set(&obj, &JsValue::from("end"), &JsValue::from(t.end)).ok()?;
             }
@@ -80,10 +115,18 @@ pub fn lex(code: &str) -> Vec<JsValue> {
 #[wasm_bindgen]
 pub fn compile(code: &str) -> JsValue {
     let output = parse(code.to_string());
-    let errors = output.errors.iter().filter_map(|e| serialize_error(e, &output.tokens)).collect::<Vec<JsValue>>();
+    let errors = output
+        .errors
+        .iter()
+        .filter_map(|e| serialize_error(e, &output.tokens))
+        .collect::<Vec<JsValue>>();
     let type_tokens = serialize_type_tokens(&output);
     let obj = js_sys::Object::new();
     let _ = js_sys::Reflect::set(&obj, &JsValue::from("errors"), &JsValue::from(errors));
-    let _ = js_sys::Reflect::set(&obj, &JsValue::from("type_tokens"), &JsValue::from(type_tokens));
+    let _ = js_sys::Reflect::set(
+        &obj,
+        &JsValue::from("type_tokens"),
+        &JsValue::from(type_tokens),
+    );
     obj.into()
 }

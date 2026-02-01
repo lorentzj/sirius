@@ -99,7 +99,7 @@ impl Poly {
         new
     }
 
-    pub fn compound_divide(&self, divisors: &Vec<Poly>) -> (Vec<Poly>, Poly) {
+    pub fn compound_divide(&self, divisors: &[Poly]) -> (Vec<Poly>, Poly) {
         if divisors.is_empty() {
             return (vec![], self.clone());
         }
@@ -107,9 +107,8 @@ impl Poly {
         let mut dividend = self.clone();
 
         let mut rem = Poly::constant(Rat::zero());
-        let mut quotients: Vec<VecDeque<Mono>> = std::iter::repeat(VecDeque::from(vec![]))
-            .take(divisors.len())
-            .collect();
+        let mut quotients: Vec<VecDeque<Mono>> =
+            std::iter::repeat_n(VecDeque::from(vec![]), divisors.len()).collect();
 
         let mut curr_divisor = 0;
 
@@ -158,7 +157,7 @@ impl Poly {
     }
 
     pub fn try_divide(&self, divisor: &Poly) -> Option<Poly> {
-        let (quots, rem) = self.compound_divide(&vec![divisor.clone()]);
+        let (quots, rem) = self.compound_divide(std::slice::from_ref(divisor));
 
         if rem.is_zero() {
             Some(quots[0].clone())

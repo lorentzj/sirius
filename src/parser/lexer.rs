@@ -319,7 +319,12 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                             }
                         } else if prev_indent_level > curr_indent_level {
                             for _c in curr_indent_level..prev_indent_level {
-                                tokens.push(Token::new(Tok::Dedent, line, 0, curr_indent_level*4));
+                                tokens.push(Token::new(
+                                    Tok::Dedent,
+                                    line,
+                                    0,
+                                    curr_indent_level * 4,
+                                ));
                             }
                         }
                         prev_indent_level = curr_indent_level;
@@ -373,7 +378,12 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                                     }
                                 } else if prev_indent_level > curr_indent_level {
                                     for _c in curr_indent_level..prev_indent_level {
-                                        tokens.push(Token::new(Tok::Dedent, line, 0, curr_indent_level*4));
+                                        tokens.push(Token::new(
+                                            Tok::Dedent,
+                                            line,
+                                            0,
+                                            curr_indent_level * 4,
+                                        ));
                                     }
                                 }
                                 prev_indent_level = curr_indent_level;
@@ -788,7 +798,7 @@ d e f
             Token::new(Tok::Indent, 0, 0, 4),
             Token::new(Tok::Identifier("a".into()), 0, 4, 5),
             Token::new(Tok::NewLine, 0, 5, 5),
-            Token::new(Tok::Dedent, 0, 5, 5)
+            Token::new(Tok::Dedent, 0, 5, 5),
         ];
 
         assert_eq!(tokens, expected_tokens);

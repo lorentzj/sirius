@@ -30,7 +30,7 @@ impl Expr {
             end,
         }
     }
-    
+
     pub fn float(start: usize, val: f64, end: usize) -> Expr {
         Expr {
             start,
@@ -38,7 +38,7 @@ impl Expr {
             end,
         }
     }
-    
+
     pub fn int(start: usize, val: i64, end: usize) -> Expr {
         Expr {
             start,
@@ -46,7 +46,7 @@ impl Expr {
             end,
         }
     }
-    
+
     pub fn ident(start: usize, type_ident: String, end: usize) -> Expr {
         Expr {
             start,
@@ -54,7 +54,7 @@ impl Expr {
             end,
         }
     }
-    
+
     pub fn tuple(start: usize, inner: Vec<Expr>, end: usize) -> Expr {
         Expr {
             start,
@@ -62,7 +62,7 @@ impl Expr {
             end,
         }
     }
-    
+
     pub fn empty_tuple(start: usize, end: usize) -> Expr {
         Expr {
             start,
@@ -70,7 +70,7 @@ impl Expr {
             end,
         }
     }
-    
+
     pub fn un_op(start: usize, op: UnaryOp, inner: Expr, end: usize) -> Expr {
         Expr {
             start,
@@ -78,7 +78,7 @@ impl Expr {
             end,
         }
     }
-    
+
     pub fn bin_op(start: usize, lhs: Expr, op: Op, rhs: Expr, end: usize) -> Expr {
         Expr {
             start,
