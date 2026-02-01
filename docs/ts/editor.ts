@@ -1,5 +1,6 @@
 import { Spinner } from "./spinner.js";
 import { Error } from "./error_list.js";
+import { debounce, getElementIndex } from './utils.js';
 
 export interface WorkerRequest {
     code: string;
@@ -8,6 +9,11 @@ export interface WorkerRequest {
 
 export type CompilerOutput = {
     errors: Error[];
+    type_tokens: {
+        line: number;
+        start: number;
+        end: number;
+    }[];
 }
 
 export type WorkerResponse = {
@@ -37,6 +43,7 @@ export class Editor {
         this.editor.spellcheck = false;
         this.editor.addEventListener('input', this.onInput.bind(this));
         this.editor.addEventListener('keydown', this.onKeyDown.bind(this));
+        this.editor.addEventListener('mousemove', debounce(this.onMouseMove.bind(this)));
         this.worker.onmessage = this.onMessage.bind(this);
 
         this.spinner.on();
@@ -45,6 +52,15 @@ export class Editor {
 
     addErrorListener(listener: (errors: Error[]) => void) {
         this.errorListeners.push(listener);
+    }
+
+    private onMouseMove(event: MouseEvent) {
+        const range = document.caretPositionFromPoint(event.clientX, event.clientY);
+        if(range !== null && range.offsetNode instanceof Text) {
+            const line = range.offsetNode.parentNode as HTMLElement;
+            const lineNumber = getElementIndex(line);
+            console.log(lineNumber, range.offset);
+        }
     }
 
     private onMessage(event: MessageEvent<WorkerResponse>) {
@@ -60,10 +76,18 @@ export class Editor {
             this.spinner.off();
 
             const errorRanges = [];
+            const typeTokenRanges = [];
 
             for(const error of event.data.output.errors) {
                 errorRanges.push(...this.errorCodeRanges(error));
             }
+
+            for(const typeToken of event.data.output.type_tokens) {
+                typeTokenRanges.push(this.typeTokenCodeRange(typeToken));
+            }
+
+            const typeTokenHighlight = new Highlight(...typeTokenRanges);
+            CSS.highlights.set('type-syntax', typeTokenHighlight);
             
             const errorHighlight = new Highlight(...errorRanges);
             CSS.highlights.set('error-syntax', errorHighlight);
@@ -88,14 +112,23 @@ export class Editor {
             keyword: [] as Range[],
             number: [] as Range[],
             error: [] as Range[],
-            comment: [] as Range[]
+            comment: [] as Range[],
+            type: [] as Range[]
         }
 
         for (const line of this.editor.children) {
             line.classList.remove('error');
         }
 
-        for(const token of tokens) {
+        type Token = {
+            line: number;
+            start: number;
+            end: number;
+            data: number;
+            is_type_ann: boolean;
+        }
+
+        for(const token of tokens as Token[]) {
             const line = this.editor.children[token.line].childNodes[0];
             const range = new Range();
             range.setStart(line, token.start);
@@ -119,12 +152,14 @@ export class Editor {
         const keywordHighlights = new Highlight(...highlights.keyword);
         const errorHighlights = new Highlight(...highlights.error);
         const commentHighlights = new Highlight(...highlights.comment);
+        const typeHighlights = new Highlight(...highlights.type);
 
         CSS.highlights.set('operator-syntax', operatorHighlights);
         CSS.highlights.set('number-syntax', numberHighlights);
         CSS.highlights.set('keyword-syntax', keywordHighlights);
         CSS.highlights.set('error-syntax', errorHighlights);
         CSS.highlights.set('comment-syntax', commentHighlights);
+        CSS.highlights.set('type-syntax', typeHighlights);
 
         if(this.ready) {
             this.editId++;
@@ -135,6 +170,14 @@ export class Editor {
                 editId: this.editId
             });
         }
+    }
+
+    private typeTokenCodeRange(typeToken: { line: number; start: number; end: number }): Range {
+        const lineTextNode = this.editor.children[typeToken.line].childNodes[0];
+        const range = new Range();
+        range.setStart(lineTextNode, typeToken.start);
+        range.setEnd(lineTextNode, typeToken.end);
+        return range;
     }
 
     private errorCodeRanges(error: Error): Range[] {

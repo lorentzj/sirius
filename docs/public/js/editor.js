@@ -1,4 +1,5 @@
 import { Spinner } from "./spinner.js";
+import { debounce, getElementIndex } from './utils.js';
 export class Editor {
     constructor(id, compilerSpinnerId, lex, worker) {
         this.worker = worker;
@@ -12,12 +13,21 @@ export class Editor {
         this.editor.spellcheck = false;
         this.editor.addEventListener('input', this.onInput.bind(this));
         this.editor.addEventListener('keydown', this.onKeyDown.bind(this));
+        this.editor.addEventListener('mousemove', debounce(this.onMouseMove.bind(this)));
         this.worker.onmessage = this.onMessage.bind(this);
         this.spinner.on();
         this.onInput(new Event('input'));
     }
     addErrorListener(listener) {
         this.errorListeners.push(listener);
+    }
+    onMouseMove(event) {
+        const range = document.caretPositionFromPoint(event.clientX, event.clientY);
+        if (range !== null && range.offsetNode instanceof Text) {
+            const line = range.offsetNode.parentNode;
+            const lineNumber = getElementIndex(line);
+            console.log(lineNumber, range.offset);
+        }
     }
     onMessage(event) {
         if ('ready' in event.data) {
@@ -32,9 +42,15 @@ export class Editor {
         else if (event.data.editId === this.editId) {
             this.spinner.off();
             const errorRanges = [];
+            const typeTokenRanges = [];
             for (const error of event.data.output.errors) {
                 errorRanges.push(...this.errorCodeRanges(error));
             }
+            for (const typeToken of event.data.output.type_tokens) {
+                typeTokenRanges.push(this.typeTokenCodeRange(typeToken));
+            }
+            const typeTokenHighlight = new Highlight(...typeTokenRanges);
+            CSS.highlights.set('type-syntax', typeTokenHighlight);
             const errorHighlight = new Highlight(...errorRanges);
             CSS.highlights.set('error-syntax', errorHighlight);
             for (const listener of this.errorListeners) {
@@ -54,7 +70,8 @@ export class Editor {
             keyword: [],
             number: [],
             error: [],
-            comment: []
+            comment: [],
+            type: []
         };
         for (const line of this.editor.children) {
             line.classList.remove('error');
@@ -86,11 +103,13 @@ export class Editor {
         const keywordHighlights = new Highlight(...highlights.keyword);
         const errorHighlights = new Highlight(...highlights.error);
         const commentHighlights = new Highlight(...highlights.comment);
+        const typeHighlights = new Highlight(...highlights.type);
         CSS.highlights.set('operator-syntax', operatorHighlights);
         CSS.highlights.set('number-syntax', numberHighlights);
         CSS.highlights.set('keyword-syntax', keywordHighlights);
         CSS.highlights.set('error-syntax', errorHighlights);
         CSS.highlights.set('comment-syntax', commentHighlights);
+        CSS.highlights.set('type-syntax', typeHighlights);
         if (this.ready) {
             this.editId++;
             this.spinner.on();
@@ -99,6 +118,13 @@ export class Editor {
                 editId: this.editId
             });
         }
+    }
+    typeTokenCodeRange(typeToken) {
+        const lineTextNode = this.editor.children[typeToken.line].childNodes[0];
+        const range = new Range();
+        range.setStart(lineTextNode, typeToken.start);
+        range.setEnd(lineTextNode, typeToken.end);
+        return range;
     }
     errorCodeRanges(error) {
         const errorRanges = [];

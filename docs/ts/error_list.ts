@@ -20,7 +20,6 @@ function errorItem(error: Error) {
     summary.appendChild(type);
     details.appendChild(summary);
     details.appendChild(document.createTextNode(error.message));
-    details.setAttribute('data-line', error.start_line.toString());
 
     return details;
 }

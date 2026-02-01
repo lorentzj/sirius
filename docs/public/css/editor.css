@@ -7,8 +7,9 @@
     list-style: none;
     height: 70vh;
     padding-left: 0px;
-    overflow-y: auto;
-    overflow-x: visible;
+    overflow: auto;
+    border: 1px solid black;
+    border-radius: 5px;
 }
 
 #editor:focus {
@@ -31,21 +32,17 @@
     background-color: rgb(242, 178, 178);
 }
 
-::highlight(type-syntax) {
-    background-color: rgba(255, 255, 0, 0.2);
-}
-
 ::highlight(keyword-syntax) {
-    color: rgb(131, 54, 153);
+    color:rgb(60, 15, 208);
 }
 
 ::highlight(number-syntax) {
     color: rgb(61, 160, 70);
 }
 
-::highlight(operator-syntax) {
-    color: rgb(70, 70, 194);
-}
+/* ::highlight(operator-syntax) {
+    
+} */
 
 ::highlight(comment-syntax) {
     color: rgb(138, 138, 139);
@@ -53,6 +50,12 @@
 
 ::highlight(error-syntax) {
     text-decoration: wavy underline red;
+}
+
+::highlight(type-syntax) {
+    color: rgb(131, 54, 153);
+
+    /* text-decoration: underline; */
 }
 
 .spinner {

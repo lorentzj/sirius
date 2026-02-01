@@ -9,6 +9,7 @@ pub enum ErrorType {
     Syntax,
     Annotation,
     NameResolution,
+    Type,
 }
 
 impl fmt::Display for ErrorType {
@@ -17,6 +18,7 @@ impl fmt::Display for ErrorType {
             ErrorType::Syntax => write!(f, "Syntax"),
             ErrorType::Annotation => write!(f, "Annotation"),
             ErrorType::NameResolution => write!(f, "NameResolution"),
+            ErrorType::Type => write!(f, "Type"),
         }
     }
 }

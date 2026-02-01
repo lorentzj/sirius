@@ -22,12 +22,11 @@ pub struct ParserOutput {
     pub tokens: Vec<Token>,
     pub tree: Option<Rc<Tree>>,
     pub highlight_map: HashMap<usize, Vec<usize>>,
-    pub type_tokens: Vec<usize>,
     pub errors: Vec<Error>,
 }
 
 pub fn parse(code: String) -> ParserOutput {
-    let tokens = lexer::tokenize(&code);
+    let mut tokens = lexer::tokenize(&code);
 
     let errors: Vec<_> = tokens
         .iter()
@@ -55,13 +54,16 @@ pub fn parse(code: String) -> ParserOutput {
             tokens_no_comments_iter,
         );
 
+        for i in type_tokens {
+            tokens[i].is_type_ann = true;
+        }
+
         match parser_output {
             Ok(tree) => ParserOutput {
                 code,
                 tokens,
                 tree: Some(Rc::new(tree)),
                 highlight_map,
-                type_tokens,
                 errors,
             },
 
@@ -70,7 +72,6 @@ pub fn parse(code: String) -> ParserOutput {
                 tokens,
                 tree: None,
                 highlight_map,
-                type_tokens,
                 errors: vec![Error::from_lalrpop(err)],
             },
         }
@@ -80,7 +81,6 @@ pub fn parse(code: String) -> ParserOutput {
             tokens,
             tree: None,
             highlight_map,
-            type_tokens,
             errors,
         }
     }
