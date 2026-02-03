@@ -9,7 +9,6 @@ pub struct FunctionType {
 
 #[derive(PartialEq, Clone)]
 pub enum Type {
-    Unknown,
     Void,
     F64,
     I64(Option<Poly>),
@@ -66,6 +65,14 @@ impl Type {
     pub fn fmt_novars(&self) -> String {
         self.fmt(&[])
     }
+
+    pub fn new_fn(p_args: Vec<String>, args: Vec<Type>, ret: Type) -> Type {
+        Type::Function(Box::new(FunctionType {
+            p_args,
+            args,
+            ret,
+        }))
+    }
 }
 
 fn usize_name(mut x: usize) -> String {
@@ -85,7 +92,6 @@ fn usize_name(mut x: usize) -> String {
 
 fn priv_print(t: &Type, p_vars: &[String]) -> String {
     match t {
-        Type::Unknown => "unknown".into(),
         Type::Void => "void".into(),
         Type::F64 => "f64".into(),
         Type::I64(ind) => match ind {
@@ -154,7 +160,6 @@ fn priv_print(t: &Type, p_vars: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::{FunctionType, Poly, Type, usize_name};
-    use crate::solver::Rat;
 
     #[test]
     fn usize_name_test() {
@@ -172,13 +177,12 @@ mod tests {
 
     #[test]
     fn print_types() {
-        assert_eq!(Type::Unknown.fmt_novars(), "unknown");
         assert_eq!(Type::Void.fmt_novars(), "void");
         assert_eq!(Type::Bool.fmt_novars(), "bool");
         assert_eq!(Type::F64.fmt_novars(), "f64");
         assert_eq!(Type::I64(None).fmt_novars(), "i64");
         assert_eq!(
-            Type::I64(Some(Poly::constant(Rat::from(1)))).fmt_novars(),
+            Type::I64(Some(Poly::constant_int(1))).fmt_novars(),
             "i64(p=1)"
         );
         assert_eq!(

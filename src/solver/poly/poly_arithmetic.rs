@@ -206,9 +206,9 @@ mod tests {
     fn arith() {
         let var_dict = Rc::new(vec!["a".to_string(), "b".to_string(), "c".to_string()]);
 
-        let a = Poly::var(0, 2) * Poly::constant(Rat::from(3));
-        let b = Poly::var(1, 1) * Poly::constant(Rat::from(4));
-        let c = Poly::constant(Rat::from(2));
+        let a = Poly::var(0, 2) * Poly::constant_int(3);
+        let b = Poly::var(1, 1) * Poly::constant_int(4);
+        let c = Poly::constant_int(2);
 
         println!("{}", (a).format(&var_dict));
         println!("{}", (b).format(&var_dict));
@@ -218,12 +218,10 @@ mod tests {
         assert_eq!("3a^2 + 4b - 2", (b + a - c).format(&var_dict));
 
         // (a + 1)(a + 1)
-        let a = (Poly::var(0, 1) + Poly::constant(Rat::from(1)))
-            * (Poly::var(0, 1) + Poly::constant(Rat::from(1)));
+        let a =
+            (Poly::var(0, 1) + Poly::constant_int(1)) * (Poly::var(0, 1) + Poly::constant_int(1));
         // a^2 + 2a + 1
-        let b = Poly::var(0, 2)
-            + Poly::constant(Rat::from(2)) * Poly::var(0, 1)
-            + Poly::constant(Rat::from(1));
+        let b = Poly::var(0, 2) + Poly::constant_int(2) * Poly::var(0, 1) + Poly::constant_int(1);
 
         assert!(a == b);
     }
@@ -241,7 +239,7 @@ mod tests {
                 let ypow = rng.gen_range(0..2);
                 let zpow = rng.gen_range(0..3);
 
-                p = p + Poly::constant(Rat::from(coef))
+                p = p + Poly::constant_int(coef)
                     * Poly::var(0, xpow)
                     * Poly::var(1, ypow)
                     * Poly::var(2, zpow);
@@ -287,7 +285,7 @@ mod tests {
     fn derivative() {
         let var_dict = vec!["x".to_string(), "y".to_string(), "z".to_string()];
 
-        let p = Poly::var(0, 2) * Poly::var(1, 2) * Poly::constant(Rat::from(3))
+        let p = Poly::var(0, 2) * Poly::var(1, 2) * Poly::constant_int(3)
             + Poly::var(0, 1) * Poly::var(2, 1);
 
         assert_eq!(

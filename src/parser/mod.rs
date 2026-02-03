@@ -1,12 +1,11 @@
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
-pub(crate) mod ast;
-pub(crate) mod lexer;
-
-mod positioned;
+pub mod ast;
+pub mod lexer;
+pub mod positioned;
 
 use crate::error::{Error, ErrorType};
-pub use ast::{AccessDim, Block, E, Expr, Function, Stmt, Tree, TypeArg, UnaryOp};
+pub use ast::{AccessDim, Block, Expr, Function, Stmt, Tree, UnaryOp};
 pub use lexer::{Tok, Token};
 pub use positioned::Pos;
 
@@ -20,7 +19,7 @@ pub fn add_highlight_pair(map: &mut HashMap<usize, Vec<usize>>, a: usize, b: usi
 pub struct ParserOutput {
     pub code: String,
     pub tokens: Vec<Token>,
-    pub tree: Option<Rc<Tree>>,
+    pub tree: Option<Tree>,
     pub highlight_map: HashMap<usize, Vec<usize>>,
     pub errors: Vec<Error>,
 }
@@ -62,7 +61,7 @@ pub fn parse(code: String) -> ParserOutput {
             Ok(tree) => ParserOutput {
                 code,
                 tokens,
-                tree: Some(Rc::new(tree)),
+                tree: Some(tree),
                 highlight_map,
                 errors,
             },

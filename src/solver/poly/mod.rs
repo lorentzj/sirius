@@ -41,6 +41,19 @@ impl Poly {
         }
     }
 
+    pub fn constant_int(val: i64) -> Self {
+        Self {
+            terms: if val == 0 {
+                vec![]
+            } else {
+                vec![Mono {
+                    val: Rat::from(val),
+                    vars: vec![],
+                }]
+            },
+        }
+    }
+
     pub fn var(var: usize, pow: u64) -> Self {
         if pow == 0 {
             Self {
@@ -246,11 +259,11 @@ mod tests {
         let var_dict = vec!["x".to_string(), "y".to_string(), "z".to_string()];
 
         let a = Poly::var(0, 4);
-        let b = Poly::var(0, 2) * Poly::constant(Rat::from(3));
-        let c = Poly::var(0, 2) * Poly::var(2, 3) * Poly::constant(Rat::from(5));
-        let d = Poly::var(1, 1) * Poly::var(0, 1) * Poly::constant(Rat::from(4));
+        let b = Poly::var(0, 2) * Poly::constant_int(3);
+        let c = Poly::var(0, 2) * Poly::var(2, 3) * Poly::constant_int(5);
+        let d = Poly::var(1, 1) * Poly::var(0, 1) * Poly::constant_int(4);
         let e = Poly::var(2, 1);
-        let f = Poly::constant(Rat::from(2));
+        let f = Poly::constant_int(2);
 
         let g = a + b + c + d + e + f;
 
@@ -278,11 +291,11 @@ mod tests {
         let var_dict = vec!["x".to_string(), "y".to_string(), "z".to_string()];
 
         let a = Poly::var(0, 4);
-        let b = Poly::var(0, 2) * Poly::constant(Rat::from(3));
-        let c = Poly::var(0, 2) * Poly::var(2, 3) * Poly::constant(Rat::from(5));
-        let d = Poly::var(1, 1) * Poly::var(0, 1) * Poly::constant(Rat::from(4));
+        let b = Poly::var(0, 2) * Poly::constant_int(3);
+        let c = Poly::var(0, 2) * Poly::var(2, 3) * Poly::constant_int(5);
+        let d = Poly::var(1, 1) * Poly::var(0, 1) * Poly::constant_int(4);
         let e = Poly::var(2, 1);
-        let f = Poly::constant(Rat::from(2));
+        let f = Poly::constant_int(2);
 
         let g = a + b + c + d + e + f;
 

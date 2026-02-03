@@ -8,14 +8,23 @@
     font-weight: bold;
 }
 
+.error_message_code {
+    font-style: italic;
+}
+
 details {
     font-size: x-large;
     font-family: monospace;
+    overflow: hidden;
+    overflow-wrap: anywhere;
 }
 
 summary {
     list-style: none;   
     user-select: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
 }
 
 details > summary::before {

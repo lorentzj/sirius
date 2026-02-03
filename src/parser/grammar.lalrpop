@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::parser::{UnaryOp, Pos, Expr, AccessDim, Stmt, Block, TypeArg, Function, Tree, add_highlight_pair};
+use crate::parser::{UnaryOp, Pos, Expr, AccessDim, Stmt, Block, Function, Tree, add_highlight_pair};
 use crate::parser::lexer;
 use lexer::{Tok, Op, AssnOp};
 
@@ -20,18 +20,15 @@ Fn: Function = {
     }
 }
 
-SigTypeArgs: Vec<TypeArg> = {
+SigTypeArgs: Vec<Pos<String>> = {
     <start: @L> "{" <args: CommaSep<PosString>> "}" <end: @R> => {
         add_highlight_pair(highlight_map, start, end - 1);
-        
-        let mut type_args = vec![];
-        
-        for arg in args {
+                
+        for arg in &args {
             type_tokens.extend(arg.start..arg.end);
-            type_args.push(TypeArg::PName(arg));
         }
 
-        type_args
+        args
     }
 }
 

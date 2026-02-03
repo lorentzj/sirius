@@ -140,13 +140,14 @@ impl AccessDim {
         }
     }
 }
+
 pub enum S {
     Print(Expr),
     Return(Expr),
     Yield(Expr),
     Let {
         mutable: bool,
-        place: Pos<String>,
+        name: Pos<String>,
         ann: Option<Expr>,
         value: Expr,
     },
@@ -198,7 +199,7 @@ impl Stmt {
     pub fn let_stmt(
         start: usize,
         mutable: bool,
-        place: Pos<String>,
+        name: Pos<String>,
         ann: Option<Expr>,
         value: Expr,
         end: usize,
@@ -207,7 +208,7 @@ impl Stmt {
             start,
             data: S::Let {
                 mutable,
-                place,
+                name,
                 ann,
                 value,
             },
@@ -266,37 +267,9 @@ pub struct Block {
     pub stmts: Vec<Stmt>,
 }
 
-pub enum TypeArg {
-    Name(Pos<String>),
-    PName(Pos<String>),
-}
-
-impl TypeArg {
-    pub fn name(&self) -> String {
-        match self {
-            TypeArg::Name(s) => s.data.clone(),
-            TypeArg::PName(s) => s.data.clone(),
-        }
-    }
-
-    pub fn start(&self) -> usize {
-        match self {
-            TypeArg::Name(s) => s.start,
-            TypeArg::PName(s) => s.start,
-        }
-    }
-
-    pub fn end(&self) -> usize {
-        match self {
-            TypeArg::Name(s) => s.end,
-            TypeArg::PName(s) => s.end,
-        }
-    }
-}
-
 pub struct Function {
     pub name: Pos<String>,
-    pub type_args: Vec<TypeArg>,
+    pub type_args: Vec<Pos<String>>,
     pub args: Vec<(Pos<String>, Expr)>,
     pub ret: Option<Expr>,
     pub body: Block,

@@ -165,7 +165,7 @@ macro_rules! system {
                         }}
                     ).collect::<VecDeque<_>>();
 
-                    let mut acc = Poly::constant(Rat::from(0));
+                    let mut acc = Poly::constant_int(0);
 
                     for term in terms {
                         acc = acc + Poly { terms: vec![term] };

@@ -19,11 +19,25 @@ impl<T> Pos<T> {
     }
 }
 
+impl<T> Pos<T>
+where T: Clone,
+{
+    pub fn collect(v: &[Pos<T>]) -> Vec<T> {
+        v.into_iter().map(|p| p.data.clone()).collect()
+    }
+}
+
 impl<T> std::hash::Hash for Pos<T>
 where
     T: std::hash::Hash,
 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.data.hash(state);
+    }
+}
+
+impl Pos<String> {
+    pub fn as_ref(&self) -> Pos<&str> {
+        Pos::new(self.start, &self.data, self.end)
     }
 }

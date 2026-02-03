@@ -59,7 +59,6 @@ export class Editor {
         if(range !== null && range.offsetNode instanceof Text) {
             const line = range.offsetNode.parentNode as HTMLElement;
             const lineNumber = getElementIndex(line);
-            console.log(lineNumber, range.offset);
         }
     }
 
@@ -226,7 +225,48 @@ export class Editor {
                 event.preventDefault();
             }
         } else if(event.key === 'Tab') {
+            document.execCommand('insertText', false, '    ');
+            event.preventDefault();
+        } else if(event.key === 'Enter') {
+            let { line, column } = this.caretPosition();
+            const lineWhiteSpace = this.editor.children[line].textContent!.match(/^ */)?.[0];
+            document.execCommand('insertText', false, '\n' + lineWhiteSpace);
             event.preventDefault();
         }
+    }
+
+    private caretPosition() : { line: number, column: number } {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) {
+            return { line: 0, column: 0 };
+        }
+
+        const range = selection.getRangeAt(0);
+        let node = range.startContainer;
+
+        let lineIndex = -1;
+        for (let i = 0; i < this.editor.children.length; i++) {
+            if (this.editor.children[i].contains(node)) {
+                lineIndex = i;
+                break;
+            }
+        }
+
+        if (lineIndex === -1) {
+            return { line: 0, column: 0 };
+        }
+
+        let column = 0;
+        if (node.nodeType === Node.TEXT_NODE) {
+            column = range.startOffset;
+        } else {
+            if (node.childNodes.length > 0 && node.childNodes[0].nodeType === Node.TEXT_NODE) {
+                column = range.startOffset;
+            } else {
+                column = 0;
+            }
+        }
+
+        return { line: lineIndex, column };
     }
 }

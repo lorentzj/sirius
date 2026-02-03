@@ -1,5 +1,4 @@
 use super::Poly;
-use super::Rat;
 use super::mono::{grevlex, monomial_div};
 use std::fmt;
 use std::rc::Rc;
@@ -25,7 +24,7 @@ impl System {
 
 impl System {
     pub fn constant(&self, val: i64) -> Poly {
-        Poly::constant(Rat::from(val))
+        Poly::constant_int(val)
     }
 
     pub fn gb(&self) -> System {

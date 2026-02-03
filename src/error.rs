@@ -3,6 +3,7 @@ use std::fmt;
 use lalrpop_util::ParseError;
 
 use crate::parser::Tok;
+use crate::parser::Pos;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ErrorType {
@@ -102,5 +103,14 @@ impl Error {
             }
             ParseError::User { error } => error,
         }
+    }
+
+    pub fn type_from_expr<T>(expr: &Pos<T>, message: &str) -> Error {
+        Error::new(
+            ErrorType::Type,
+            message.to_string(),
+            expr.start,
+            expr.end - 1,
+        )
     }
 }

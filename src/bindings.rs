@@ -3,6 +3,8 @@ use crate::parser::ParserOutput;
 use super::error::Error;
 use super::parser::lexer::{Tok, Token, tokenize};
 use super::parser::parse;
+use super::typechecker::check_source;
+
 use wasm_bindgen::prelude::*;
 
 extern crate console_error_panic_hook;
@@ -114,12 +116,16 @@ pub fn lex(code: &str) -> Vec<JsValue> {
 
 #[wasm_bindgen]
 pub fn compile(code: &str) -> JsValue {
-    let output = parse(code.to_string());
+    let mut output = parse(code.to_string());
+    let type_errors = check_source(&mut output);
+    output.errors.extend(type_errors);
+
     let errors = output
         .errors
         .iter()
         .filter_map(|e| serialize_error(e, &output.tokens))
-        .collect::<Vec<JsValue>>();
+        .collect::<Vec<_>>();
+
     let type_tokens = serialize_type_tokens(&output);
     let obj = js_sys::Object::new();
     let _ = js_sys::Reflect::set(&obj, &JsValue::from("errors"), &JsValue::from(errors));
