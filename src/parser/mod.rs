@@ -4,7 +4,7 @@ pub mod ast;
 pub mod lexer;
 pub mod positioned;
 
-use crate::error::{Error, ErrorType};
+use crate::error::{Error, ErrorType, Errors};
 pub use ast::{AccessDim, Block, Expr, Function, Stmt, Tree, UnaryOp};
 pub use lexer::{Tok, Token};
 pub use positioned::Pos;
@@ -21,7 +21,7 @@ pub struct ParserOutput {
     pub tokens: Vec<Token>,
     pub tree: Option<Tree>,
     pub highlight_map: HashMap<usize, Vec<usize>>,
-    pub errors: Vec<Error>,
+    pub errors: Errors,
 }
 
 pub fn parse(code: String) -> ParserOutput {

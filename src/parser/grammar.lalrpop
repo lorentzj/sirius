@@ -49,6 +49,7 @@ Stmt: Stmt = {
     <start: @L> "print" <e: Expr> <end: @R> "newline" => Stmt::print(start, e, end),
     <start: @L> "return" <e: Expr> <end: @R> "newline" => Stmt::return_stmt(start, e, end),
     <start: @L> "yield" <e: Expr> <end: @R> "newline" => Stmt::yield_stmt(start, e, end),
+    <start: @L> "yield"  "from" <e: Expr> <end: @R> "newline" => Stmt::yield_from_stmt(start, e, end),
 
     <start: @L> "let" <m: "mut"?> <p: PosString> <ann: (":" TypeAnn)?> "=" <e: Expr> <end: @R> "newline" => {
         let ann = ann.map(|(_, a)| a);
@@ -181,7 +182,7 @@ CommaSepNonZ<T>: Vec<T> = {
 
 CommaSep<T>: Vec<T> = {
     => vec![],
-    <ts: CommaSepNonZ<T>> => ts
+    <ts: CommaSepNonZ<T>> ","? => ts
 }
 
 extern {

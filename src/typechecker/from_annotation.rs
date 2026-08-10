@@ -1,6 +1,7 @@
-use crate::error::Error;
 use super::Type;
-use crate::parser::ast::{AD, E, Expr};
+use crate::error::{Error, Errors};
+use crate::parser::Pos;
+use crate::parser::ast::{AD, E, Expr, Function};
 use crate::parser::lexer::Op;
 use crate::solver::Poly;
 
@@ -19,13 +20,10 @@ pub fn annotation(ann: &Expr, p_vars: &Vec<String>) -> Result<Type, Error> {
         E::Ident(s) => {
             if let Some(t) = standard_type(s) {
                 Ok(t)
-            } else if p_vars.contains(s) {
-                Ok(Type::I64(Some(Poly::var(
-                    p_vars.iter().position(|v| v == s).unwrap(),
-                    1,
-                ))))
+            } else if let Some(p_position) = p_vars.iter().position(|v| v == s) {
+                Ok(Type::I64(Some(Poly::var(p_position, 1))))
             } else {
-                Err(Error::type_from_expr(ann, &format!("unknown type \"{}\"", s)))
+                Err(ann.type_error(&format!("unknown type \"{}\"", s)))
             }
         }
         E::Int(i) => Ok(Type::I64(Some(Poly::constant_int(*i)))),
@@ -46,11 +44,11 @@ pub fn annotation(ann: &Expr, p_vars: &Vec<String>) -> Result<Type, Error> {
                         if let Type::I64(Some(poly)) = p {
                             parsed_dims.push(poly);
                         } else {
-                            return Err(Error::type_from_expr(e, "dimension must be a poly expression"));
+                            return Err(e.type_error("dimension must be a poly expression"));
                         }
                     }
                     AD::Range(_, _) => {
-                        return Err(Error::type_from_expr(dim, "ranges not supported in type annotations"));
+                        return Err(dim.type_error("ranges not supported in type annotations"));
                     }
                 }
             }
@@ -71,10 +69,10 @@ pub fn annotation(ann: &Expr, p_vars: &Vec<String>) -> Result<Type, Error> {
             let (lhs_poly, rhs_poly) = match (lhs_t, rhs_t) {
                 (Type::I64(Some(l)), Type::I64(Some(r))) => (l, r),
                 (Type::I64(Some(_)), _) => {
-                    return Err(Error::type_from_expr(rhs, "operand must be a poly expression"));
+                    return Err(rhs.type_error("operand must be a poly expression"));
                 }
                 (_, _) => {
-                    return Err(Error::type_from_expr(lhs, "operand must be a poly expression"));
+                    return Err(lhs.type_error("operand must be a poly expression"));
                 }
             };
 
@@ -87,16 +85,16 @@ pub fn annotation(ann: &Expr, p_vars: &Vec<String>) -> Result<Type, Error> {
                         let rhs_const: i64 = match rhs_const.0.to_integer().try_into() {
                             Ok(i) => i,
                             Err(_) => {
-                                return Err(Error::type_from_expr(rhs, "power must be an integer"));
+                                return Err(rhs.type_error("power must be an integer"));
                             }
                         };
 
                         if rhs_const == 0 {
                             Ok(Type::I64(Some(Poly::constant_int(1))))
                         } else if rhs_const < 0 {
-                            Err(Error::type_from_expr(rhs, "power must be non-negative"))
+                            Err(rhs.type_error("power must be non-negative"))
                         } else if rhs_const > 16 {
-                            Err(Error::type_from_expr(rhs, "power must be less than or equal to 16"))
+                            Err(rhs.type_error("power must be less than or equal to 16"))
                         } else {
                             let mut result = Poly::constant_int(1);
                             for _ in 0..rhs_const {
@@ -105,11 +103,43 @@ pub fn annotation(ann: &Expr, p_vars: &Vec<String>) -> Result<Type, Error> {
                             Ok(Type::I64(Some(result)))
                         }
                     }
-                    None => Err(Error::type_from_expr(rhs, "power must be a constant poly expression")),
+                    None => Err(rhs.type_error("power must be a constant poly expression")),
                 },
-                _ => Err(Error::type_from_expr(ann, &format!("invalid binary operation \"{op:?}\" in type annotation"))),
+                _ => Err(ann.type_error(&format!(
+                    "invalid binary operation \"{op:?}\" in type annotation"
+                ))),
             }
         }
-        _ => Err(Error::type_from_expr(ann, "invalid type annotation")),
+        _ => Err(ann.type_error("invalid type annotation")),
     }
+}
+
+pub fn fun_type(fun: &Function) -> Result<Type, Errors> {
+    let p_vars = Pos::inner_collect(&fun.type_args);
+
+    let mut args = vec![];
+    let mut errors = vec![];
+    for (_, ann) in fun.args.iter() {
+        match annotation(ann, &p_vars) {
+            Ok(t) => {
+                args.push(t);
+            }
+            Err(e) => {
+                errors.push(e);
+            }
+        }
+    }
+
+    let ret_t = match &fun.ret {
+        Some(ret) => match annotation(ret, &p_vars) {
+            Ok(t) => t,
+            Err(e) => {
+                errors.push(e);
+                Type::Void
+            }
+        },
+        None => Type::Void,
+    };
+
+    Ok(Type::new_fn(p_vars, args, ret_t))
 }

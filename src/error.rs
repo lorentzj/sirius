@@ -3,7 +3,7 @@ use std::fmt;
 use lalrpop_util::ParseError;
 
 use crate::parser::Tok;
-use crate::parser::Pos;
+pub type Errors = Vec<Error>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ErrorType {
@@ -37,24 +37,6 @@ impl Error {
         Error {
             error_type,
             message,
-            start,
-            end,
-        }
-    }
-
-    pub fn new_ann(start: usize, message: String, end: usize) -> Error {
-        Error {
-            error_type: ErrorType::Annotation,
-            message,
-            start,
-            end,
-        }
-    }
-
-    pub fn new_ann_default_msg(start: usize, end: usize) -> Error {
-        Error {
-            error_type: ErrorType::Annotation,
-            message: "illegal expression in annotation".into(),
             start,
             end,
         }
@@ -103,14 +85,5 @@ impl Error {
             }
             ParseError::User { error } => error,
         }
-    }
-
-    pub fn type_from_expr<T>(expr: &Pos<T>, message: &str) -> Error {
-        Error::new(
-            ErrorType::Type,
-            message.to_string(),
-            expr.start,
-            expr.end - 1,
-        )
     }
 }

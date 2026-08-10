@@ -5,17 +5,12 @@ pub struct Scope<T: Clone>(Vec<HashMap<String, T>>);
 
 impl<T: Clone> std::default::Default for Scope<T> {
     fn default() -> Self {
-        Scope::<T>(vec![])
+        let globals: HashMap<String, T> = HashMap::default();
+        Scope::<T>(vec![globals])
     }
 }
 
 impl<T: Clone> Scope<T> {
-    pub fn _init(globals: HashMap<String, T>) -> Self {
-        let mut v = Self(vec![]);
-        v.0.push(globals);
-        v
-    }
-
     pub fn _get(&self, key: &str) -> Option<&T> {
         for scope in self.0.iter().rev() {
             if let Some(t) = scope.get(key) {

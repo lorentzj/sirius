@@ -1,3 +1,5 @@
+use crate::error::{Error, ErrorType};
+
 #[derive(Clone)]
 pub struct Pos<T> {
     pub start: usize,
@@ -10,29 +12,26 @@ impl<T> Pos<T> {
         Self { start, data, end }
     }
 
-    pub fn map<U>(&self, f: fn(&T) -> U) -> Pos<U> {
-        Pos {
-            start: self.start,
-            data: f(&self.data),
-            end: self.end,
-        }
+    pub fn new_at<U>(data: T, pos: &Pos<U>) -> Self {
+        Self::new(pos.start, data, pos.end)
+    }
+
+    pub fn type_error(&self, message: &str) -> Error {
+        Error::new(
+            ErrorType::Type,
+            message.to_string(),
+            self.start,
+            self.end - 1,
+        )
     }
 }
 
 impl<T> Pos<T>
-where T: Clone,
-{
-    pub fn collect(v: &[Pos<T>]) -> Vec<T> {
-        v.into_iter().map(|p| p.data.clone()).collect()
-    }
-}
-
-impl<T> std::hash::Hash for Pos<T>
 where
-    T: std::hash::Hash,
+    T: Clone,
 {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.data.hash(state);
+    pub fn inner_collect<B: FromIterator<T>>(v: &[Pos<T>]) -> B {
+        v.iter().map(|p| p.data.clone()).collect()
     }
 }
 

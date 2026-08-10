@@ -34,10 +34,8 @@ impl Type {
 
                 f.ret.forall_vars(seen);
             }
-            Type::ForAll(i) => {
-                if !seen.contains(i) {
-                    seen.push(*i);
-                }
+            Type::ForAll(i) if !seen.contains(i) => {
+                seen.push(*i);
             }
             _ => (),
         }
@@ -67,11 +65,7 @@ impl Type {
     }
 
     pub fn new_fn(p_args: Vec<String>, args: Vec<Type>, ret: Type) -> Type {
-        Type::Function(Box::new(FunctionType {
-            p_args,
-            args,
-            ret,
-        }))
+        Type::Function(Box::new(FunctionType { p_args, args, ret }))
     }
 }
 
@@ -118,7 +112,7 @@ fn priv_print(t: &Type, p_vars: &[String]) -> String {
         Type::Function(f) => {
             let mut res = "".to_string();
             if f.args.len() == 1 {
-                res.push_str(&format!("{}->", &priv_print(&f.args[0], p_vars)));
+                res.push_str(&format!("{}->", priv_print(&f.args[0], p_vars)));
             } else {
                 res.push('(');
                 for t in &f.args {

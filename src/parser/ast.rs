@@ -145,6 +145,7 @@ pub enum S {
     Print(Expr),
     Return(Expr),
     Yield(Expr),
+    YieldFrom(Expr),
     Let {
         mutable: bool,
         name: Pos<String>,
@@ -192,6 +193,14 @@ impl Stmt {
         Stmt {
             start,
             data: S::Yield(data),
+            end,
+        }
+    }
+
+    pub fn yield_from_stmt(start: usize, data: Expr, end: usize) -> Stmt {
+        Stmt {
+            start,
+            data: S::YieldFrom(data),
             end,
         }
     }
