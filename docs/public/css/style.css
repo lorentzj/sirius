@@ -1,0 +1,161 @@
+:root {
+    --link-color: rgb(0, 0, 255);
+    --link-hover-color: rgb(99, 0, 157);
+    --link-active-color: rgb(186, 20, 167);
+}
+
+@font-face {
+    font-family: "Domine";
+    src: url("/fonts/Domine/static/Domine-Regular.ttf") format("truetype");
+    font-display: swap;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    background-color: rgb(255, 253, 251);
+    font-family: "Domine";
+    font-size: larger;
+    color: rgb(25, 41, 30);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+@media (width <= 800px) {
+    body {
+        font-size: medium;
+    }
+}
+
+h1::before, h1::after {
+    content: "✷";
+    padding: 10px;
+}
+
+h2::before, h2::after {
+    content: "✦";
+    padding: 10px;
+}
+
+p, div:has(h1), div:has(h2), svg {
+    max-width: 700px;
+    margin: auto;
+}
+
+p {
+    text-indent: 2em;
+    line-height: 1.5;
+}
+
+code {
+    white-space: nowrap;
+    font-size: larger;
+}
+
+em code {
+    font-style: normal;
+}
+
+/* Tables */
+
+table {
+    border-spacing: 0;
+    margin: auto;
+}
+
+th {
+    border-bottom: 1px solid black;
+}
+
+td, th {
+    padding: 10px;
+}
+
+td:not(:last-child), th:not(:last-child) {
+    border-right: 1px solid black;
+}
+
+/* Footnotes */
+
+@keyframes flash_link {
+    0%   { background-color: transparent; }
+    10%   { background-color: rgb(248, 248, 123); }
+    100% { background-color: transparent }
+}
+
+.backlink:target {
+    animation: flash_link 1s linear;
+}
+
+.footnote:target {
+    animation: flash_link 1s linear;
+}
+
+/* Links */
+
+a, a svg {
+    text-decoration: underline;
+    color: var(--link-color);
+}
+
+svg.icon {
+    width: 0.8em;
+    height: 0.8em;
+}
+
+a:is(:hover, :focus), a:is(:hover, :focus) svg {
+    color: var(--link-hover-color);
+    text-decoration: none;
+    outline: none;
+}
+
+a:active, a:active svg {
+    color: var(--link-active-color);
+    outline: none;
+}
+
+/* Editor */
+
+.editor {
+    max-width: 900px;
+    margin: auto;
+    outline: 1px solid black;
+    padding: 10px;
+}
+
+.editor:has(.cm-focused) {
+    outline: 2px solid black;
+}
+
+.cm-focused {
+    outline: none !important;
+}
+
+.keyword {
+    color:rgb(60, 15, 208);
+    font-weight: bold;
+}
+
+.number {
+    color: rgb(61, 160, 70);
+}
+
+.comment {
+    color: rgb(122, 122, 122);
+}
+
+.type {
+    font-weight: bold;
+}
+
+.cm-lintRange-info {
+    background-image: none !important;
+}
+
+.cm-panels {
+    position: unset !important;
+}

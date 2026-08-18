@@ -1,0 +1,197 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <meta charset = "UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" type="image/x-icon" href="./favicon.ico">
+        <link rel = "stylesheet" href = "/css/style.css">
+        <script src = "./js/index.js" type = "module"></script>
+        <title>Sirius</title>
+    </head>
+    <body>
+        <div><h1>Sirius</h1></div>
+        
+        <p><code>Sirius</code> is a small, imperative, <a href="https://en.wikipedia.org/wiki/Total_functional_programming">total</a>, polynomially bounded language for array programming.</p>
+        
+        <p>Having been stung too many times <a href="https://docs.pytorch.org/docs/2.13/generated/torch.nn.Conv3d.html">massaging PyTorch tensors</a>, I set off to design a type system that handles tensor shape bookkeeping.</p>
+
+        <p>It turns out we can make one -- without the ergonomic strain of full-blown refinement types like <a href="https://ucsd-progsys.github.io/liquidhaskell/">Liquid Haskell</a> -- provided we surrender shape dynamism. In exchange, we reject more bad programs and expose more complete function contracts. The <code>Sirius</code> type system will also unlock a bit of witchcraft in the backend.</p>
+
+        <p>I've embedded a prototype compiler frontend in this page. Here's a <code>hello world</code>: dot product and matrix multiplication.</p>
+        
+        <pre class="editor">// <code>typevar</code>s, representing integers, come in curly brackets after function name
+// "len(a) == len(b)" is proven at callsites
+fn dot{N}(a: f32[N], b: f32[N]) -> f32:
+    let mut sum = 0.0
+    for i from 0 to N:
+        // i is proven valid index into a and b
+        sum += a[i] * b[i]
+    return sum
+
+// invalid shape calls fail to compile
+fn matmul{I, J, K}(a: f32[I, J], b: f32[J, K]) -> f32[I, K]:
+    for i from 0 to I:
+        for k from 0 to K:
+            // i is proven valid index into a
+            // k valid into b' (b transpose)
+            // dot_product requires a[i] and b'[k] have same length
+            // total yield count is proven I*K
+            // yield populates the return array in column-major order
+            yield dot(a[i], b'[k])</pre>
+
+        <p>This program doesn't seem very interesting until you try to change it. The compiler rejects accessing <code>a[i+1]</code> in <code>dot</code>, adding an extra <code>yield</code> in <code>matmul</code>, or modifying any of the <code>typevar</code> constraints in the function signatures.</p>
+
+        <pre class="editor">// polynomial expressions in <code>typevar</code>s are valid types
+// "len(return) == A + B" is proven in function body
+fn concat{A, B}(a: f32[A], b: f32[B]) -> f32[A + B]:
+    yield from a
+    yield from b
+
+// N + 1 for <code>typevar</code> N is also valid type
+fn push{N}(arr: f32[N], item: f32) -> f32[N + 1]:
+    yield from arr
+    yield item
+
+fn fill{N}(val: f32) -> f32[N]:
+    for i from 0 to N:
+        yield val
+
+fn test():
+    let x = [1.0, 2.0, 3.0]
+    // dot expects equal-len args
+    // so fill(2) is inferred to be fill{3}(2.0) i.e. [2.0, 2.0, 2.0]
+    let y = dot(x, fill(2)) // == 12.0
+
+    // ! can't satisfy dot's call site constraints
+    let z = dot(x, fill{4}(2))</pre>
+
+        <p>Signatures provide shape bounds, accesses are statically checked, and <code>yield</code>s are statically counted. In short, we're using refinement types with an intentionally limited scope. Since the type system is constrained, <span id="backlink_1" class="backlink">the annotation burden stays low.</span><sup><a href="#footnote_1">[1]</a></sup></p>
+        
+        <div><h2><a href="#design_rationale">#</a> Design Rationale</h2></div>
+        
+        <p>Why make an imperative array language? In my opinion, the humble C-style <code>for</code> loop has gotten a bad rap. <code>Sirius</code> static analysis keeps most of its power and ameliorates the downsides. Subjectively, some problems feel easier to solve in an imperative, looping style. <code>Sirius</code> is just exploring a new part of design space.</p>
+        
+        <p>That said, I plan to build functional and array-oriented facilities over the imperative core, like map and filter, fancy indexing, and a checked <a href="https://openreview.net/pdf?id=oapKSVM2bcj">einops</a> primitive integrated like regexes in Perl.</p>
+        
+        <p>What do polynomials have to do with arrays? For one thing, multidimensional array access desugars to a polynomial.</p>
+        <table>
+            <thead><tr><th>Array</th><th>Access</th><th>Desugar</th></tr></thead>
+            <dbody>
+                <tr>
+                    <td><code>A[N]</code></td>
+                    <td><code>A[i]</code></td>
+                    <td><code>deref(A + i)</code></td>
+                </tr>
+                <tr>
+                    <td><code>A[N, M]</code></td>
+                    <td><code>A[i, j]</code></td>
+                    <td><code>deref(A + i*M + j)</code></td>
+                </tr>
+                <tr>
+                    <td><code>A[N, M, P]</code></td>
+                    <td><code>A[i, j, k]</code></td>
+                    <td><code>deref(A + i*M*P + j*P + k)</code></td>
+                </tr>
+                <tr>
+                    <td><code>A[N, M, M]</code></td>
+                    <td><code>A[i, j, k]</code></td>
+                    <td><code>deref(A + i*M^2 + j*M + k)</code></td>
+                </tr>
+            </dbody>
+        </table>
+        <p>The desugared expression is a strategy for accessing an element given array coordinates, and it is polynomial in array dimensions. This is a <a href="https://en.wikipedia.org/wiki/Polynomial_ring">polynomial ring</a>. Add two <code>Poly</code>s together, multiply them, or substitute a variable for a new one, and you'll always get a <code>Poly</code> back.</p>
+        <table>
+            <thead><tr><th>Array</th><th>Access</th><th>Desugar</th></tr></thead>
+            <dbody>
+                <tr>
+                    <td><code>A[N, M + 1]</code></td>
+                    <td><code>A[i, j]</code></td>
+                    <td><code>deref(A + i*M + i + j)</code></td>
+                </tr>
+                <tr>
+                    <td><code>A[N, 2*M]</code></td>
+                    <td><code>A[i, j]</code></td>
+                    <td><code>deref(A + 2*i*M + j)</code></td>
+                </tr>
+                <tr>
+                    <td><code>A[N, M]</code></td>
+                    <td><code>A[3*i + 2, j + 5]</code></td>
+                    <td><code>deref(A + 3*i*M + 2*M + j + 5)</code></td>
+                </tr>
+            </dbody>
+        </table>
+
+        <p>The <code>Sirius</code> type system permits the programmer to freely express array dimensions and accesses in terms of <code>Poly</code>s -- <span id="backlink_2" class="backlink">as long as the resulting constraints can be solved by the <a href="https://github.com/Z3Prover/z3">Z3 prover</a>.</span><sup><a href="#footnote_2">[2]</a></sup> The backend represents array access, strides, and offsets using this abstraction.</p>
+
+        <p>Now, you might object: why can't the programmer write a function that <code>yield</code>s an array of super-polynomial size? This is simple in most languages using a <code>while</code> loop or recursion; both are inexpressible in <code>Sirius</code>. Only <code>for</code>-iteration between <code>Poly</code> bounds is permitted. Memory and compute are therefore subject to the same organs of static analysis.</p>
+
+        <p>There are various means to navigate the shape-data boundary in <code>Sirius</code>. <code>typevar</code>s are available as constants at runtime. Some operators can lift a normal value into a <code>typevar</code> by proving its bounds. Iterators behave as <code>typevar</code>s. <code>typevar</code>s can compose algebraically, but any division that doesn't immediately factor will pull the type expression down into a normal value. For example, <code>(N^2-4)/(N+2)</code> is of type <code>N-2</code>, but <code>(2*N)/M</code> is not a type, even given <code>N == M</code>.</p>
+
+        <svg alt="Diagram describing the transitions to and from the tracked Poly system for Sirius variables." width="100%" viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="20" refX="9" refY="5" orient="auto">
+                    <polygon fill="currentColor" points="0 0, 0 10, 10 5"></polygon>
+                </marker>
+                <g id="box">
+                    <path stroke="currentColor" fill="transparent" d="M -50 -15
+                        h100
+                        a5,5 0 0 1 5,5
+                        v20
+                        a5,5 0 0 1 -5,5
+                        h-100
+                        a5,5 0 0 1 -5,-5
+                        v-20
+                        a5,5 0 0 1 5,-5
+                        z"></path>
+                </g>
+            </defs>
+
+            <text x="100" y="40" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Typevar</text>
+            <line stroke="currentColor" marker-end="url(#arrowhead)" x1="100" y1="50" x2="100" y2="74"></line>
+            <text x="300" y="40" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Argument/variable</text>
+            <line stroke="currentColor" marker-end="url(#arrowhead)" x1="300" y1="50" x2="300" y2="74"></line>
+
+            <line stroke="currentColor" marker-end="url(#arrowhead)" x1="245" y1="90" x2="156" y2="90"></line>
+            <text x="200" y="75" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Modulo</text>
+
+            <g transform="translate(100 90)">
+                <use xlink:href="#box"></use>
+                <text x="0" y="0" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Poly</text>
+            </g>
+
+            <g transform="translate(300 90)">
+                <use xlink:href="#box"></use>
+                <text x="0" y="0" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Plain Value</text>
+            </g>
+
+            <path stroke="currentColor" fill="transparent" marker-end="url(#arrowhead)" d="M 60 105
+                v40
+                a5,5 0 0 0 5,5
+                h70
+                a5,5 0 0 0 5,-5
+                v-39
+                "></path>
+            
+            <text x="100" y="135" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Arithmetic</text>
+            <text x="300" y="135" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Arithmetic</text>
+
+            <line stroke="currentColor" marker-end="url(#arrowhead)" x1="105" y1="150" x2="205" y2="150"></line>
+            <line stroke="currentColor" marker-start="url(#arrowhead)" marker-end="url(#arrowhead)" x1="105" y1="150" x2="305" y2="150"></line>
+
+            <path stroke="currentColor" fill="transparent" marker-end="url(#arrowhead)" d="M 260 105
+                v40
+                a5,5 0 0 0 5,5
+                h70
+                a5,5 0 0 0 5,-5
+                v-39
+                "></path>
+
+            <text x="200" y="165" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Inexact Division</text>
+        </svg>
+        
+        <hr>
+        
+        <p id="footnote_1" class="footnote">[1] Low-ish. Annotation may be lessened in some cases, à la <a href="https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-elision">lifetime elision</a> in the Rust borrow checker. I will refrain from any kind of global inference because I mostly agree with  <a href="https://borretti.me/article/type-inference-was-a-mistake">Fernando Borretti on the topic</a>. <a href="#backlink_1">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
+        <p id="footnote_2" class="footnote">[2] Solving arbitrary <code>Poly</code> constraints is impossible, courtesy of <a href="https://en.wikipedia.org/wiki/Hilbert%27s_tenth_problem">Matiyasevich et al</a>. For now, I'm sticking with <a href="https://microsoft.github.io/z3guide/docs/theories/Arithmetic">linear integer arithmetic</a> for stability's sake. Although Z3 could safely run more sophisticated constraints, the checker will inevitably return some false negatives. <a href="#backlink_2">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
+    </body>
+</html>

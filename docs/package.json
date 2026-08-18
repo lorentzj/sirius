@@ -1,0 +1,14 @@
+{
+  "name": "srs-docs",
+  "version": "1.0.0",
+  "description": "Docs for the Sirius programming language",
+  "license": "MIT",
+  "scripts": {
+    "build": "rm -f public/js/worker.*.js.map public/js/worker.*.js && FORCE_COLOR=1 parcel build ts/index.ts --dist-dir public/js",
+    "watch": "watch --color npm run build"
+  },
+  "dependencies": {
+    "@codemirror/language": "^6.12.4",
+    "codemirror": "^6.0.2"
+  }
+}
