@@ -1,12 +1,16 @@
-import init, { compile } from "./wasm/sirius";
-import type { EditRequest, Diagnostic } from "./lints";
+import compilerInit, { compile } from "./wasm/sirius";
+import type { EditRequest, Poke, Diagnostic, LintResponse } from "./compiler";
 
 let initWasm = false;
 
-onmessage = async (e: MessageEvent<EditRequest>) => {
+onmessage = async (e: MessageEvent<EditRequest | Poke>) => {
     if(!initWasm) {
-        await init();
-        initWasm = true;
+        return;
+    }
+
+    if("message" in e.data) {
+        postMessage({message: "ready"});
+        return;
     }
 
     const output = compile(e.data.code);
@@ -31,11 +35,16 @@ onmessage = async (e: MessageEvent<EditRequest>) => {
             markClass: "type"
         });
     }
-        
-    postMessage({
+    
+    const message: LintResponse = {
         diagnostics,
         id: e.data.id,
-    });
+    };
+
+    postMessage(message);
 };
 
-postMessage("ready");
+compilerInit().then(() => {
+    initWasm = true;
+    postMessage({message: "ready"});
+});

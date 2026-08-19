@@ -5,6 +5,7 @@ pub enum UnaryOp {
     ArithNeg,
     BoolNeg,
     Tick,
+    Option,
 }
 
 pub enum E {
@@ -16,7 +17,7 @@ pub enum E {
     Array(Vec<Expr>),
     UnOp(UnaryOp, Box<Expr>),
     BinOp(Box<Expr>, Op, Box<Expr>),
-    FnCall(Box<Expr>, Vec<Expr>),
+    FnCall(Box<Expr>, Vec<Expr>, Vec<Expr>),
     Access(Box<Expr>, Vec<AccessDim>),
 }
 
@@ -87,10 +88,10 @@ impl Expr {
         }
     }
 
-    pub fn fn_call(start: usize, caller: Expr, args: Vec<Expr>, end: usize) -> Expr {
+    pub fn fn_call(start: usize, caller: Expr, args: Vec<Expr>, type_args: Option<Vec<Expr>>, end: usize) -> Expr {
         Expr {
             start,
-            data: E::FnCall(Box::new(caller), args),
+            data: E::FnCall(Box::new(caller), args, type_args.unwrap_or(vec![])),
             end,
         }
     }
@@ -279,6 +280,7 @@ pub struct Block {
 pub struct Function {
     pub name: Pos<String>,
     pub type_args: Vec<Pos<String>>,
+    pub type_constraints: Vec<(Pos<String>, Expr)>,
     pub args: Vec<(Pos<String>, Expr)>,
     pub ret: Option<Expr>,
     pub body: Block,

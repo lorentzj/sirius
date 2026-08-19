@@ -62,9 +62,14 @@ em code {
 
 /* Tables */
 
+div:has(table) {
+    max-width: min(1200px, 100%);
+    overflow-x: auto;
+    margin: auto;
+}
+
 table {
     border-spacing: 0;
-    margin: auto;
 }
 
 th {
@@ -121,10 +126,19 @@ a:active, a:active svg {
 /* Editor */
 
 .editor {
-    max-width: 900px;
+    max-width: min(1200px, 100%);
     margin: auto;
     outline: 1px solid black;
-    padding: 10px;
+    overflow-x: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.cm-editor {
+    padding: 5px;
+    padding-bottom: 0;
+    width: fit-content !important;
 }
 
 .editor:has(.cm-focused) {
@@ -158,4 +172,52 @@ a:active, a:active svg {
 
 .cm-panels {
     position: unset !important;
+}
+
+/* Compiler status line */
+
+.compiler_status {
+    flex: 1;
+    width: fit-content;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px;
+    margin: 5px;
+    background-color: rgb(213, 247, 222);
+}
+
+.compiler_status.loading {
+    background-color: rgb(213, 230, 247);
+}
+
+.loader {
+    display: inline-block;
+    border: 0.1em solid currentColor;
+    border-radius: 50%;
+    width: 1.2em;
+    height: 1.2em;
+}
+
+.loader.loading {
+    animation: spin720 2s ease-in-out infinite;
+    border-left-color: transparent;
+    border-right-color: transparent;
+}
+
+/* Animations */
+
+@media (prefers-reduced-motion: no-preference) {
+    @keyframes spin720 {
+        0% {
+            transform: rotate(0deg);
+            border-left-color: black;
+        }
+        50% {
+            transform: rotate(-360deg);
+        }
+        100% {
+            transform: rotate(360deg);
+        }
+    }
 }

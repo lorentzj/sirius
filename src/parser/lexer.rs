@@ -19,6 +19,7 @@ pub enum Op {
     NotEq,
     Tick,
     Apply,
+    Option,
     Comma,
 }
 
@@ -42,6 +43,7 @@ impl fmt::Debug for Op {
             Op::NotEq => write!(f, "!="),
             Op::Tick => write!(f, "'"),
             Op::Apply => write!(f, "->"),
+            Op::Option => write!(f, "?"),
             Op::Comma => write!(f, ","),
         }
     }
@@ -83,6 +85,8 @@ pub enum Keyword {
     For,
     From,
     To,
+    SuchThat,
+    In,
     Yield,
     Mut,
 }
@@ -103,6 +107,8 @@ impl fmt::Debug for Keyword {
             Keyword::For => write!(f, "for"),
             Keyword::From => write!(f, "from"),
             Keyword::To => write!(f, "to"),
+            Keyword::SuchThat => write!(f, "st"),
+            Keyword::In => write!(f, "\\in"),
             Keyword::Yield => write!(f, "yield"),
             Keyword::Mut => write!(f, "mut"),
         }
@@ -202,6 +208,8 @@ fn parse_keyword(s: &str) -> Option<Tok> {
         "for" => Some(Tok::Keyword(Keyword::For)),
         "from" => Some(Tok::Keyword(Keyword::From)),
         "to" => Some(Tok::Keyword(Keyword::To)),
+        "st" => Some(Tok::Keyword(Keyword::SuchThat)),
+        "\\in" => Some(Tok::Keyword(Keyword::In)),
         "yield" => Some(Tok::Keyword(Keyword::Yield)),
         "mut" => Some(Tok::Keyword(Keyword::Mut)),
         _ => None,
@@ -308,7 +316,7 @@ pub fn tokenize(code: &str) -> Vec<Token> {
         }
 
         match char {
-            '0'..='9' | 'A'..='Z' | 'a'..='z' | '\u{0370}'..='\u{03FF}' | '_' | '.' => {
+            '0'..='9' | 'A'..='Z' | 'a'..='z' | '\u{0370}'..='\u{03FF}' | '_' | '.' | '\\' => {
                 if let Some(spaces) = indent_spaces {
                     if spaces % 4 == 0 {
                         let curr_indent_level = spaces / 4;
@@ -485,6 +493,7 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                         }
                     }
                     '<' => Token::new(Tok::Op(Op::Less), line, col - 1, col),
+                    '?' => Token::new(Tok::Op(Op::Option), line, col - 1, col),
                     '=' => {
                         if let Some(Token {
                             data: Tok::AssignOp(AssnOp::Eq),

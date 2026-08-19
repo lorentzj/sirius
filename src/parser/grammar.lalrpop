@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
-use crate::parser::{UnaryOp, Pos, Expr, AccessDim, Stmt, Block, Function, Tree, add_highlight_pair};
+use crate::parser::{UnaryOp, Pos, Expr, AccessDim, Stmt, Block, Function, Tree};
 use crate::parser::lexer;
 use lexer::{Tok, Op, AssnOp};
 
-grammar(highlight_map: &mut HashMap<usize, Vec<usize>>, type_tokens: &mut Vec<usize>);
+grammar(type_tokens: &mut Vec<usize>);
 
 pub Tree: Tree = {
     "newline"* <fns: (Fn "newline"*)*> => {
@@ -15,26 +13,34 @@ pub Tree: Tree = {
 Fn: Function = {
     "fn" <name: PosString> <type_args: SigTypeArgs?> <args: SigArgs> <ret: ("->" TypeAnn)?> ":" "newline" <body: Block> => {
         let ret = ret.map(|(_, r)| r);
-        let type_args = type_args.unwrap_or(vec![]);
-        Function { name, type_args, args, ret, body }
+        let type_args = type_args.unwrap_or((vec![], vec![]));
+        Function { name, type_args: type_args.0, type_constraints: type_args.1, args, ret, body }
     }
 }
 
-SigTypeArgs: Vec<Pos<String>> = {
-    <start: @L> "{" <args: CommaSep<PosString>> "}" <end: @R> => {
-        add_highlight_pair(highlight_map, start, end - 1);
-                
+SigTypeArgs: (Vec<Pos<String>>, Vec<(Pos<String>, Expr)>) = {
+    <start: @L> "{" <args: CommaSep<PosString>> <constraints: CommaSep<SigTypeConstraint>> "}" <end: @R> => {                
         for arg in &args {
             type_tokens.extend(arg.start..arg.end);
         }
+        for constraint in &constraints {
+            type_tokens.extend(constraint.0.start..constraint.0.end);
+            type_tokens.extend(constraint.1.start..constraint.1.end);
+        }
 
-        args
+        (args, constraints)
     }
 }
 
+SigTypeConstraint: (Pos<String>, Expr) = {
+    <start: @L> "st" <lhs: PosString> "\\in" <rhs: Expr> <end: @R> => {
+        (lhs, rhs)
+    }
+}
+
+
 SigArgs: Vec<(Pos<String>, Expr)> = {
     <start: @L> "(" <args: CommaSep<(PosString ":" TypeAnn)>> ")" <end: @R> => {
-        add_highlight_pair(highlight_map, start, end - 1);
         args.into_iter().map(|s| (s.0, s.2)).collect()
     }
 }
@@ -90,10 +96,11 @@ Expr: Expr = {
     <t: Term> => t,
 
     #[precedence(level="3")] #[assoc(side="left")]
-    <start: @L> <caller: Expr> <args: FnCallArgs> <end: @R> => Expr::fn_call(start, caller, args, end),
+    <start: @L> <caller: Expr> <type_args: FnCallTypeArgs?> <args: FnCallArgs> <end: @R> => Expr::fn_call(start, caller, args, type_args, end),
     <start: @L> <arr: Expr> <dims: AccessDims> <end: @R> =>    Expr::access(start, arr, dims, end),
     <start: @L> <lhs: Expr> "." <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Dot, rhs, end),
     <start: @L> <inner: Expr> "'" <end: @R> =>                 Expr::un_op(start, UnaryOp::Tick, inner, end),
+    <start: @L> <inner: Expr> "?" <end: @R> =>                 Expr::un_op(start, UnaryOp::Option, inner, end),
 
     #[precedence(level="3")] #[assoc(side="left")]
     <start: @L> <lhs: Expr> "^" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Exp, rhs, end),
@@ -126,14 +133,18 @@ Expr: Expr = {
 
 FnCallArgs: Vec<Expr> = {
     <start: @L> "(" <args: CommaSep<Expr>> ")" <end: @R> => {
-        add_highlight_pair(highlight_map, start, end - 1);
+        args
+    }
+}
+
+FnCallTypeArgs: Vec<Expr> = {
+    <start: @L> "{" <args: CommaSep<Expr>> "}" <end: @R> => {
         args
     }
 }
 
 AccessDims: Vec<AccessDim> = {
     <start: @L> "[" <inner: CommaSepNonZ<AccessDim>> "]" <end: @R> => {
-        add_highlight_pair(highlight_map, start, end - 1);
         inner
     }
 }
@@ -155,7 +166,6 @@ Term: Expr = {
     <start: @L> <ident: "identifier"> <end: @R> => Expr::ident(start, ident, end),
 
     <start: @L> "(" <mut inner: CommaSep<Expr>> ")" <end: @R> => {
-        add_highlight_pair(highlight_map, start, end - 1);
         if inner.len() == 1 {
             let mut inner = inner.pop().unwrap();
             inner.start = start;
@@ -167,7 +177,6 @@ Term: Expr = {
     },
 
     <start: @L> "[" <inner: CommaSep<Expr>> "]" <end: @R> => {
-        add_highlight_pair(highlight_map, start, end - 1);
         Expr::array(start, inner, end)
     }
 }
@@ -217,6 +226,7 @@ extern {
         "=="         => Tok::Op(Op::Eq),
         "!="         => Tok::Op(Op::NotEq),
         "->"         => Tok::Op(Op::Apply),
+        "?"          => Tok::Op(Op::Option),
         ","          => Tok::Op(Op::Comma),
         "float"      => Tok::Float(<f64>),
         "int"        => Tok::Int(<i64>),
@@ -234,6 +244,8 @@ extern {
         "from"       => Tok::Keyword(lexer::Keyword::From),
         "to"         => Tok::Keyword(lexer::Keyword::To),
         "return"     => Tok::Keyword(lexer::Keyword::Return),
+        "\\in"       => Tok::Keyword(lexer::Keyword::In),
+        "st"         => Tok::Keyword(lexer::Keyword::SuchThat),
         "yield"      => Tok::Keyword(lexer::Keyword::Yield),
         "mut"        => Tok::Keyword(lexer::Keyword::Mut),
         ";"          => Tok::Semicolon,

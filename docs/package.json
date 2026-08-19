@@ -5,10 +5,12 @@
   "license": "MIT",
   "scripts": {
     "build": "rm -f public/js/worker.*.js.map public/js/worker.*.js && FORCE_COLOR=1 parcel build ts/index.ts --dist-dir public/js",
-    "watch": "watch --color npm run build"
+    "watch": "watch --color npm run build",
+    "serve": "cd public && miniserve --tls-cert ~/mkcert/lan.pem --tls-key ~/mkcert/lan-key.pem --header \"Cross-Origin-Embedder-Policy: require-corp\" --header \"Cross-Origin-Opener-Policy: same-origin\" ."
   },
   "dependencies": {
     "@codemirror/language": "^6.12.4",
-    "codemirror": "^6.0.2"
+    "codemirror": "^6.0.2",
+    "z3-solver": "^5.1.0"
   }
 }

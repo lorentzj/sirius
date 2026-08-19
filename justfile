@@ -5,6 +5,9 @@ demo:
     mv docs/public/js/sirius_bg.wasm docs/ts/sirius/wasm
     rm -rf docs/public/js
     cd docs && npm run build
+    mkdir docs/public/js/z3
+    cp docs/node_modules/z3-solver/build/z3-built.js docs/public/js/z3
+    cp docs/node_modules/z3-solver/build/z3-built.wasm docs/public/js/z3
 
 test:
     cargo test

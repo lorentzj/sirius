@@ -1,0 +1,183 @@
+import { linter, Diagnostic, setDiagnosticsEffect } from "@codemirror/lint";
+import { EditorView, Decoration, ViewPlugin, ViewUpdate, DecorationSet } from "@codemirror/view";
+import { RangeSetBuilder } from "@codemirror/state";
+import { init as z3init, Context as Z3Context } from 'z3-solver/build/browser';
+export { Diagnostic } from "@codemirror/lint";
+
+import { init } from "z3-solver";
+
+export type EditRequest = {
+    id: string,
+    code: string
+}
+
+export type Poke = {
+    message: "poke"
+}
+
+export type LintResponse = {
+    id: string,
+    diagnostics: Diagnostic[],
+    message?: string
+}
+
+let worker: Worker | null = null;
+let z3Context: Z3Context | null = null;
+const decorationData: Map<number, Diagnostic[]> = new Map();
+
+async function loadZ3(): Promise<Z3Context> {
+    if(z3Context === null) {
+        const { Context } = await init();
+        z3Context = new Context("main");
+        return z3Context;
+    } else {
+        return z3Context;
+    }
+}
+
+async function getWorker(status: StatusLine): Promise<Worker> {
+    if(worker === null) {
+        status.loading("loading compiler");
+        worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+    }
+
+    const p = new Promise<Worker>((resolve) => {        
+        function handleReady(event: MessageEvent) {
+            if (event.data.message === "ready" && worker !== null) {
+                worker.removeEventListener("message", handleReady);
+                status.finished();
+                resolve(worker); 
+            } else if(event.data.message !== undefined) {
+                status.loading(event.data.message);
+            }
+        };
+        if(worker !== null) {
+            worker.addEventListener("message", handleReady);
+        }
+    });
+
+    worker.postMessage({message: "poke"});
+
+    return p;
+}
+
+export function filterTypeInfo(diagnostics: readonly Diagnostic[]): Diagnostic[] {
+    return diagnostics.filter((v) => v.severity != "info");
+}
+
+export const siriusLinter = (editorId: number) => {
+    let editNumber = 0;
+    decorationData.set(editorId, []);
+
+    const compilerStatus = new StatusLine();
+
+    return linter(async (view) => {
+        if(!compilerStatus.root.isConnected) {
+            view.dom.insertAdjacentElement("afterend", compilerStatus.root);
+        }
+
+        editNumber += 1;
+        const editId = `${editorId}-${editNumber}`;
+
+        let worker = await getWorker(compilerStatus);
+
+        return new Promise((resolve) => {
+            worker.addEventListener("message", function listener(event: MessageEvent<LintResponse>) {
+                if(event.data.id === editId) {
+                    worker.removeEventListener("message", listener);
+                    decorationData.set(
+                        editorId,
+                        event.data.diagnostics.filter((e) => e.severity === "info"
+                    ));
+                    compilerStatus.finished();
+                    resolve(event.data.diagnostics);
+                }
+            });
+
+            const message = {
+                id: editId,
+                code: view.state.doc.toString()
+            };
+
+            compilerStatus.loading("compiling");
+            worker.postMessage(message);
+        });
+    }, {
+        tooltipFilter: filterTypeInfo,
+        markerFilter: filterTypeInfo,
+        autoPanel: true,
+        delay: 50
+    });
+}
+
+const typeDecoration = Decoration.mark({ class: "type" });
+
+class TypeHighlights {
+    decorations: DecorationSet;
+    editorId: number
+
+    constructor(view: EditorView, editorId: number) {
+        this.editorId = editorId;
+        this.decorations = this.buildDecorations(view);
+    }
+
+    update(update: ViewUpdate) {
+        const lintChanged = update.transactions.some((tr) =>
+            tr.effects.some((effect) => effect.is(setDiagnosticsEffect))
+        );
+
+        if(update.viewportChanged || lintChanged) {
+            this.decorations = this.buildDecorations(update.view);
+        }
+    }
+
+    buildDecorations(view: EditorView): DecorationSet {
+        const builder = new RangeSetBuilder<Decoration>();
+        for (let { from, to } of view.visibleRanges) {
+            for (const diagnostic of decorationData.get(this.editorId) || []) {
+                if(diagnostic.from <= to && diagnostic.to >= from && diagnostic.severity === "info") {
+                    builder.add(diagnostic.from, diagnostic.to, typeDecoration);
+                }
+            }
+        }
+
+        return builder.finish();
+    }
+}
+
+export const highlightTypes = ViewPlugin.fromClass(TypeHighlights, {
+    decorations: v => v.decorations
+});
+
+class StatusLine {
+    root: HTMLDivElement;
+    private compilerLoader: HTMLSpanElement;
+    private compilerMessage: HTMLSpanElement;
+
+    constructor() {
+        this.root = document.createElement("div");
+        this.root.classList.add("compiler_status");
+
+        this.compilerLoader = document.createElement("span");
+        this.compilerMessage = document.createElement("span");
+        this.compilerLoader.classList.add("loader");
+
+        this.loading("loading");
+        this.root.appendChild(this.compilerLoader);
+        this.root.appendChild(this.compilerMessage);
+    }
+
+    finished() {
+        this.compilerMessage.textContent = "ready";
+        this.compilerLoader.classList.remove("loading");
+        this.root.classList.remove("loading");
+    }
+
+    loading(message: string | undefined) {
+        if(message !== undefined) {
+            this.compilerMessage.textContent = message;
+        } 
+        this.compilerLoader.classList.add("loading");
+        this.root.classList.add("loading");
+    }
+}
