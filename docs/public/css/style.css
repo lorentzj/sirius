@@ -107,6 +107,10 @@ a, a svg {
     color: var(--link-color);
 }
 
+a:has(svg) {
+    white-space: nowrap;
+}
+
 svg.icon {
     width: 0.8em;
     height: 0.8em;

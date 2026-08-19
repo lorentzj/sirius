@@ -12,13 +12,13 @@
     <body>
         <div><h1>Sirius</h1></div>
         
-        <p><code>Sirius</code> is a small, imperative, <a href="https://en.wikipedia.org/wiki/Total_functional_programming">total</a>, polynomially bounded language for array programming.</p>
+        <p><a href="https://github.com/lorentzj/sirius"><code>Sirius</code></a> is a small, imperative, <a href="https://en.wikipedia.org/wiki/Total_functional_programming">total</a>, polynomially bounded language for array programming.</p>
         
-        <p>Having been stung too many times <a href="https://docs.pytorch.org/docs/2.13/generated/torch.nn.Conv3d.html">massaging PyTorch tensors</a>, I set off to design a type system that handles tensor shape bookkeeping. In the process, I explored a new part of PL design space and stumbled on an interesting set of features.</p>
+        <p>Having been stung too many times <a href="https://docs.pytorch.org/docs/2.13/generated/torch.nn.Conv3d.html">massaging PyTorch tensors</a>, I set off to design a type system that handles tensor shape bookkeeping. In the process, I explored a new part of PL design space and stumbled on an interesting feature set.</p>
 
         <p>It turns out we can avoid runtime shape errors -- without the ergonomic strain of full-blown refinement types like <a href="https://ucsd-progsys.github.io/liquidhaskell/">Liquid Haskell</a> -- provided we surrender shape dynamism. In exchange, we reject more bad programs and expose more complete function contracts. The <code>Sirius</code> type system will also unlock a bit of witchcraft in the backend.</p>
 
-        <p>I embedded a prototype compiler frontend in this page (sorry, Z3 Wasm builds don't seem to play nice on mobile). Here's a <code>hello world</code>: dot product and matrix multiplication.</p>
+        <p>I embedded a prototype compiler frontend in this page (sorry, Z3 Wasm builds don't seem to play nice on mobile). Here's a <em>hello world</em>: dot product and matrix multiplication.</p>
         
         <pre class="editor">// <code>typevar</code>s, representing integers, come in curly brackets after function name
 // "len(a) == len(b)" is proven at callsites
@@ -70,7 +70,7 @@ fn test():
 
         <p>Signatures provide shape bounds, accesses are statically checked, and <code>yield</code>s are statically counted. In short, we're using refinement types with intentionally limited power and a built-in polynomial abstraction (<code>Poly</code>). Since the type system is constrained, <span id="backlink_1" class="backlink">the annotation burden stays low.</span><sup><a href="#footnote_1">[1]</a></sup></p>
         
-        <div><h2><a href="#design_rationale">#</a> Design Rationale</h2></div>
+        <div><h2 id="design_rationale"><a href="#design_rationale">#</a> Design Rationale</h2></div>
         
         <p>Why make an imperative array language? In my opinion, the humble C-style <code>for</code> loop has gotten a bad rap. <code>Sirius</code> static analysis keeps most of its power and ameliorates the downsides. Some problems are easier to solve in an imperative, looping style, with mutable state and high locality.</p>
         
@@ -126,9 +126,11 @@ fn test():
 
         <p>The <code>Sirius</code> type system permits the programmer to freely express array dimensions and accesses in terms of <code>Poly</code>s -- <span id="backlink_2" class="backlink">as long as the resulting constraints can be solved by the <a href="https://github.com/Z3Prover/z3">Z3 prover</a>.</span><sup><a href="#footnote_2">[2]</a></sup> The backend represents array access, strides, and offsets the same way.</p>
 
-        <p>Now, you might object: why can't the programmer write a function that <code>yield</code>s an array of super-polynomial size? This is simple in most languages using a <code>while</code> loop or recursion; both are inexpressible in <code>Sirius</code>. Only <code>for</code>-iteration between <code>Poly</code> bounds is permitted.</p>
+        <p>Now you might object: why can't the programmer write a function that <code>yield</code>s an array of super-polynomial size? This is simple in most languages using a <code>while</code> loop or recursion; both are inexpressible in <code>Sirius</code>. Only <code>for</code>-iteration between <code>Poly</code> bounds is permitted.</p>
         
         <p>Memory, compute, and optimization are all therefore subject to the same organs of static analysis. At this point, I hope I've convinced you that the <code>Poly</code> abstraction earns its keep.</p>
+
+        <p>Dynamic values and shapes cannot mix without blowing up the type system. However, some navigation along their boundary is necessary to write useful programs. My design started with purely constant array shapes and I am adding features slowly in order to increase the space of useful <code>Sirius</code> programs.</p>
 
         <p>There are various means to navigate the shape-data boundary in <code>Sirius</code>. <code>typevar</code>s are available at runtime. Some operators can lift a normal value into a <code>typevar</code> by proving its bounds. Iterators behave like <code>typevar</code>s. <code>typevar</code>s compose algebraically, but any division that doesn't immediately simplify will demote the type expression to a plain integer. For example, <code>(N^2-M^2)/(N+M)</code> is the type <code>N-M</code>, but <code>N/M</code> is not a type, even given <code>N=M</code>.</p>
 
@@ -194,11 +196,10 @@ fn test():
             <text x="200" y="165" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Inexact Division</text>
         </svg>
 
-        <p>Control flow is dictated by <code>for</code>-loops and <code>if</code>-statements. With flow typing, facts in <code>if</code> conditions are available to the constraint solver inside their scopes. Every <code>yield</code> must be <span id="backlink_3" class="backlink">counted symbolically.</span><sup><a href="#footnote_3">[3]</a></sup>. </p>
+        <p>Control flow is dictated by <code>for</code>-loops and <code>if</code>-statements. With flow typing, facts in <code>if</code> conditions are available to the constraint solver inside their scopes. Every <code>yield</code> must be <span id="backlink_3" class="backlink">counted symbolically.</span><sup><a href="#footnote_3">[3]</a></sup> </p>
 
         <pre class="editor">// a challenge for the yield counter
-// typevar polys may only be written as sum-of-products in integer coefficients
-// however, counting engine knows that inner for-body is invoked N(N-1)/2 times
+// counting engine knows that inner for-body is invoked N(N-1)/2 times
 fn triangle{N}() -> f32[N^2 - N + 1]:
     for i from 0 to N:
         for j from 0 to i:
@@ -210,7 +211,7 @@ fn triangle{N}() -> f32[N^2 - N + 1]:
         <p>Constraints that appear in function arguments must be proven at call sites and are available in the function body; vice-versa for constraints in the return type. <code>Sirius</code> also supports existential types, which are newly minted by function calls and can be constrained by <code>st</code> (<em>such that</em>) clauses. These clauses are proven in the function body and available at call sites.</p>
 
         <pre class="editor">
-// read as "N, K such that K is in 0&lt;=K&lt;N"
+// read as "N, K such that 0&lt;=K&lt;N"
 // this constraint is proven in function body
 fn find{N, K st K \in N}(needle: f32, haystack: f32[N]) -> K?:
     for i from 0 to N:
@@ -229,10 +230,14 @@ fn test():
         arr[k] += 1.0
 </pre>
 
+        <p>The objective of Sirius's design is to ergonomically expose and prove the bookkeeping that programmers already do in their heads.</p>
+
+        <div><h2 id="backend"><a href="#backend">#</a> Backend</h2></div>
+
         <hr>
         
         <p id="footnote_1" class="footnote">[1] Low-ish. Annotation may be lessened in some cases, à la <a href="https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-elision">lifetime elision</a> in the Rust borrow checker. I will refrain from any kind of global inference because I mostly agree with  <a href="https://borretti.me/article/type-inference-was-a-mistake">Fernando Borretti on the topic</a>. Inference and solving strictly go per-function. <a href="#backlink_1">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
         <p id="footnote_2" class="footnote">[2] Solving arbitrary <code>Poly</code> constraints is impossible, courtesy of <a href="https://en.wikipedia.org/wiki/Hilbert%27s_tenth_problem">Matiyasevich et al</a>. For now, I'm sticking with <a href="https://microsoft.github.io/z3guide/docs/theories/Arithmetic">linear integer arithmetic</a> for stability's sake. Although Z3 could safely run more sophisticated constraints, the checker will inevitably return some false negatives. Happily, most constraints are trivial and obtain representationally without invoking Z3 at all. <a href="#backlink_2">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
-        <p id="footnote_3" class="footnote">[3] The summation algorithm uses <a href="https://en.wikipedia.org/wiki/Stirling_number#Expansions_of_falling_and_rising_factorials">Stirling numbers</a> and falling factorials. <a href="#backlink_3">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
+        <p id="footnote_3" class="footnote">[3] The summation algorithm uses <a href="https://en.wikipedia.org/wiki/Stirling_number#Expansions_of_falling_and_rising_factorials">Stirling numbers</a> and falling factorials. More details are available in the <a href="/api/doc/sirius/index.html">API docs</a>. <a href="#backlink_3">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
     </body>
 </html>

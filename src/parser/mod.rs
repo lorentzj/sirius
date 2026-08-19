@@ -38,10 +38,8 @@ pub fn parse(code: String) -> ParserOutput {
     let mut type_tokens = vec![];
 
     if errors.is_empty() {
-        let parser_output = grammar::TreeParser::new().parse(
-            &mut type_tokens,
-            tokens_no_comments_iter,
-        );
+        let parser_output =
+            grammar::TreeParser::new().parse(&mut type_tokens, tokens_no_comments_iter);
 
         for i in type_tokens {
             tokens[i].is_type_ann = true;

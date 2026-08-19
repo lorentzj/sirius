@@ -1,312 +1,317 @@
-pub mod macros;
+//! A multivariable [polynomial ring](https://en.wikipedia.org/wiki/Polynomial_ring) with integer coefficients.
+
+#[macro_use]
 pub mod mono;
-pub mod poly_arithmetic;
-pub mod system;
+pub mod coef;
 
-use std::fmt::Write;
+use std::cmp::Ordering;
 
-use super::Rat;
-use mono::*;
-use num::Signed;
+use coef::Coef;
+use mono::{Mono, Pow, Var};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// A multivariable polynomial.
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Poly {
-    pub terms: Vec<Mono>,
+    terms: Vec<(Coef, Mono)>,
 }
 
 impl Poly {
-    pub fn get_constant_val(&self) -> Option<Rat> {
-        if self.terms.is_empty() {
-            Some(Rat::zero())
-        } else if self.terms.len() == 1 {
-            if self.terms[0].vars.is_empty() {
-                Some(self.terms[0].val.clone())
-            } else {
-                None
-            }
+    pub fn zero() -> Self {
+        Self { terms: vec![] }
+    }
+
+    pub fn constant<T: Into<Coef>>(c: T) -> Self {
+        let c = c.into();
+        if c == 0.into() {
+            Poly::zero()
         } else {
-            None
-        }
-    }
-}
-
-impl Poly {
-    pub fn constant(val: Rat) -> Self {
-        Self {
-            terms: if val.is_zero() {
-                vec![]
-            } else {
-                vec![Mono { val, vars: vec![] }]
-            },
-        }
-    }
-
-    pub fn constant_int(val: i64) -> Self {
-        Self {
-            terms: if val == 0 {
-                vec![]
-            } else {
-                vec![Mono {
-                    val: Rat::from(val),
-                    vars: vec![],
-                }]
-            },
-        }
-    }
-
-    pub fn var(var: usize, pow: u64) -> Self {
-        if pow == 0 {
-            Self {
-                terms: vec![Mono {
-                    val: Rat::one(),
-                    vars: vec![],
-                }],
-            }
-        } else {
-            Self {
-                terms: vec![Mono {
-                    val: Rat::one(),
-                    vars: vec![(var, pow)],
-                }],
+            Poly {
+                terms: vec![(c, Mono::unit())],
             }
         }
     }
 
-    pub fn is_zero(&self) -> bool {
-        self.terms.is_empty()
+    pub fn var(v: Var) -> Poly {
+        Self::term(1, Mono::new(vec![(v, 1)]))
     }
 
-    pub fn lt(&self) -> Poly {
-        match self.terms.last() {
-            Some(m) => Poly {
-                terms: vec![m.clone()],
-            },
-            None => Poly { terms: vec![] },
-        }
-    }
-
-    pub fn lt_mono(&self) -> Mono {
-        match self.terms.last() {
-            Some(m) => m.clone(),
-            None => Mono {
-                val: Rat::zero(),
-                vars: vec![],
-            },
-        }
-    }
-
-    pub fn s_poly(p: Poly, q: Poly) -> Poly {
-        let p_lt = p.lt();
-        let q_lt = q.lt();
-
-        let lcm_lmp_lmq = Poly {
-            terms: vec![monomial_lcm(p_lt.lt_mono(), q_lt.lt_mono())],
-        };
-
-        if let (Some(coef_p), Some(coef_q)) =
-            (lcm_lmp_lmq.try_divide(&p_lt), lcm_lmp_lmq.try_divide(&q_lt))
-        {
-            coef_p * p - coef_q * q
+    pub fn term<T: Into<Coef>>(c: T, m: Mono) -> Self {
+        let c = c.into();
+        if c == 0.into() {
+            Poly::zero()
         } else {
-            unreachable!()
+            Poly {
+                terms: vec![(c, m)],
+            }
         }
     }
 
-    pub fn deg(&self, var: usize) -> usize {
+    pub fn from_terms(terms: impl IntoIterator<Item = (Coef, Mono)>) -> Self {
+        let mut raw: Vec<_> = terms.into_iter().collect();
+        raw.sort_unstable_by(|(_, m1), (_, m2)| m2.cmp(m1));
+        let mut terms = Vec::with_capacity(raw.len());
+        for (c, m) in raw {
+            match terms.last_mut() {
+                Some((lc, lm)) if *lm == m => {
+                    *lc = &*lc + &c;
+                    if *lc == 0.into() {
+                        terms.pop();
+                    }
+                }
+                _ => {
+                    if c != 0.into() {
+                        terms.push((c, m));
+                    }
+                }
+            }
+        }
+        Poly { terms }.debug_checked()
+    }
+
+    pub fn total_degree(&self) -> Pow {
         self.terms
-            .iter()
-            .map(|term| term.deg(var))
-            .fold(0, |acc, v| acc.max(v))
+            .first()
+            .map(|(_, m)| m.total_degree())
+            .unwrap_or(0)
     }
 
-    pub fn coefs(&self, var: usize) -> Vec<Poly> {
-        let deg = self.deg(var);
-        let mut coefs: Vec<_> = std::iter::repeat_n(Poly::constant(Rat::zero()), deg + 1).collect();
-
-        for term in self.terms.iter().rev() {
-            let (term_deg, term_coef) = term.coef(var);
-
-            coefs[deg - term_deg] = coefs[deg - term_deg].clone()
-                + Poly {
-                    terms: vec![term_coef],
-                };
-        }
-
-        coefs
-    }
-
-    pub fn from_uni_fmt(p: Vec<Self>, var: usize) -> Self {
-        let mut new = Poly { terms: vec![] };
-        let deg = p.len() - 1;
-
-        for (i, term) in p.into_iter().enumerate() {
-            if i == deg {
-                new = new + term
-            } else {
-                let var_pow = Poly {
-                    terms: vec![Mono {
-                        val: Rat::one(),
-                        vars: vec![(var, (deg - i) as u64)],
-                    }],
-                };
-
-                new = new + term * var_pow;
+    pub fn degree_in(&self, v: Var) -> Pow {
+        let mut deg = 0;
+        for (_, mono) in &self.terms {
+            let mut term_deg = 0;
+            for (var, pow) in mono.exps() {
+                term_deg += pow;
+                match var.cmp(&v) {
+                    Ordering::Greater => continue,
+                    Ordering::Equal => {
+                        deg = deg.min(*pow);
+                        break;
+                    }
+                    Ordering::Less => break,
+                }
+            }
+            if term_deg < deg {
+                break;
             }
         }
 
-        new
+        deg
     }
 
-    pub fn eval(&self, var: usize, val: Rat) -> Self {
-        let mut new = Poly { terms: vec![] };
-        let mut val_pow = Rat::one();
-        for mut coef in self.coefs(var).into_iter().rev() {
-            for term in &mut coef.terms {
-                term.val = term.val.clone() * val_pow.clone();
+    pub fn mul_scalar(&self, c: Coef) -> Self {
+        if c == 0.into() {
+            Self::zero()
+        } else {
+            Self {
+                terms: self
+                    .terms
+                    .iter()
+                    .map(|t| (&t.0 * &c, t.1.clone()))
+                    .collect(),
             }
-            new = new + coef;
-
-            val_pow = val_pow * val.clone();
         }
-
-        new
     }
 
-    pub fn norm(&self) -> Poly {
-        use num::{BigInt, BigRational, integer::gcd};
-        let mut new = self.clone();
+    pub fn vars(&self) -> Vec<Var> {
+        let mut vs = vec![];
 
-        let mut all_terms_den_gcd = BigInt::from(1);
-        let mut all_terms_num_gcd = BigInt::from(1);
-
-        if let Some(t) = new.terms.last() {
-            all_terms_num_gcd = t.val.0.numer().clone();
-            all_terms_den_gcd = t.val.0.denom().clone();
+        for term in &self.terms {
+            for (var, _) in term.1.exps() {
+                if !vs.contains(var) {
+                    vs.push(*var);
+                }
+            }
         }
 
-        for term in &new.terms {
-            all_terms_den_gcd = gcd(all_terms_den_gcd, term.val.0.denom().clone());
-            all_terms_num_gcd = gcd(all_terms_num_gcd, term.val.0.numer().clone());
-        }
+        vs.sort_unstable();
+        vs
+    }
 
-        if let Some(t) = new.terms.last()
-            && t.val.0.is_negative()
-        {
-            all_terms_num_gcd = -all_terms_num_gcd;
+    pub fn add(&self, rhs: &Self) -> Self {
+        let mut terms = Vec::with_capacity(self.terms.len() + rhs.terms.len());
+        let (mut a, mut b) = (self.terms.iter().peekable(), rhs.terms.iter().peekable());
+        loop {
+            match (a.peek(), b.peek()) {
+                (Some(&(ac, am)), Some(&(bc, bm))) => match am.cmp(bm) {
+                    Ordering::Greater => {
+                        terms.push((*ac, am.clone()));
+                        a.next();
+                    }
+                    Ordering::Less => {
+                        terms.push((*bc, bm.clone()));
+                        b.next();
+                    }
+                    Ordering::Equal => {
+                        let c = ac + bc;
+                        if c != 0.into() {
+                            terms.push((c, am.clone()));
+                        }
+                        a.next();
+                        b.next();
+                    }
+                },
+                (Some(_), None) => terms.extend(a.by_ref().cloned()),
+                (None, Some(_)) => terms.extend(b.by_ref().cloned()),
+                (None, None) => break,
+            }
         }
+        Self { terms }.debug_checked()
+    }
 
-        for term in &mut new.terms {
-            term.val.0 = BigRational::new(
-                term.val.0.numer().clone() / all_terms_num_gcd.clone(),
-                term.val.0.denom().clone() / all_terms_den_gcd.clone(),
+    pub fn mul(&self, rhs: &Self) -> Self {
+        let mut buf = Vec::with_capacity(self.terms.len() * rhs.terms.len());
+        for (ac, am) in &self.terms {
+            for (bc, bm) in &rhs.terms {
+                buf.push((ac * bc, (am.mul(bm))));
+            }
+        }
+        Self::from_terms(buf)
+    }
+
+    pub fn neg(&self) -> Self {
+        Self {
+            terms: self.terms.iter().map(|(c, m)| (-c, m.clone())).collect(),
+        }
+    }
+
+    pub fn sub(&self, rhs: &Self) -> Self {
+        self.add(&rhs.neg())
+    }
+
+    /// Panic unless canonical: strictly descending monomials, no zero
+    /// coefficients, inner monomial invariants. Test and debug aid.
+    #[doc(hidden)]
+    pub fn assert_canonical(&self) {
+        for w in self.terms.windows(2) {
+            assert!(
+                w[0].1 > w[1].1,
+                "terms not strictly descending: {:?} then {:?}",
+                w[0],
+                w[1]
             );
         }
-
-        new
+        for (c, m) in &self.terms {
+            assert!(*c != 0.into(), "zero coefficient on {m:?}");
+            m.assert_canonical();
+        }
     }
 
-    pub fn format(&self, var_dict: &[String]) -> String {
-        use num::ToPrimitive;
+    fn debug_checked(self) -> Poly {
+        #[cfg(debug_assertions)]
+        self.assert_canonical();
+        self
+    }
 
-        let mut s = String::new();
-        if self.terms.is_empty() {
-            write!(s, "0").unwrap();
+    pub fn get_constant(&self) -> Option<i128> {
+        if self.terms.len() == 1 && self.terms[0].1.exps().len() == 1 {
+            return Some(self.terms[0].0.get());
         }
 
-        for (i, Mono { val, vars }) in (self.terms).iter().rev().enumerate() {
-            let coef: f64 = val.0.to_f64().unwrap_or(f64::NAN);
-            if coef != 1. || vars.is_empty() {
-                if coef < 0. {
-                    if coef == -1. && !vars.is_empty() {
-                        if i == 0 {
-                            write!(s, "-").unwrap();
-                        } else {
-                            write!(s, " - ").unwrap();
-                        }
-                    } else if i == 0 {
-                        write!(s, "{coef}").unwrap();
-                    } else {
-                        write!(s, " - {}", -coef).unwrap();
-                    }
-                } else if i == 0 {
-                    write!(s, "{coef}").unwrap();
-                } else {
-                    write!(s, " + {coef}").unwrap();
-                }
-            } else if i != 0 {
-                write!(s, " + ").unwrap();
-            }
-
-            for (var, pow) in vars {
-                if *pow == 1 {
-                    write!(s, "{}", var_dict[*var]).unwrap();
-                } else {
-                    write!(s, "{}^{pow}", var_dict[*var]).unwrap();
-                }
-            }
-        }
-
-        s
+        None
     }
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __poly_term {
+    () => {{ std::collections::VecDeque::new() }};
+    ($var:ident ^ $pow:literal $(* $($rest:tt)*)?) => {{
+        use $crate::solver::poly::mono::{Var, __read_var_name};
+        const VAR_NAME: Var = __read_var_name(stringify!($var));
+
+        let mut rest = $crate::__poly_term!($($($rest)*)?);
+        if rest.is_empty() {
+            rest.push_front((1, vec![(VAR_NAME, $pow)]));
+        } else {
+            rest[0].1.push((VAR_NAME, $pow));
+        }
+        rest
+    }};
+
+    ($var:ident ^ $pow:literal $(+ $($rest:tt)*)?) => {{
+        use $crate::solver::poly::mono::{Var, __read_var_name};
+        const VAR_NAME: Var = __read_var_name(stringify!($var));
+
+        let mut rest = $crate::__poly_sum!($($($rest)*)?);
+        rest.push_front((1, vec![(VAR_NAME, $pow)]));
+        rest
+    }};
+
+    ($var:ident ^ $pow:literal $(- $($rest:tt)*)?) => {{
+        use $crate::solver::poly::mono::{Var, __read_var_name};
+        const VAR_NAME: Var = __read_var_name(stringify!($var));
+
+        let mut rest = $crate::__poly_sum!($($($rest)*)?);
+        match rest.get_mut(0) {
+            Some(term) => term.0 *= -1,
+            None => {}
+        }
+        rest.push_front((1, vec![(VAR_NAME, $pow)]));
+        rest
+    }};
+
+    ($var:ident $(* $($rest:tt)*)?) => {{
+        $crate::__poly_term!($var ^ 1 * $($($rest)*)?)
+    }};
+
+    ($var:ident $(+ $($rest:tt)*)?) => {{
+        $crate::__poly_term!($var ^ 1 + $($($rest)*)?)
+    }};
+
+    ($var:ident $(- $($rest:tt)*)?) => {{
+        $crate::__poly_term!($var ^ 1 - $($($rest)*)?)
+    }};
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __poly_sum {
+    ()             => {{ std::collections::VecDeque::new() }};
+    ($c:literal)   => {{ std::collections::VecDeque::from([($c, vec![])]) }};
+    ($c:literal+$($rest:tt)+) => {{
+        let mut rest = $crate::__poly_sum!($($rest)*);
+        rest.push_front(($c, vec![]));
+        rest
+    }};
+    ($c:literal-$($rest:tt)+) => {{
+        let mut rest = $crate::__poly_sum!($($rest)*);
+        rest[0].0 *= -1;
+        rest.push_front(($c, vec![]));
+        rest
+    }};
+    ($c:literal*$($rest:tt)+) => {{
+        let mut v = $crate::__poly_term!($($rest)*);
+        v[0].0 *= $c;
+        v
+    }};
+    ($($rest:tt)+) => {{ $crate::__poly_term!($($rest)*) }};
+}
+
+/// Create a [`Poly`]. Accepts 1-character ASCII variable names; <nobr>`poly!(2*x*y^5 + 8*z)`</nobr>.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __poly {
+    ($($body:tt)*) => {{
+        use $crate::solver::poly::{Poly, mono::{Var, Pow, Mono}};
+        let v: Vec<(i128, Vec<(Var, Pow)>)> = $crate::__poly_sum!($($body)*).into();
+        Poly::from_terms(v.into_iter().map(|(c, exps)| (c.into(), Mono::new(exps))))
+    }};
+}
+
+#[doc(inline)]
+pub use crate::__poly as poly;
+
 #[cfg(test)]
-mod tests {
-    use super::{Poly, Rat};
-
+mod test {
+    use super::poly;
     #[test]
-    fn coefs() {
-        let var_dict = vec!["x".to_string(), "y".to_string(), "z".to_string()];
-
-        let a = Poly::var(0, 4);
-        let b = Poly::var(0, 2) * Poly::constant_int(3);
-        let c = Poly::var(0, 2) * Poly::var(2, 3) * Poly::constant_int(5);
-        let d = Poly::var(1, 1) * Poly::var(0, 1) * Poly::constant_int(4);
-        let e = Poly::var(2, 1);
-        let f = Poly::constant_int(2);
-
-        let g = a + b + c + d + e + f;
-
+    fn constants() {
+        let x = poly!(3 * x ^ 2 + 5 * z - 2 + 1);
+        let y = poly!(4 * y * z);
         assert_eq!(
-            "5x^2z^3 + x^4 + 3x^2 + 4xy + z + 2",
-            format!("{}", g.format(&var_dict))
+            x.mul(&y),
+            poly!(12 * x ^ 2 * y * z + 20 * y * z ^ 2 - 4 * y * z)
         );
-
-        assert_eq!(
-            "[\"1\", \"0\", \"5z^3 + 3\", \"4y\", \"z + 2\"]",
-            format!(
-                "{:?}",
-                g.coefs(0)
-                    .iter()
-                    .map(|p| p.format(&var_dict))
-                    .collect::<Vec<_>>()
-            )
-        );
-
-        assert_eq!(g, Poly::from_uni_fmt(g.coefs(0), 0));
-    }
-
-    #[test]
-    fn eval() {
-        let var_dict = vec!["x".to_string(), "y".to_string(), "z".to_string()];
-
-        let a = Poly::var(0, 4);
-        let b = Poly::var(0, 2) * Poly::constant_int(3);
-        let c = Poly::var(0, 2) * Poly::var(2, 3) * Poly::constant_int(5);
-        let d = Poly::var(1, 1) * Poly::var(0, 1) * Poly::constant_int(4);
-        let e = Poly::var(2, 1);
-        let f = Poly::constant_int(2);
-
-        let g = a + b + c + d + e + f;
-
-        assert_eq!(
-            "5x^2z^3 + x^4 + 3x^2 + 4xy + z + 2",
-            format!("{}", g.format(&var_dict))
-        );
-
-        assert_eq!(
-            "20z^3 + 8y + z + 30",
-            format!("{}", g.eval(0, Rat::from(2)).format(&var_dict))
-        );
+        assert_eq!(poly!(), poly!(x - x));
     }
 }

@@ -1,381 +1,215 @@
-use super::super::Rat;
+//! Monomial without coefficient, the variable part of a [`Poly`](super::Poly) term.
+
 use std::cmp::Ordering;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// A variable, represented by `u64`.
+pub type Var = u64;
+/// An exponent, represented by `u64`.
+pub type Pow = u64;
+
+/// A power product ∏xᵢ^eᵢ (for example, x²y⁵). The variable part of a [`Poly`](super::Poly) term.
+/// [`Mono::cmp`] implements [graded-lex ordering](https://en.wikipedia.org/wiki/Monomial_order#Graded_lexicographic_order).
+/// ```
+/// # use sirius::solver::poly::mono::mono;
+/// let a = mono!(x^2);
+/// let b = mono!(x*y);
+/// let c = mono!(x*z^2);
+/// assert_eq!(a.mul(&b).mul(&c), mono!(x^4*y*z^2));
+/// ```
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Mono {
-    pub val: Rat,
-    pub vars: Vec<(usize, u64)>,
+    exps: Vec<(Var, Pow)>,
 }
 
 impl Mono {
-    pub fn deg(&self, var: usize) -> usize {
-        self.vars
+    pub fn new(exps: impl IntoIterator<Item = (Var, Pow)>) -> Self {
+        // Normalize an exp list: sort, combine like vars, and remove zero powers.
+        let mut pairs: Vec<_> = exps.into_iter().filter(|&(_, e)| e > 0).collect();
+        pairs.sort_unstable_by_key(|&(v, _)| v);
+        let mut exps = Vec::<(Var, Pow)>::with_capacity(pairs.len());
+        for (v, e) in pairs {
+            match exps.last_mut() {
+                Some((lv, le)) if *lv == v => *le += e,
+                _ => exps.push((v, e)),
+            }
+        }
+        Self { exps }
+    }
+
+    /// Unit monomial, 1.
+    pub fn unit() -> Self {
+        Self::new(vec![])
+    }
+
+    pub fn exps(&self) -> &[(Var, Pow)] {
+        &self.exps
+    }
+
+    pub fn is_unit(&self) -> bool {
+        self.exps.is_empty()
+    }
+
+    pub fn total_degree(&self) -> Pow {
+        self.exps.iter().map(|&(_, e)| e).sum()
+    }
+
+    pub fn mul(&self, other: &Self) -> Self {
+        // Merge sorted `exps` and combine like vars to maintain canonical form.
+        let mut exps = Vec::with_capacity(self.exps.len() + other.exps.len());
+        let (mut a, mut b) = (self.exps.iter().peekable(), other.exps.iter().peekable());
+        loop {
+            match (a.peek(), b.peek()) {
+                (Some(&&(va, ea)), Some(&&(vb, eb))) => match va.cmp(&vb) {
+                    Ordering::Less => {
+                        exps.push((va, ea));
+                        a.next();
+                    }
+                    Ordering::Greater => {
+                        exps.push((vb, eb));
+                        b.next();
+                    }
+                    Ordering::Equal => {
+                        exps.push((va, ea + eb));
+                        a.next();
+                        b.next();
+                    }
+                },
+                (Some(_), None) => {
+                    exps.extend(a);
+                    break;
+                }
+                (None, Some(_)) => {
+                    exps.extend(b);
+                    break;
+                }
+                (None, None) => break,
+            }
+        }
+        Self { exps }.debug_checked()
+    }
+
+    pub fn degree_in(&self, v: Var) -> Pow {
+        self.exps
             .iter()
-            .find_map(|(v, pow)| match var.cmp(v) {
-                Ordering::Equal => Some(*pow as usize),
-                Ordering::Greater => Some(0),
-                Ordering::Less => None,
-            })
+            .find(|(va, _)| *va == v)
+            .map(|exp| exp.1)
             .unwrap_or(0)
     }
 
-    pub fn coef(&self, var: usize) -> (usize, Mono) {
-        let mut new_vars = vec![];
-        let mut deg = 0;
-
-        for (v, pow) in &self.vars {
-            if *v == var {
-                deg = *pow as usize;
-            } else {
-                new_vars.push((*v, *pow));
-            }
+    /// Panic unless the internal invariant holds. Test and debug aid.
+    #[doc(hidden)]
+    pub fn assert_canonical(&self) {
+        for w in self.exps.windows(2) {
+            assert!(
+                w[0].0 < w[1].0,
+                "monomial vars not strictly ascending: {:?}",
+                self.exps
+            );
         }
-
-        (
-            deg,
-            Mono {
-                val: self.val.clone(),
-                vars: new_vars,
-            },
-        )
-    }
-}
-
-#[cfg(test)]
-pub fn print_exps(term: &Mono, var_dict: &[String]) -> String {
-    use std::fmt::Write;
-
-    let mut res = String::new();
-
-    for (var, pow) in &term.vars {
-        if *pow == 1 {
-            write!(res, "{}", var_dict[*var]).unwrap();
-        } else {
-            write!(res, "{}^{pow}", var_dict[*var]).unwrap();
+        for &(_, e) in &self.exps {
+            assert!(e >= 1, "monomial has zero exponent: {:?}", self.exps);
         }
     }
 
-    res
-}
-
-pub fn grevlex(lhs: &Mono, rhs: &Mono) -> Ordering {
-    let lhs_total_degree = lhs.vars.iter().fold(0, |acc, (_, pow)| acc + pow);
-    let rhs_total_degree = rhs.vars.iter().fold(0, |acc, (_, pow)| acc + pow);
-
-    match lhs_total_degree.cmp(&rhs_total_degree) {
-        Ordering::Less => Ordering::Less,
-        Ordering::Greater => Ordering::Greater,
-        Ordering::Equal => {
-            for ((lhs_var, lhs_pow), (rhs_var, rhs_pow)) in lhs.vars.iter().zip(&rhs.vars) {
-                match lhs_var.cmp(rhs_var) {
-                    Ordering::Less => return Ordering::Greater,
-                    Ordering::Greater => return Ordering::Less,
-                    Ordering::Equal => match lhs_pow.cmp(rhs_pow) {
-                        Ordering::Less => return Ordering::Less,
-                        Ordering::Greater => return Ordering::Greater,
-                        Ordering::Equal => continue,
-                    },
-                }
-            }
-
-            Ordering::Equal
-        }
+    fn debug_checked(self) -> Self {
+        #[cfg(debug_assertions)]
+        self.assert_canonical();
+        self
     }
 }
 
-pub fn monomial_div(lhs: &Mono, rhs: &Mono) -> Option<Mono> {
-    if rhs.val.is_zero() {
-        None
-    } else if lhs.val.is_zero() {
-        Some(Mono {
-            val: Rat::zero(),
-            vars: vec![],
-        })
-    } else {
-        let mut lhs_var_iter = lhs.vars.iter().peekable();
-        let mut rhs_var_iter = rhs.vars.iter().peekable();
-        let mut vars = vec![];
-        while let Some((rhs_var, rhs_pow)) = rhs_var_iter.peek() {
-            if let Some((lhs_var, lhs_pow)) = lhs_var_iter.peek() {
-                match lhs_var.cmp(rhs_var) {
-                    Ordering::Equal => match lhs_pow.cmp(rhs_pow) {
-                        Ordering::Greater => {
-                            vars.push((*lhs_var, lhs_pow - rhs_pow));
-                            lhs_var_iter.next();
-                            rhs_var_iter.next();
-                            continue;
-                        }
-                        Ordering::Equal => {
-                            lhs_var_iter.next();
-                            rhs_var_iter.next();
-                            continue;
-                        }
-                        Ordering::Less => return None,
-                    },
-                    Ordering::Less => {
-                        vars.push((*lhs_var, *lhs_pow));
-                        lhs_var_iter.next();
-                        continue;
-                    }
-                    Ordering::Greater => {
-                        return None;
+impl Ord for Mono {
+    /// [Graded-lex](https://en.wikipedia.org/wiki/Monomial_order#Graded_lexicographic_order): total degree first;
+    /// ties broken lexicographically on exponent vectors with lower [`Var`] index more significant
+    /// (larger exponent on the first differing variable wins).
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.total_degree()
+            .cmp(&other.total_degree())
+            .then_with(|| {
+                let (mut a, mut b) = (self.exps.iter(), other.exps.iter());
+                loop {
+                    match (a.next(), b.next()) {
+                        (Some(&(va, ea)), Some(&(vb, eb))) => match va.cmp(&vb) {
+                            Ordering::Less => return Ordering::Greater,
+                            Ordering::Greater => return Ordering::Less,
+                            Ordering::Equal => {
+                                if ea != eb {
+                                    return ea.cmp(&eb);
+                                }
+                            }
+                        },
+                        (Some(_), None) => return Ordering::Greater,
+                        (None, Some(_)) => return Ordering::Less,
+                        (None, None) => return Ordering::Equal,
                     }
                 }
-            }
-
-            return None;
-        }
-
-        for (lhs_var, lhs_pow) in lhs_var_iter {
-            vars.push((*lhs_var, *lhs_pow));
-        }
-
-        Some(Mono {
-            val: lhs.val.clone() / rhs.val.clone(),
-            vars,
-        })
+            })
     }
 }
 
-pub fn monomial_mul(lhs: &Mono, rhs: &Mono) -> Mono {
-    let val = if lhs.val.is_zero() || rhs.val.is_zero() {
-        return Mono {
-            val: Rat::zero(),
-            vars: vec![],
-        };
-    } else {
-        lhs.val.clone() * rhs.val.clone()
-    };
-
-    let mut vars = vec![];
-
-    let mut lhs_var_ind = 0;
-    let mut rhs_var_ind = 0;
-
-    while lhs_var_ind < lhs.vars.len() || rhs_var_ind < rhs.vars.len() {
-        if lhs_var_ind < lhs.vars.len() && rhs_var_ind < rhs.vars.len() {
-            match lhs.vars[lhs_var_ind].0.cmp(&rhs.vars[rhs_var_ind].0) {
-                Ordering::Equal => {
-                    vars.push((
-                        lhs.vars[lhs_var_ind].0,
-                        lhs.vars[lhs_var_ind].1 + rhs.vars[rhs_var_ind].1,
-                    ));
-                    lhs_var_ind += 1;
-                    rhs_var_ind += 1;
-                }
-                Ordering::Greater => {
-                    vars.push(rhs.vars[rhs_var_ind]);
-                    rhs_var_ind += 1;
-                }
-                Ordering::Less => {
-                    vars.push(lhs.vars[lhs_var_ind]);
-                    lhs_var_ind += 1;
-                }
-            }
-        } else if lhs_var_ind < lhs.vars.len() {
-            vars.push(lhs.vars[lhs_var_ind]);
-            lhs_var_ind += 1;
-        } else if rhs_var_ind < rhs.vars.len() {
-            vars.push(rhs.vars[rhs_var_ind]);
-            rhs_var_ind += 1;
-        }
-    }
-
-    Mono { val, vars }
-}
-
-// ignore coef, just applied to vars
-pub fn monomial_lcm(lhs: Mono, rhs: Mono) -> Mono {
-    let mut vars = vec![];
-
-    let mut lhs_var_ind = 0;
-    let mut rhs_var_ind = 0;
-
-    while lhs_var_ind < lhs.vars.len() || rhs_var_ind < rhs.vars.len() {
-        if lhs_var_ind < lhs.vars.len() && rhs_var_ind < rhs.vars.len() {
-            match lhs.vars[lhs_var_ind].0.cmp(&rhs.vars[rhs_var_ind].0) {
-                Ordering::Equal => {
-                    vars.push((
-                        lhs.vars[lhs_var_ind].0,
-                        lhs.vars[lhs_var_ind].1.max(rhs.vars[rhs_var_ind].1),
-                    ));
-                    lhs_var_ind += 1;
-                    rhs_var_ind += 1;
-                }
-                Ordering::Greater => {
-                    vars.push(rhs.vars[rhs_var_ind]);
-                    rhs_var_ind += 1;
-                }
-                Ordering::Less => {
-                    vars.push(lhs.vars[lhs_var_ind]);
-                    lhs_var_ind += 1;
-                }
-            }
-        } else if lhs_var_ind < lhs.vars.len() {
-            vars.push(lhs.vars[lhs_var_ind]);
-            lhs_var_ind += 1;
-        } else if rhs_var_ind < rhs.vars.len() {
-            vars.push(rhs.vars[rhs_var_ind]);
-            rhs_var_ind += 1;
-        }
-    }
-
-    Mono {
-        val: Rat::one(),
-        vars,
+impl PartialOrd for Mono {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
+
+#[doc(hidden)]
+/// Helper function for the [`mono`](crate::mono) macro.
+pub const fn __read_var_name(name: &str) -> Var {
+    let bytes = name.as_bytes();
+    assert!(bytes.len() == 1, "variable name must have length 1");
+    bytes[0] as Var
+}
+
+/// Create a [`Mono`]. Accepts 1-character ASCII variable names; for example, `mono!(x*y^5)`.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __mono {
+    () => { $crate::solver::poly::mono::Mono::unit() };
+
+    ($var:ident ^ $pow:literal $(* $($rest:tt)*)?) => {{
+        use $crate::solver::poly::mono::{Mono, Var, __read_var_name};
+        const VAR_NAME: Var = __read_var_name(stringify!($var));
+        Mono::new(vec![(VAR_NAME, $pow)]).mul(&$crate::__mono!($($($rest)*)?))
+    }};
+    ($var:ident $(* $($rest:tt)*)?) => {{
+        use $crate::solver::poly::mono::{Mono, Var, __read_var_name};
+        const VAR_NAME: Var = __read_var_name(stringify!($var));
+        Mono::new(vec![(VAR_NAME, 1)]).mul(&$crate::__mono!($($($rest)*)?))
+    }};
+}
+
+#[doc(inline)]
+pub use crate::__mono as mono;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use rand::prelude::*;
+    use super::mono;
 
     #[test]
-    fn ordering() {
-        let var_dict = ["x".to_string(), "y".to_string(), "z".to_string()];
-        let mut terms = vec![];
-
-        for i in 0..4 {
-            for j in 0..4 {
-                for k in 0..4 {
-                    let mut vars = vec![];
-                    if i > 0 {
-                        vars.push((0, i))
-                    }
-                    if j > 0 {
-                        vars.push((1, j))
-                    }
-                    if k > 0 {
-                        vars.push((2, k))
-                    }
-
-                    terms.push(Mono {
-                        val: Rat::one(),
-                        vars,
-                    });
-                }
-            }
-        }
-
-        let expected_sort = "x^3y^3z^3
-x^3y^3z^2
-x^3y^2z^3
-x^2y^3z^3
-x^3y^3z
-x^3y^2z^2
-x^3yz^3
-x^2y^3z^2
-x^2y^2z^3
-xy^3z^3
-x^3y^3
-x^3y^2z
-x^3yz^2
-x^3z^3
-x^2y^3z
-x^2y^2z^2
-x^2yz^3
-xy^3z^2
-xy^2z^3
-y^3z^3
-x^3y^2
-x^3yz
-x^3z^2
-x^2y^3
-x^2y^2z
-x^2yz^2
-x^2z^3
-xy^3z
-xy^2z^2
-xyz^3
-y^3z^2
-y^2z^3
-x^3y
-x^3z
-x^2y^2
-x^2yz
-x^2z^2
-xy^3
-xy^2z
-xyz^2
-xz^3
-y^3z
-y^2z^2
-yz^3
-x^3
-x^2y
-x^2z
-xy^2
-xyz
-xz^2
-y^3
-y^2z
-yz^2
-z^3
-x^2
-xy
-xz
-y^2
-yz
-z^2
-x
-y
-z
-
-
-"
-        .split("\n")
-        .collect::<Vec<_>>();
-
-        terms.sort_by(|a, b| grevlex(a, b));
-
-        for (i, term) in terms.iter().rev().enumerate() {
-            assert_eq!(expected_sort[i], print_exps(&term, &var_dict));
+    fn graded_lex() {
+        let descending = [
+            mono!(x ^ 2),
+            mono!(x * y),
+            mono!(x * z),
+            mono!(y ^ 2),
+            mono!(y * z),
+            mono!(z ^ 2),
+            mono!(x),
+            mono!(y),
+            mono!(z),
+            mono!(),
+        ];
+        for w in descending.windows(2) {
+            assert!(w[0] > w[1], "expected {:?} > {:?}", w[0], w[1]);
         }
     }
 
     #[test]
-    fn div_mul_fuzz() {
-        let mut rng = SmallRng::seed_from_u64(1);
-
-        fn random_mono(rng: &mut SmallRng, min_coef: i32, max_coef: i32) -> Mono {
-            let coef = rng.gen_range(min_coef..max_coef);
-
-            let mut vars = vec![];
-
-            let wpow = rng.gen_range(0..3);
-            if wpow > 0 {
-                vars.push((0, wpow));
-            }
-
-            let xpow = rng.gen_range(0..1);
-            if xpow > 0 {
-                vars.push((1, xpow));
-            }
-
-            let ypow = rng.gen_range(0..1);
-            if ypow > 0 {
-                vars.push((2, ypow));
-            }
-
-            let zpow = rng.gen_range(0..2);
-            if zpow > 0 {
-                vars.push((3, zpow));
-            }
-
-            Mono {
-                val: Rat::from(coef as i64),
-                vars: if coef == 0 { vec![] } else { vars },
-            }
-        }
-
-        for _i in 0..1000 {
-            let a = random_mono(&mut rng, 6, 12);
-            let b = random_mono(&mut rng, 0, 6);
-            let c = monomial_div(&a, &b);
-            if let Some(c) = c {
-                assert_eq!(a, monomial_mul(&c, &b));
-            }
-        }
+    fn multiplication() {
+        assert_eq!(mono!(x).mul(&mono!(x)), mono!(x ^ 2));
+        let a = mono!(x ^ 2 * y).mul(&mono!(x * z ^ 2));
+        a.assert_canonical();
+        assert_eq!(a, mono!(x ^ 3 * y * z ^ 2));
     }
 }

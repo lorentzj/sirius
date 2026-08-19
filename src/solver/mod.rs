@@ -1,5 +1,3 @@
-pub mod poly;
-pub mod rat;
+//! This module implements some symbolic computation utilities for the *Sirius* programming language.
 
-pub use poly::Poly;
-pub use rat::Rat;
+pub mod poly;

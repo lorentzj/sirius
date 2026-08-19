@@ -1,0 +1,2 @@
+createSrcSidebar('[["sirius",["",[["parser",[],["ast.rs","lexer.rs","mod.rs","positioned.rs"]],["solver",[["poly",[],["coef.rs","mod.rs","mono.rs"]]],["mod.rs"]],["typechecker",[],["from_annotation.rs","mod.rs","types.rs"]]],["bindings.rs","error.rs","lib.rs","scope.rs"]]]]');
+//{"start":19,"fragment_lengths":[254]}

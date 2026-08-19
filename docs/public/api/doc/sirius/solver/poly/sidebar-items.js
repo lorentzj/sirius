@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"macro":[["poly",1]],"mod":["coef","mono"],"struct":["Poly"]};
