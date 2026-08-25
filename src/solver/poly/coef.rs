@@ -1,11 +1,11 @@
 //! Coefficient, the constant part of a [`Poly`](super::Poly) term.
 
 use std::cmp::{Ord, PartialOrd};
-use std::ops::{Add, Div, Mul, Neg};
+use std::ops::Neg;
 
 /// Coefficient, represented by `i128`. The constant part of a [`Poly`](super::Poly) term.
 /// All arithmetic is checked and panics on overflow.
-#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialOrd, Ord, Hash, PartialEq, Eq)]
 pub struct Coef(i128);
 
 impl Coef {
@@ -17,6 +17,10 @@ impl Coef {
         self.0
     }
 
+    pub fn vec(arr: &[i128]) -> Vec<Self> {
+        arr.iter().map(|a| Coef::new(*a)).collect()
+    }
+
     pub fn is_zero(&self) -> bool {
         self.0 == 0
     }
@@ -25,43 +29,39 @@ impl Coef {
         self.0 > 0
     }
 
-    /// Stein's binary GCD algorithm. Always returns non-negative.
-    /// `gcd(x, 0) = x` and `gcd(0, y) = y`.
     pub fn gcd(&self, other: &Self) -> Self {
-        let (mut u, mut v) = (self.0.unsigned_abs(), other.0.unsigned_abs());
-
-        if u == 0 {
-            return Self(v.cast_signed());
+        let (mut a, mut b) = (self.0, other.0);
+        while b != 0 {
+            (a, b) = (b, a % b);
         }
-        if v == 0 {
-            return Self(u.cast_signed());
-        }
+        Self(a)
+    }
 
-        // find the common power of 2 factor using trailing zeros
-        let i = u.trailing_zeros();
-        let j = v.trailing_zeros();
-        let k = i.min(j);
-        u >>= i;
-        v >>= j;
+    pub fn abs(&self) -> Self {
+        Coef(self.0.checked_abs().unwrap())
+    }
 
-        loop {
-            // both u and v are guaranteed to be odd
-            if u > v {
-                std::mem::swap(&mut u, &mut v);
-            }
+    pub fn divrem(&self, other: Coef) -> (Self, Self) {
+        (
+            Coef(self.0.checked_div(other.0).unwrap()),
+            Coef(self.0.checked_rem(other.0).unwrap()),
+        )
+    }
 
-            v -= u;
+    fn add_impl(&self, b: &Self) -> Coef {
+        Coef(self.0.checked_add(b.0).unwrap())
+    }
 
-            if v == 0 {
-                break;
-            }
+    fn sub_impl(&self, b: &Self) -> Coef {
+        Coef(self.0.checked_sub(b.0).unwrap())
+    }
 
-            // remove all trailing factors of 2 from v to make it odd again
-            v >>= v.trailing_zeros();
-        }
+    fn mul_impl(&self, b: &Self) -> Coef {
+        Coef(self.0.checked_mul(b.0).unwrap())
+    }
 
-        // multiply back the shared power of 2 factor
-        Self(i128::try_from(u << k).unwrap())
+    fn div_impl(&self, b: &Self) -> Coef {
+        Coef(self.0.checked_div(b.0).unwrap())
     }
 }
 
@@ -77,37 +77,47 @@ impl From<i128> for Coef {
     }
 }
 
-impl Add for &Coef {
-    type Output = Coef;
-
-    fn add(self, b: Self) -> Coef {
-        Coef(self.0.checked_add(b.0).unwrap())
-    }
-}
-
-impl Mul for &Coef {
-    type Output = Coef;
-
-    fn mul(self, b: Self) -> Coef {
-        Coef(self.0.checked_mul(b.0).unwrap())
-    }
-}
-
-impl Div for &Coef {
-    type Output = Coef;
-
-    fn div(self, b: Self) -> Coef {
-        Coef(self.0.checked_div(b.0).unwrap())
-    }
-}
-
-impl Neg for &Coef {
+impl Neg for Coef {
     type Output = Coef;
 
     fn neg(self) -> Coef {
         Coef(self.0.checked_neg().unwrap())
     }
 }
+
+macro_rules! impl_binop {
+    ($T:ident, $Trait:ident, $method:ident, $impl_fn:ident) => {
+        impl std::ops::$Trait<&$T> for &$T {
+            type Output = $T;
+            fn $method(self, rhs: &$T) -> $T {
+                self.$impl_fn(rhs)
+            }
+        }
+        impl std::ops::$Trait<$T> for &$T {
+            type Output = $T;
+            fn $method(self, rhs: $T) -> $T {
+                self.$impl_fn(&rhs)
+            }
+        }
+        impl std::ops::$Trait<&$T> for $T {
+            type Output = $T;
+            fn $method(self, rhs: &$T) -> $T {
+                self.$impl_fn(rhs)
+            }
+        }
+        impl std::ops::$Trait<$T> for $T {
+            type Output = $T;
+            fn $method(self, rhs: $T) -> $T {
+                self.$impl_fn(&rhs)
+            }
+        }
+    };
+}
+
+impl_binop!(Coef, Add, add, add_impl);
+impl_binop!(Coef, Sub, sub, sub_impl);
+impl_binop!(Coef, Mul, mul, mul_impl);
+impl_binop!(Coef, Div, div, div_impl);
 
 #[cfg(test)]
 mod tests {

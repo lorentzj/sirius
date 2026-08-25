@@ -4,8 +4,8 @@ use std::cmp::Ordering;
 
 /// A variable, represented by `u64`.
 pub type Var = u64;
-/// An exponent, represented by `u64`.
-pub type Pow = u64;
+/// An exponent, represented by `u32`.
+pub type Pow = u32;
 
 /// A power product ∏xᵢ^eᵢ (for example, x²y⁵). The variable part of a [`Poly`](super::Poly) term.
 /// [`Mono::cmp`] implements [graded-lex ordering](https://en.wikipedia.org/wiki/Monomial_order#Graded_lexicographic_order).

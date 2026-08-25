@@ -14,8 +14,8 @@ fn monomial_div(lhs: &(Coef, Mono), rhs: &(Coef, Mono)) -> Option<(Coef, Mono)> 
     } else if lhs.0.is_zero() {
         Some((Coef::new(0), Mono::unit()))
     } else if let Some(quot) = lhs.1.div(&rhs.1) {
-        let const_quot = (&rhs.0) / (&lhs.0);
-        if &lhs.0 * &const_quot == rhs.0 {
+        let const_quot = rhs.0 / lhs.0;
+        if lhs.0 * const_quot == rhs.0 {
             Some((const_quot, quot))
         } else {
             None
@@ -26,7 +26,7 @@ fn monomial_div(lhs: &(Coef, Mono), rhs: &(Coef, Mono)) -> Option<(Coef, Mono)> 
 }
 
 /// A multivariable polynomial.
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub struct Poly {
     terms: Vec<(Coef, Mono)>,
 }
@@ -51,11 +51,11 @@ impl Poly {
         }
     }
 
-    pub fn var(v: Var, pow: Pow) -> Self {
-        if pow == 0 {
+    pub fn var(v: Var, p: Pow) -> Self {
+        if p == 0 {
             Self::constant(1)
         } else {
-            Self::term(1, Mono::new(vec![(v, pow)]))
+            Self::term(1, Mono::new(vec![(v, p)]))
         }
     }
 
@@ -70,6 +70,10 @@ impl Poly {
         }
     }
 
+    pub fn terms(&self) -> Vec<(Coef, Mono)> {
+        self.terms.clone()
+    }
+
     pub fn from_terms(terms: impl IntoIterator<Item = (Coef, Mono)>) -> Self {
         let mut raw: Vec<_> = terms.into_iter().collect();
         raw.sort_unstable_by(|(_, m1), (_, m2)| m2.cmp(m1));
@@ -77,7 +81,7 @@ impl Poly {
         for (c, m) in raw {
             match terms.last_mut() {
                 Some((lc, lm)) if *lm == m => {
-                    *lc = &*lc + &c;
+                    *lc = *lc + c;
                     if *lc == 0.into() {
                         terms.pop();
                     }
@@ -108,7 +112,7 @@ impl Poly {
                 match var.cmp(&v) {
                     Ordering::Greater => continue,
                     Ordering::Equal => {
-                        deg = deg.min(*pow);
+                        deg = deg.max(*pow);
                         break;
                     }
                     Ordering::Less => break,
@@ -122,17 +126,89 @@ impl Poly {
         deg
     }
 
-    pub fn mul_scalar(&self, c: Coef) -> Self {
-        if c == 0.into() {
+    pub fn mul_scalar<T: Into<Coef>>(&self, c: T) -> Self {
+        let c = c.into();
+        if c.is_zero() {
             Self::zero()
         } else {
             Self {
-                terms: self
-                    .terms
-                    .iter()
-                    .map(|t| (&t.0 * &c, t.1.clone()))
-                    .collect(),
+                terms: self.terms.iter().map(|t| (t.0 * c, t.1.clone())).collect(),
             }
+        }
+    }
+
+    pub fn pow(&self, mut e: u32) -> Self {
+        let mut acc = Self::constant(1);
+        let mut base = self.clone();
+        while e > 0 {
+            if e & 1 == 1 {
+                acc = acc.mul(&base);
+            }
+            e >>= 1;
+            if e > 0 {
+                base = base.mul(&base);
+            }
+        }
+        acc
+    }
+
+    pub fn eval(&self, mut point: impl FnMut(Var) -> i128) -> Coef {
+        let mut acc = Coef::new(0);
+        for (c, m) in &self.terms {
+            let mut t = *c;
+            for &(v, e) in m.exps() {
+                t = t * Coef::new(point(v).checked_pow(e).unwrap());
+            }
+            acc = acc + t;
+        }
+        acc
+    }
+
+    pub fn map_vars(&self, mut f: impl FnMut(Var) -> Self) -> Self {
+        let mut acc = Poly::zero();
+        for (c, m) in &self.terms {
+            let mut t = Poly::constant(*c);
+            for &(v, e) in m.exps() {
+                t = t.mul(&f(v).pow(e));
+            }
+            acc = acc.add(&t);
+        }
+        acc
+    }
+
+    pub fn substitute(&self, v: Var, q: &Self) -> Self {
+        self.map_vars(|w| if w == v { q.clone() } else { Self::var(w, 1) })
+    }
+
+    pub fn coef_gcd(&self) -> Coef {
+        self.terms
+            .iter()
+            .fold(Coef::from(0), |g, &(c, _)| g.gcd(&c))
+            .abs()
+    }
+
+    pub fn divide_coefs<T: Into<Coef>>(&self, d: T) -> Option<Self> {
+        let d = d.into();
+        if d.is_zero() {
+            return None;
+        }
+        let mut terms = Vec::with_capacity(self.terms.len());
+        for (c, m) in &self.terms {
+            let (quot, rem) = c.divrem(d);
+            if rem.is_zero() {
+                terms.push((quot, m.clone()));
+            } else {
+                return None;
+            }
+        }
+        Some(Poly { terms }.debug_checked())
+    }
+
+    pub fn as_constant(&self) -> Option<Coef> {
+        match self.terms.as_slice() {
+            [] => Some(Coef::new(0)),
+            [(c, m)] if m.is_unit() => Some(*c),
+            _ => None,
         }
     }
 
@@ -193,9 +269,7 @@ impl Poly {
     }
 
     pub fn neg(&self) -> Self {
-        Self {
-            terms: self.terms.iter().map(|(c, m)| (-c, m.clone())).collect(),
-        }
+        self.mul_scalar(-1)
     }
 
     pub fn sub(&self, rhs: &Self) -> Self {
@@ -339,7 +413,7 @@ impl std::fmt::Debug for Poly {
             if coef.is_positive() {
                 write!(f, " + {:?}{:?}", coef, mono)?;
             } else {
-                write!(f, " - {:?}{:?}", -coef, mono)?;
+                write!(f, " - {:?}{:?}", -*coef, mono)?;
             }
         }
 
