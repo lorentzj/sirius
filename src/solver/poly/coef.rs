@@ -1,11 +1,11 @@
 //! Coefficient, the constant part of a [`Poly`](super::Poly) term.
 
 use std::cmp::{Ord, PartialOrd};
-use std::ops::{Add, Mul, Neg};
+use std::ops::{Add, Div, Mul, Neg};
 
 /// Coefficient, represented by `i128`. The constant part of a [`Poly`](super::Poly) term.
 /// All arithmetic is checked and panics on overflow.
-#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub struct Coef(i128);
 
 impl Coef {
@@ -15,6 +15,14 @@ impl Coef {
 
     pub fn get(&self) -> i128 {
         self.0
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.0 == 0
+    }
+
+    pub fn is_positive(&self) -> bool {
+        self.0 > 0
     }
 
     /// Stein's binary GCD algorithm. Always returns non-negative.
@@ -57,6 +65,12 @@ impl Coef {
     }
 }
 
+impl std::fmt::Debug for Coef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl From<i128> for Coef {
     fn from(val: i128) -> Self {
         Coef(val)
@@ -76,6 +90,14 @@ impl Mul for &Coef {
 
     fn mul(self, b: Self) -> Coef {
         Coef(self.0.checked_mul(b.0).unwrap())
+    }
+}
+
+impl Div for &Coef {
+    type Output = Coef;
+
+    fn div(self, b: Self) -> Coef {
+        Coef(self.0.checked_div(b.0).unwrap())
     }
 }
 

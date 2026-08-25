@@ -21,7 +21,7 @@ pub fn annotation(ann: &Expr, p_vars: &Vec<String>) -> Result<Type, Error> {
             if let Some(t) = standard_type(s) {
                 Ok(Type::new_at(t, ann))
             } else if let Some(p_position) = p_vars.iter().position(|v| v == s) {
-                Ok(Type::poly(Poly::var(p_position as u64), ann))
+                Ok(Type::poly(Poly::var(p_position as u64, 1), ann))
             } else {
                 Err(ann.type_error(&format!("unknown type \"{}\"", s)))
             }

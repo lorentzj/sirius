@@ -16,7 +16,7 @@ pub type Pow = u64;
 /// let c = mono!(x*z^2);
 /// assert_eq!(a.mul(&b).mul(&c), mono!(x^4*y*z^2));
 /// ```
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Mono {
     exps: Vec<(Var, Pow)>,
 }
@@ -88,6 +88,48 @@ impl Mono {
         Self { exps }.debug_checked()
     }
 
+    pub fn div(&self, other: &Self) -> Option<Self> {
+        let mut lhs_var_iter = self.exps.iter().peekable();
+        let mut rhs_var_iter = other.exps.iter().peekable();
+        let mut vars = vec![];
+        while let Some((rhs_var, rhs_pow)) = rhs_var_iter.peek() {
+            if let Some((lhs_var, lhs_pow)) = lhs_var_iter.peek() {
+                match lhs_var.cmp(rhs_var) {
+                    Ordering::Equal => match lhs_pow.cmp(rhs_pow) {
+                        Ordering::Greater => {
+                            vars.push((*lhs_var, lhs_pow - rhs_pow));
+                            lhs_var_iter.next();
+                            rhs_var_iter.next();
+                            continue;
+                        }
+                        Ordering::Equal => {
+                            lhs_var_iter.next();
+                            rhs_var_iter.next();
+                            continue;
+                        }
+                        Ordering::Less => return None,
+                    },
+                    Ordering::Less => {
+                        vars.push((*lhs_var, *lhs_pow));
+                        lhs_var_iter.next();
+                        continue;
+                    }
+                    Ordering::Greater => {
+                        return None;
+                    }
+                }
+            }
+
+            return None;
+        }
+
+        for (lhs_var, lhs_pow) in lhs_var_iter {
+            vars.push((*lhs_var, *lhs_pow));
+        }
+
+        Some(Mono::new(vars))
+    }
+
     pub fn degree_in(&self, v: Var) -> Pow {
         self.exps
             .iter()
@@ -115,6 +157,28 @@ impl Mono {
         #[cfg(debug_assertions)]
         self.assert_canonical();
         self
+    }
+}
+
+impl std::fmt::Debug for Mono {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (var, pow) in &self.exps {
+            if *var >= 97 && *var <= 122 {
+                if *pow == 1 {
+                    write!(f, "*{}", char::from_u32(*var as u32).unwrap())?;
+                } else {
+                    write!(f, "*{}^{pow}", char::from_u32(*var as u32).unwrap())?;
+                }
+            } else {
+                if *pow == 1 {
+                    write!(f, "*{{x_{}}}", *var)?;
+                } else {
+                    write!(f, "*{{x_{}}}^{pow}", *var)?;
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 

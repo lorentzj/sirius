@@ -4,13 +4,29 @@
 pub mod mono;
 pub mod coef;
 
-use std::cmp::Ordering;
-
 use coef::Coef;
 use mono::{Mono, Pow, Var};
+use std::cmp::Ordering;
+
+fn monomial_div(lhs: &(Coef, Mono), rhs: &(Coef, Mono)) -> Option<(Coef, Mono)> {
+    if rhs.0.is_zero() {
+        None
+    } else if lhs.0.is_zero() {
+        Some((Coef::new(0), Mono::unit()))
+    } else if let Some(quot) = lhs.1.div(&rhs.1) {
+        let const_quot = (&rhs.0) / (&lhs.0);
+        if &lhs.0 * &const_quot == rhs.0 {
+            Some((const_quot, quot))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
 
 /// A multivariable polynomial.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct Poly {
     terms: Vec<(Coef, Mono)>,
 }
@@ -18,6 +34,10 @@ pub struct Poly {
 impl Poly {
     pub fn zero() -> Self {
         Self { terms: vec![] }
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.terms.is_empty()
     }
 
     pub fn constant<T: Into<Coef>>(c: T) -> Self {
@@ -31,8 +51,12 @@ impl Poly {
         }
     }
 
-    pub fn var(v: Var) -> Poly {
-        Self::term(1, Mono::new(vec![(v, 1)]))
+    pub fn var(v: Var, pow: Pow) -> Self {
+        if pow == 0 {
+            Self::constant(1)
+        } else {
+            Self::term(1, Mono::new(vec![(v, pow)]))
+        }
     }
 
     pub fn term<T: Into<Coef>>(c: T, m: Mono) -> Self {
@@ -65,7 +89,7 @@ impl Poly {
                 }
             }
         }
-        Poly { terms }.debug_checked()
+        Self { terms }.debug_checked()
     }
 
     pub fn total_degree(&self) -> Pow {
@@ -178,8 +202,99 @@ impl Poly {
         self.add(&rhs.neg())
     }
 
-    /// Panic unless canonical: strictly descending monomials, no zero
-    /// coefficients, inner monomial invariants. Test and debug aid.
+    pub fn leading_term(&self) -> (Coef, Mono) {
+        match self.terms.first() {
+            Some(m) => m.clone(),
+            None => (Coef::new(0), Mono::unit()),
+        }
+    }
+
+    pub fn compound_divide(&self, divisors: &[Self]) -> (Vec<Self>, Self) {
+        println!("divide {self:?} by {divisors:?}");
+
+        if divisors.is_empty() {
+            return (vec![], self.clone());
+        }
+
+        let mut dividend = self.clone();
+
+        let mut rem = Poly::constant(0);
+        let mut quotients: Vec<Vec<(Coef, Mono)>> =
+            std::iter::repeat_n(Vec::default(), divisors.len()).collect();
+
+        let mut curr_term = 0;
+        let mut curr_divisor = 0;
+
+        while dividend.terms.len() > curr_term {
+            let self_lt = dividend.terms[curr_term].clone();
+            println!("-----------");
+            println!("leading term: {self_lt:?}");
+            if !divisors[curr_divisor].is_zero() {
+                let div_lt = &divisors[curr_divisor].leading_term();
+                let self_over_div_lt = monomial_div(&self_lt, div_lt);
+
+                println!("curr_divisor: {:?}", divisors[curr_divisor]);
+                println!("curr_divisor leading term: {div_lt:?}");
+                println!("self_over_div_lt: {self_over_div_lt:?}");
+
+                if let Some(self_over_div_lt) = self_over_div_lt {
+                    quotients[curr_divisor].push(self_over_div_lt.clone());
+
+                    let self_over_div_lt = Poly {
+                        terms: vec![self_over_div_lt],
+                    };
+
+                    println!(
+                        "subtracting {dividend:?} by ({self_over_div_lt:?}) * ({:?})",
+                        divisors[curr_divisor]
+                    );
+                    println!(
+                        "subtracting {dividend:?} by {:?}",
+                        self_over_div_lt.mul(&divisors[curr_divisor])
+                    );
+
+                    dividend = dividend.sub(&self_over_div_lt.mul(&divisors[curr_divisor]));
+                    println!("new dividend: {dividend:?}");
+
+                    curr_divisor = 0;
+                } else {
+                    curr_divisor += 1;
+                }
+            } else {
+                curr_divisor += 1;
+            }
+
+            if curr_divisor == divisors.len() {
+                let self_lt = Self {
+                    terms: vec![self_lt.clone()],
+                };
+                println!("hit end of divisors; adding {self_lt:?} to rem {rem:?}");
+                curr_term += 1;
+
+                rem = rem.add(&self_lt);
+                println!("new rem: {rem:?}");
+                curr_divisor = 0;
+            }
+        }
+
+        let quotients = quotients
+            .into_iter()
+            .map(|v| Self::debug_checked(Self { terms: v }))
+            .collect();
+
+        (quotients, rem)
+    }
+
+    pub fn try_divide(&self, divisor: &Self) -> Option<Self> {
+        let (mut quots, rem) = self.compound_divide(std::slice::from_ref(divisor));
+
+        if rem.is_zero() {
+            Some(quots.pop().unwrap())
+        } else {
+            None
+        }
+    }
+
     #[doc(hidden)]
     pub fn assert_canonical(&self) {
         for w in self.terms.windows(2) {
@@ -196,7 +311,7 @@ impl Poly {
         }
     }
 
-    fn debug_checked(self) -> Poly {
+    fn debug_checked(self) -> Self {
         #[cfg(debug_assertions)]
         self.assert_canonical();
         self
@@ -208,6 +323,27 @@ impl Poly {
         }
 
         None
+    }
+}
+
+impl std::fmt::Debug for Poly {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.terms.first() {
+            None => write!(f, "0")?,
+            Some((coef, mono)) => {
+                write!(f, "{:?}{:?}", coef, mono)?;
+            }
+        }
+
+        for (coef, mono) in self.terms.iter().skip(1) {
+            if coef.is_positive() {
+                write!(f, " + {:?}{:?}", coef, mono)?;
+            } else {
+                write!(f, " - {:?}{:?}", -coef, mono)?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -304,6 +440,7 @@ pub use crate::__poly as poly;
 #[cfg(test)]
 mod test {
     use super::poly;
+
     #[test]
     fn constants() {
         let x = poly!(3 * x ^ 2 + 5 * z - 2 + 1);
@@ -313,5 +450,75 @@ mod test {
             poly!(12 * x ^ 2 * y * z + 20 * y * z ^ 2 - 4 * y * z)
         );
         assert_eq!(poly!(), poly!(x - x));
+    }
+
+    #[test]
+    fn arith_sanity() {
+        let x = poly!(a ^ 2 + 2 * b + c);
+        let y = poly!(2 * a ^ 2 - c ^ 3 + d);
+        assert!(x.add(&y) == poly!(-1 * c ^ 3 + 3 * a ^ 2 + 2 * b + c + d));
+
+        let x = poly!(a ^ 4 - b ^ 4);
+        let y = poly!(a ^ 2 + b ^ 2);
+        assert_eq!(x.try_divide(&y), Some(poly!(a ^ 2 - b ^ 2)));
+
+        let x = poly!(a ^ 2 - 2 * a * b + b ^ 2);
+        let y = poly!(a - b);
+        assert_eq!(x.try_divide(&y), Some(poly!(a - b)));
+
+        let x = poly!(-4 * b);
+        let y = poly!(a);
+        assert_eq!(x.try_divide(&y), None);
+    }
+
+    #[test]
+    fn arith_fuzz() {
+        use rand::prelude::*;
+
+        use super::Poly;
+
+        let mut rng = SmallRng::seed_from_u64(1);
+
+        fn create_random_poly(rng: &mut SmallRng, term_max: i32) -> Poly {
+            let mut p = Poly::zero();
+
+            for _ in 0..rng.gen_range(0..term_max + 1) {
+                let coef = rng.gen_range(-7..7);
+                let xpow = rng.gen_range(0..2);
+                let ypow = rng.gen_range(0..2);
+                let zpow = rng.gen_range(0..4);
+                let coef = Poly::constant(coef);
+                let xpow = Poly::var('x' as u64, xpow);
+                let ypow = Poly::var('y' as u64, ypow);
+                let zpow = Poly::var('z' as u64, zpow);
+
+                p = p.add(&coef.mul(&xpow).mul(&ypow).mul(&zpow));
+            }
+
+            p
+        }
+
+        for _ in 0..10_000 {
+            let dividend = create_random_poly(&mut rng, 10);
+            let n_divs = rng.gen_range(0..4);
+            let mut divisors: Vec<_> = std::iter::repeat_with(|| create_random_poly(&mut rng, 6))
+                .take(n_divs)
+                .collect();
+
+            let (quotients, rem) = dividend.compound_divide(&mut divisors);
+
+            println!("-------------------------");
+            println!("calculated {:?} / {:?}", dividend, divisors);
+            println!("got {:?} rem {:?}", quotients, rem);
+            println!("-------------------------");
+
+            let calculated_dividend = quotients
+                .into_iter()
+                .zip(divisors.clone())
+                .fold(Poly::zero(), |acc, (x, y)| acc.add(&mut x.mul(&y)))
+                .add(&mut rem.clone());
+
+            assert_eq!(calculated_dividend, dividend);
+        }
     }
 }
