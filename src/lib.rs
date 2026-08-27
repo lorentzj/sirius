@@ -1,9 +1,7 @@
-mod scope;
-
 pub mod bindings;
+pub mod solver;
+
 mod error;
 mod parser;
-pub mod solver;
-pub mod typechecker;
-
-pub use bindings::log;
+mod scope;
+mod typechecker;

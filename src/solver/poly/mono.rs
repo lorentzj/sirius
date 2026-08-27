@@ -2,12 +2,12 @@
 
 use std::cmp::Ordering;
 
-/// A variable, represented by `u64`.
-pub type Var = u64;
+/// A variable, represented by `u32`.
+pub type Var = u32;
 /// An exponent, represented by `u32`.
 pub type Pow = u32;
 
-/// A power product ∏xᵢ^eᵢ (for example, x²y⁵). The variable part of a [`Poly`](super::Poly) term.
+/// A power product $\prod_i x_i^{e_i}$ (for example, $x^2y^5$). The variable part of a [`Poly`](super::Poly) term.
 /// [`Mono::cmp`] implements [graded-lex ordering](https://en.wikipedia.org/wiki/Monomial_order#Graded_lexicographic_order).
 /// ```
 /// # use sirius::solver::poly::mono::mono;
@@ -16,7 +16,7 @@ pub type Pow = u32;
 /// let c = mono!(x*z^2);
 /// assert_eq!(a.mul(&b).mul(&c), mono!(x^4*y*z^2));
 /// ```
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Mono {
     exps: Vec<(Var, Pow)>,
 }
@@ -138,8 +138,44 @@ impl Mono {
             .unwrap_or(0)
     }
 
-    /// Panic unless the internal invariant holds. Test and debug aid.
-    #[doc(hidden)]
+    pub fn lcm(&self, rhs: &Self) -> Self {
+        let mut vars = vec![];
+
+        let mut lhs_vars = self.exps.iter().peekable();
+        let mut rhs_vars = rhs.exps.iter().peekable();
+
+        loop {
+            match (lhs_vars.peek(), rhs_vars.peek()) {
+                (Some(lhs_v), Some(rhs_v)) => match lhs_v.0.cmp(&rhs_v.0) {
+                    Ordering::Equal => {
+                        vars.push((lhs_v.0, lhs_v.1.max(rhs_v.1)));
+                        lhs_vars.next();
+                        rhs_vars.next();
+                    }
+                    Ordering::Greater => {
+                        vars.push(**rhs_v);
+                        rhs_vars.next();
+                    }
+                    Ordering::Less => {
+                        vars.push(**lhs_v);
+                        lhs_vars.next();
+                    }
+                },
+                (Some(lhs_v), None) => {
+                    vars.push(**lhs_v);
+                    lhs_vars.next();
+                }
+                (None, Some(rhs_v)) => {
+                    vars.push(**rhs_v);
+                    rhs_vars.next();
+                }
+                (None, None) => break,
+            }
+        }
+
+        Mono { exps: vars }
+    }
+
     pub fn assert_canonical(&self) {
         for w in self.exps.windows(2) {
             assert!(
@@ -157,28 +193,6 @@ impl Mono {
         #[cfg(debug_assertions)]
         self.assert_canonical();
         self
-    }
-}
-
-impl std::fmt::Debug for Mono {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (var, pow) in &self.exps {
-            if *var >= 97 && *var <= 122 {
-                if *pow == 1 {
-                    write!(f, "*{}", char::from_u32(*var as u32).unwrap())?;
-                } else {
-                    write!(f, "*{}^{pow}", char::from_u32(*var as u32).unwrap())?;
-                }
-            } else {
-                if *pow == 1 {
-                    write!(f, "*{{x_{}}}", *var)?;
-                } else {
-                    write!(f, "*{{x_{}}}^{pow}", *var)?;
-                }
-            }
-        }
-
-        Ok(())
     }
 }
 

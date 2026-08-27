@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["poly"]};
+window.SIDEBAR_ITEMS = {"mod":["count","poly","z3"]};

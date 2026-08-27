@@ -1,9 +1,46 @@
+//! Polynomial summation.
+
 use super::poly::{
     Poly,
     coef::Coef,
     mono::{Mono, Pow, Var},
 };
 
+/// Closed-form sum of a [Poly] over given bounds.
+///
+/// Given the code:
+/// ```text
+/// for i from 0 to N:
+///     for j from 0 to i^2:
+///         yield 1
+/// ```
+///
+/// The inner `for` body `yield`s $1$ time, outer `for` body `yield`s $\sum_{j=0}^{i^2-1} (1) = i^2$ times, and the full program `yield`s $\sum_{i=0}^{N-1} (i^2) = N(N-1)(2N - 1)/6$ times.
+///
+/// To count `yield`s in general, we need an algorithm to count lattice points over [`Poly`] bounds. Treating other [`Var`]s as constants, and summing each term independently, the problem reduces to
+/// $\sum_{x=0}^{P-1} x^{n}$ for variable $x$, constant $n$, and polynomial $P$.
+///
+/// We can convert to [falling factorials](https://en.wikipedia.org/wiki/Falling_and_rising_factorials) $x_{(k)} = (x)(x-1)(x-2)\dots(x-k+1)$ using [Stirling numbers of the second kind](https://en.wikipedia.org/wiki/Stirling_numbers_of_the_second_kind) and the identity
+///
+/// $$x^{n} = \sum_{k=0}^n {S(n, k)} x_{(k)}$$
+///
+/// Therefore, $$\sum_{x=0}^{P-1} x^n = \sum_{x=0}^{P-1} \left( \sum_{k=0}^n S(n, k) x_{(k)} \right)$$
+///
+/// After the inner sum is simplified, each term will be a falling factorial that can be evaluated with the discrete power rule
+///
+/// $$\sum_{x=0}^{K-1} x_{(k)} = \frac{K_{(k+1)}}{k+1}$$
+///
+/// For example, in the case above, $P=N$ and $n=2$, so
+/// $$\sum_{x=0}^{N-1} x^2 = \sum_{x=0}^{N-1} \left( \sum_{k=0}^2 \textcolor{blue}{S(2, k)} \textcolor{red}{x_{(k)}} \right)$$
+/// $$= \sum_{x=0}^{N-1} \textcolor{blue}{(0)}\textcolor{red}{x_{(0)}} + \sum_{x=0}^{N-1} \textcolor{blue}{(1)}\textcolor{red}{x_{(1)}} + \sum_{x=0}^{N-1} \textcolor{blue}{
+/// (1)}\textcolor{red}{x_{(2)}}$$
+/// $$= \frac{N\_{(2)}}{2} + \frac{N\_{(3)}}{3}$$
+/// $$= \frac{N(N-1)}{2} + \frac{N(N-1)(N-2)}{3}$$
+/// $$= \frac{3(N^2-N) + 2(N^3-3N^2+2N)}{6}$$
+/// $$= \frac{2N^3 - 3N^2 + N}{6}$$
+/// $$ = \frac{N(N−1)(2N−1)}{6}$$
+///
+/// This algorithm is implemented in [`Count::sum_below`].
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Count {
     num: Poly,
@@ -44,7 +81,7 @@ impl Count {
         let g = num.coef_gcd().gcd(&den);
         let num = num.divide_coefs(g).unwrap();
 
-        Self { num, den: den / g }
+        Self { num, den: den / g }.debug_checked()
     }
 
     pub fn num(&self) -> &Poly {
@@ -59,6 +96,7 @@ impl Count {
         self.num.is_zero()
     }
 
+    /// Only possible if denominator is zero.
     pub fn as_poly(&self) -> Option<&Poly> {
         (self.den == 1.into()).then_some(&self.num)
     }
@@ -116,7 +154,7 @@ impl Count {
         Self::new(self.num.substitute(v, q), self.den)
     }
 
-    fn assert_canonical(&self) {
+    pub fn assert_canonical(&self) {
         self.num.assert_canonical();
         assert!(
             self.den.is_positive(),

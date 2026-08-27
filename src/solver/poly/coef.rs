@@ -37,6 +37,10 @@ impl Coef {
         Self(a)
     }
 
+    pub fn lcm(&self, other: &Self) -> Self {
+        self * other / self.gcd(other)
+    }
+
     pub fn abs(&self) -> Self {
         Coef(self.0.checked_abs().unwrap())
     }

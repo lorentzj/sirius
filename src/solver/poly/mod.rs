@@ -1,31 +1,23 @@
 //! A multivariable [polynomial ring](https://en.wikipedia.org/wiki/Polynomial_ring) with integer coefficients.
 
-#[macro_use]
-pub mod mono;
+use std::cmp::Ordering;
+
 pub mod coef;
+pub mod mono;
+
+mod arithmetic;
+mod display;
+mod macros;
+
+pub use arithmetic::monomial_div;
+pub use macros::poly;
 
 use coef::Coef;
 use mono::{Mono, Pow, Var};
-use std::cmp::Ordering;
 
-fn monomial_div(lhs: &(Coef, Mono), rhs: &(Coef, Mono)) -> Option<(Coef, Mono)> {
-    if rhs.0.is_zero() {
-        None
-    } else if lhs.0.is_zero() {
-        Some((Coef::new(0), Mono::unit()))
-    } else if let Some(quot) = lhs.1.div(&rhs.1) {
-        let const_quot = rhs.0 / lhs.0;
-        if lhs.0 * const_quot == rhs.0 {
-            Some((const_quot, quot))
-        } else {
-            None
-        }
-    } else {
-        None
-    }
-}
-
-/// A multivariable polynomial.
+/// A multivariable polynomial in canonical form.
+///
+/// For example, $4x^2y^5 - 7xz + 3y + 1$.
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub struct Poly {
     terms: Vec<(Coef, Mono)>,
@@ -126,30 +118,11 @@ impl Poly {
         deg
     }
 
-    pub fn mul_scalar<T: Into<Coef>>(&self, c: T) -> Self {
-        let c = c.into();
-        if c.is_zero() {
-            Self::zero()
-        } else {
-            Self {
-                terms: self.terms.iter().map(|t| (t.0 * c, t.1.clone())).collect(),
-            }
+    pub fn leading_term(&self) -> (Coef, Mono) {
+        match self.terms.first() {
+            Some(m) => m.clone(),
+            None => (Coef::new(0), Mono::unit()),
         }
-    }
-
-    pub fn pow(&self, mut e: u32) -> Self {
-        let mut acc = Self::constant(1);
-        let mut base = self.clone();
-        while e > 0 {
-            if e & 1 == 1 {
-                acc = acc.mul(&base);
-            }
-            e >>= 1;
-            if e > 0 {
-                base = base.mul(&base);
-            }
-        }
-        acc
     }
 
     pub fn eval(&self, mut point: impl FnMut(Var) -> i128) -> Coef {
@@ -184,6 +157,13 @@ impl Poly {
         self.terms
             .iter()
             .fold(Coef::from(0), |g, &(c, _)| g.gcd(&c))
+            .abs()
+    }
+
+    pub fn coef_lcm(&self) -> Coef {
+        self.terms
+            .iter()
+            .fold(Coef::from(1), |g, &(c, _)| g.lcm(&c))
             .abs()
     }
 
@@ -227,149 +207,6 @@ impl Poly {
         vs
     }
 
-    pub fn add(&self, rhs: &Self) -> Self {
-        let mut terms = Vec::with_capacity(self.terms.len() + rhs.terms.len());
-        let (mut a, mut b) = (self.terms.iter().peekable(), rhs.terms.iter().peekable());
-        loop {
-            match (a.peek(), b.peek()) {
-                (Some(&(ac, am)), Some(&(bc, bm))) => match am.cmp(bm) {
-                    Ordering::Greater => {
-                        terms.push((*ac, am.clone()));
-                        a.next();
-                    }
-                    Ordering::Less => {
-                        terms.push((*bc, bm.clone()));
-                        b.next();
-                    }
-                    Ordering::Equal => {
-                        let c = ac + bc;
-                        if c != 0.into() {
-                            terms.push((c, am.clone()));
-                        }
-                        a.next();
-                        b.next();
-                    }
-                },
-                (Some(_), None) => terms.extend(a.by_ref().cloned()),
-                (None, Some(_)) => terms.extend(b.by_ref().cloned()),
-                (None, None) => break,
-            }
-        }
-        Self { terms }.debug_checked()
-    }
-
-    pub fn mul(&self, rhs: &Self) -> Self {
-        let mut buf = Vec::with_capacity(self.terms.len() * rhs.terms.len());
-        for (ac, am) in &self.terms {
-            for (bc, bm) in &rhs.terms {
-                buf.push((ac * bc, (am.mul(bm))));
-            }
-        }
-        Self::from_terms(buf)
-    }
-
-    pub fn neg(&self) -> Self {
-        self.mul_scalar(-1)
-    }
-
-    pub fn sub(&self, rhs: &Self) -> Self {
-        self.add(&rhs.neg())
-    }
-
-    pub fn leading_term(&self) -> (Coef, Mono) {
-        match self.terms.first() {
-            Some(m) => m.clone(),
-            None => (Coef::new(0), Mono::unit()),
-        }
-    }
-
-    pub fn compound_divide(&self, divisors: &[Self]) -> (Vec<Self>, Self) {
-        println!("divide {self:?} by {divisors:?}");
-
-        if divisors.is_empty() {
-            return (vec![], self.clone());
-        }
-
-        let mut dividend = self.clone();
-
-        let mut rem = Poly::constant(0);
-        let mut quotients: Vec<Vec<(Coef, Mono)>> =
-            std::iter::repeat_n(Vec::default(), divisors.len()).collect();
-
-        let mut curr_term = 0;
-        let mut curr_divisor = 0;
-
-        while dividend.terms.len() > curr_term {
-            let self_lt = dividend.terms[curr_term].clone();
-            println!("-----------");
-            println!("leading term: {self_lt:?}");
-            if !divisors[curr_divisor].is_zero() {
-                let div_lt = &divisors[curr_divisor].leading_term();
-                let self_over_div_lt = monomial_div(&self_lt, div_lt);
-
-                println!("curr_divisor: {:?}", divisors[curr_divisor]);
-                println!("curr_divisor leading term: {div_lt:?}");
-                println!("self_over_div_lt: {self_over_div_lt:?}");
-
-                if let Some(self_over_div_lt) = self_over_div_lt {
-                    quotients[curr_divisor].push(self_over_div_lt.clone());
-
-                    let self_over_div_lt = Poly {
-                        terms: vec![self_over_div_lt],
-                    };
-
-                    println!(
-                        "subtracting {dividend:?} by ({self_over_div_lt:?}) * ({:?})",
-                        divisors[curr_divisor]
-                    );
-                    println!(
-                        "subtracting {dividend:?} by {:?}",
-                        self_over_div_lt.mul(&divisors[curr_divisor])
-                    );
-
-                    dividend = dividend.sub(&self_over_div_lt.mul(&divisors[curr_divisor]));
-                    println!("new dividend: {dividend:?}");
-
-                    curr_divisor = 0;
-                } else {
-                    curr_divisor += 1;
-                }
-            } else {
-                curr_divisor += 1;
-            }
-
-            if curr_divisor == divisors.len() {
-                let self_lt = Self {
-                    terms: vec![self_lt.clone()],
-                };
-                println!("hit end of divisors; adding {self_lt:?} to rem {rem:?}");
-                curr_term += 1;
-
-                rem = rem.add(&self_lt);
-                println!("new rem: {rem:?}");
-                curr_divisor = 0;
-            }
-        }
-
-        let quotients = quotients
-            .into_iter()
-            .map(|v| Self::debug_checked(Self { terms: v }))
-            .collect();
-
-        (quotients, rem)
-    }
-
-    pub fn try_divide(&self, divisor: &Self) -> Option<Self> {
-        let (mut quots, rem) = self.compound_divide(std::slice::from_ref(divisor));
-
-        if rem.is_zero() {
-            Some(quots.pop().unwrap())
-        } else {
-            None
-        }
-    }
-
-    #[doc(hidden)]
     pub fn assert_canonical(&self) {
         for w in self.terms.windows(2) {
             assert!(
@@ -390,130 +227,28 @@ impl Poly {
         self.assert_canonical();
         self
     }
-
-    pub fn get_constant(&self) -> Option<i128> {
-        if self.terms.len() == 1 && self.terms[0].1.exps().len() == 1 {
-            return Some(self.terms[0].0.get());
-        }
-
-        None
-    }
 }
 
-impl std::fmt::Debug for Poly {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.terms.first() {
-            None => write!(f, "0")?,
-            Some((coef, mono)) => {
-                write!(f, "{:?}{:?}", coef, mono)?;
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+pub struct LinearPoly(pub Poly);
+
+impl LinearPoly {
+    pub fn new(p: Poly) -> Option<Self> {
+        for (_, m) in &p.terms {
+            match m.exps() {
+                [] => continue,
+                [(_, 1)] => continue,
+                _ => return None,
             }
         }
 
-        for (coef, mono) in self.terms.iter().skip(1) {
-            if coef.is_positive() {
-                write!(f, " + {:?}{:?}", coef, mono)?;
-            } else {
-                write!(f, " - {:?}{:?}", -*coef, mono)?;
-            }
-        }
-
-        Ok(())
+        Some(Self(p))
     }
 }
-
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __poly_term {
-    () => {{ std::collections::VecDeque::new() }};
-    ($var:ident ^ $pow:literal $(* $($rest:tt)*)?) => {{
-        use $crate::solver::poly::mono::{Var, __read_var_name};
-        const VAR_NAME: Var = __read_var_name(stringify!($var));
-
-        let mut rest = $crate::__poly_term!($($($rest)*)?);
-        if rest.is_empty() {
-            rest.push_front((1, vec![(VAR_NAME, $pow)]));
-        } else {
-            rest[0].1.push((VAR_NAME, $pow));
-        }
-        rest
-    }};
-
-    ($var:ident ^ $pow:literal $(+ $($rest:tt)*)?) => {{
-        use $crate::solver::poly::mono::{Var, __read_var_name};
-        const VAR_NAME: Var = __read_var_name(stringify!($var));
-
-        let mut rest = $crate::__poly_sum!($($($rest)*)?);
-        rest.push_front((1, vec![(VAR_NAME, $pow)]));
-        rest
-    }};
-
-    ($var:ident ^ $pow:literal $(- $($rest:tt)*)?) => {{
-        use $crate::solver::poly::mono::{Var, __read_var_name};
-        const VAR_NAME: Var = __read_var_name(stringify!($var));
-
-        let mut rest = $crate::__poly_sum!($($($rest)*)?);
-        match rest.get_mut(0) {
-            Some(term) => term.0 *= -1,
-            None => {}
-        }
-        rest.push_front((1, vec![(VAR_NAME, $pow)]));
-        rest
-    }};
-
-    ($var:ident $(* $($rest:tt)*)?) => {{
-        $crate::__poly_term!($var ^ 1 * $($($rest)*)?)
-    }};
-
-    ($var:ident $(+ $($rest:tt)*)?) => {{
-        $crate::__poly_term!($var ^ 1 + $($($rest)*)?)
-    }};
-
-    ($var:ident $(- $($rest:tt)*)?) => {{
-        $crate::__poly_term!($var ^ 1 - $($($rest)*)?)
-    }};
-}
-
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __poly_sum {
-    ()             => {{ std::collections::VecDeque::new() }};
-    ($c:literal)   => {{ std::collections::VecDeque::from([($c, vec![])]) }};
-    ($c:literal+$($rest:tt)+) => {{
-        let mut rest = $crate::__poly_sum!($($rest)*);
-        rest.push_front(($c, vec![]));
-        rest
-    }};
-    ($c:literal-$($rest:tt)+) => {{
-        let mut rest = $crate::__poly_sum!($($rest)*);
-        rest[0].0 *= -1;
-        rest.push_front(($c, vec![]));
-        rest
-    }};
-    ($c:literal*$($rest:tt)+) => {{
-        let mut v = $crate::__poly_term!($($rest)*);
-        v[0].0 *= $c;
-        v
-    }};
-    ($($rest:tt)+) => {{ $crate::__poly_term!($($rest)*) }};
-}
-
-/// Create a [`Poly`]. Accepts 1-character ASCII variable names; <nobr>`poly!(2*x*y^5 + 8*z)`</nobr>.
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __poly {
-    ($($body:tt)*) => {{
-        use $crate::solver::poly::{Poly, mono::{Var, Pow, Mono}};
-        let v: Vec<(i128, Vec<(Var, Pow)>)> = $crate::__poly_sum!($($body)*).into();
-        Poly::from_terms(v.into_iter().map(|(c, exps)| (c.into(), Mono::new(exps))))
-    }};
-}
-
-#[doc(inline)]
-pub use crate::__poly as poly;
 
 #[cfg(test)]
 mod test {
-    use super::poly;
+    use super::{Coef, Poly, monomial_div, poly};
 
     #[test]
     fn constants() {
@@ -562,9 +297,9 @@ mod test {
                 let ypow = rng.gen_range(0..2);
                 let zpow = rng.gen_range(0..4);
                 let coef = Poly::constant(coef);
-                let xpow = Poly::var('x' as u64, xpow);
-                let ypow = Poly::var('y' as u64, ypow);
-                let zpow = Poly::var('z' as u64, zpow);
+                let xpow = Poly::var('x' as u32, xpow);
+                let ypow = Poly::var('y' as u32, ypow);
+                let zpow = Poly::var('z' as u32, zpow);
 
                 p = p.add(&coef.mul(&xpow).mul(&ypow).mul(&zpow));
             }
@@ -593,6 +328,167 @@ mod test {
                 .add(&mut rem.clone());
 
             assert_eq!(calculated_dividend, dividend);
+        }
+    }
+
+    pub fn s_poly(p: &Poly, q: &Poly) -> Poly {
+        let p_lt = Poly {
+            terms: vec![p.leading_term()],
+        };
+        let q_lt = Poly {
+            terms: vec![q.leading_term()],
+        };
+
+        let lcm_ltp_ltq = Poly {
+            terms: vec![(
+                p_lt.terms[0].0 * q_lt.terms[0].0,
+                p_lt.terms[0].1.lcm(&q_lt.terms[0].1),
+            )],
+        };
+
+        let coef_p = lcm_ltp_ltq.try_divide(&p_lt).unwrap();
+        let coef_q = lcm_ltp_ltq.try_divide(&q_lt).unwrap();
+
+        let a = coef_p.mul(&p);
+        let b = coef_q.mul(&q);
+        let res = a.sub(&b);
+
+        if res.is_zero() {
+            res
+        } else {
+            res.divide_coefs(res.coef_gcd()).unwrap()
+        }
+    }
+
+    pub fn groebner_basis(sys: &[Poly]) -> Vec<Poly> {
+        let mut sys = sys.to_vec();
+
+        // buchberger
+
+        let mut combs = {
+            let mut combs = vec![];
+            for i in 0..sys.len() {
+                for j in 0..sys.len() {
+                    if i != j {
+                        combs.push((sys[i].clone(), sys[j].clone()));
+                    }
+                }
+            }
+
+            combs
+        };
+
+        while let Some((a, b)) = combs.pop() {
+            let s = s_poly(&a, &b);
+            let (_, rem) = s.compound_divide(&sys);
+
+            if !rem.is_zero() {
+                for member in &sys {
+                    combs.push((member.clone(), rem.clone()));
+                }
+                sys.push(rem);
+            }
+        }
+
+        // reduce
+
+        let mut keep = vec![];
+
+        for i in 0..sys.len() {
+            let mut divides_any = false;
+
+            for j in 0..sys.len() {
+                if i != j {
+                    let i_lt = (Coef::new(1), sys[i].leading_term().1);
+                    let j_lt = (Coef::new(1), sys[j].leading_term().1);
+                    if let Some((_, m)) = monomial_div(&i_lt, &j_lt) {
+                        if m.is_unit() {
+                            divides_any = i > j;
+                        } else {
+                            divides_any = true;
+                        }
+
+                        if divides_any {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if !divides_any {
+                keep.push(sys[i].clone());
+            }
+        }
+
+        keep.sort_by(|p, q| p.leading_term().1.cmp(&q.leading_term().1).reverse());
+        println!("sys: {:?}", keep);
+
+        let mut keep2 = vec![];
+
+        for (i, k) in keep.iter().enumerate() {
+            let all_except = keep
+                .iter()
+                .enumerate()
+                .filter_map(|(j, p)| if j != i { Some(p.clone()) } else { None })
+                .collect::<Vec<_>>();
+
+            let all_except_lcm = all_except
+                .iter()
+                .fold(Coef::new(1), |c, p| c.lcm(&p.coef_lcm()));
+
+            let (_, rem) = k.mul_scalar(all_except_lcm).compound_divide(&all_except);
+            if !rem.is_zero() {
+                keep2.push(rem.divide_coefs(rem.coef_gcd()).unwrap());
+            }
+        }
+
+        for p in keep2.iter_mut() {
+            if !p.leading_term().0.is_positive() {
+                *p = p.mul_scalar(-1);
+            }
+        }
+
+        keep2
+    }
+
+    #[test]
+    fn groebner_basis_validation() {
+        let sys = [
+            poly!(x + y ^ 2 + z),
+            poly!(x - y + 3 * z + 5),
+            poly!(x - 2 * y + 3),
+        ];
+
+        let gb = groebner_basis(&sys);
+
+        let correct = [
+            poly!(9 * z ^ 2 + 7 * z - 3),
+            poly!(x + 6 * z + 7),
+            poly!(y + 3 * z + 2),
+        ];
+
+        println!("{:?}", gb);
+        println!("{:?}", correct);
+
+        for (g, c) in gb.iter().zip(correct.iter()) {
+            assert_eq!(g, c, "{:?} = {:?}", g, c);
+        }
+
+        let sys = [
+            poly!(x ^ 2 * y + 1),
+            poly!(2 * x + y * z - 1),
+            poly!(x - y ^ 2 * z ^ 2 + 1),
+        ];
+
+        let gb = groebner_basis(&sys);
+
+        let correct = [poly!(4 * x - 5), poly!(25 * y + 16), poly!(32 * z - 75)];
+
+        println!("{:?}", gb);
+        println!("{:?}", correct);
+
+        for (g, c) in gb.iter().zip(correct.iter()) {
+            assert_eq!(g, c, "{:?} = {:?}", g, c);
         }
     }
 }

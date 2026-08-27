@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["bindings","solver","typechecker"]};
+window.SIDEBAR_ITEMS = {"mod":["bindings","solver"]};

@@ -1,5 +1,5 @@
 docs:
-    cargo doc --no-deps --target-dir docs/public/api
+    RUSTDOCFLAGS="--html-in-header docs/katex-header.html" cargo doc --no-deps --target-dir docs/public/api
     wasm-pack build --target web --out-dir docs/public/js
     mv docs/public/js/sirius.js docs/ts/sirius/wasm
     mv docs/public/js/sirius.d.ts docs/ts/sirius/wasm

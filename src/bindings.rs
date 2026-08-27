@@ -1,3 +1,5 @@
+//! Wasm bindings.
+
 use crate::parser::ParserOutput;
 
 use super::error::Error;
