@@ -91,13 +91,13 @@ impl Expr {
     pub fn fn_call(
         start: usize,
         caller: Expr,
-        args: Vec<Expr>,
         type_args: Option<Vec<Expr>>,
+        args: Vec<Expr>,
         end: usize,
     ) -> Expr {
         Expr {
             start,
-            data: E::FnCall(Box::new(caller), args, type_args.unwrap_or(vec![])),
+            data: E::FnCall(Box::new(caller), type_args.unwrap_or(vec![]), args),
             end,
         }
     }

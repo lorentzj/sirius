@@ -190,6 +190,10 @@ a:active, a:active svg {
     background-color: rgb(213, 230, 247);
 }
 
+.compiler_status.error {
+    background-color: rgb(247, 213, 213);
+}
+
 .loader {
     display: inline-block;
     border: 0.1em solid currentColor;

@@ -91,12 +91,12 @@ TypeAnn: Expr = {
     }
 }
 
-Expr: Expr = {
+pub Expr: Expr = {
     #[precedence(level="1")]
     <t: Term> => t,
 
     #[precedence(level="3")] #[assoc(side="left")]
-    <start: @L> <caller: Expr> <type_args: FnCallTypeArgs?> <args: FnCallArgs> <end: @R> => Expr::fn_call(start, caller, args, type_args, end),
+    <start: @L> <caller: Expr> <type_args: FnCallTypeArgs?> <args: FnCallArgs> <end: @R> => Expr::fn_call(start, caller, type_args, args, end),
     <start: @L> <arr: Expr> <dims: AccessDims> <end: @R> =>    Expr::access(start, arr, dims, end),
     <start: @L> <lhs: Expr> "." <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Dot, rhs, end),
     <start: @L> <inner: Expr> "'" <end: @R> =>                 Expr::un_op(start, UnaryOp::Tick, inner, end),

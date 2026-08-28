@@ -1,7 +1,8 @@
 pub mod bindings;
 pub mod solver;
 
+#[macro_use]
 mod error;
-mod parser;
+pub(crate) mod parser;
 mod scope;
 mod typechecker;

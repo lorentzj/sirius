@@ -1,13 +1,13 @@
 use crate::{parser::Pos, solver::poly::Poly};
 use std::rc::Rc;
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FunctionType {
     pub poly_args: Vec<Pos<String>>,
     pub args: Vec<Type>,
     pub ret: Type,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum T {
     Void,
     F32,

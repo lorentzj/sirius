@@ -8,18 +8,17 @@ use crate::parser::{
     lexer::AssnOp,
 };
 use crate::scope::Scope;
+use crate::typechecker::types::T;
 use crate::{error::Errors, parser::Function};
 
 use from_annotation::{annotation, fun_type};
 
 pub use types::Type;
 
-pub fn check_source(source: &mut ParserOutput) -> Errors {
+pub fn check_source(source: &mut ParserOutput) {
     if let Some(tree) = &mut source.tree
         && source.errors.is_empty()
     {
-        let mut errors = vec![];
-
         let mut global_types = Scope::default();
         global_types.push();
         let mut fail_check_signatures = false;
@@ -27,42 +26,37 @@ pub fn check_source(source: &mut ParserOutput) -> Errors {
         for fun in &tree.0 {
             match fun_type(fun) {
                 Ok(t) => {
-                    global_types.insert(fun.name.data.clone(), Pos::new_at(t, &fun.name));
+                    global_types.insert(fun.name.data.clone(), Pos::new_at(t.data, &fun.name));
                 }
                 Err(e) => {
-                    errors.extend(e);
+                    global_types.insert(fun.name.data.clone(), Pos::new_at(T::Error, &fun.name));
+                    source.errors.extend(e);
                     fail_check_signatures = true;
                 }
             }
         }
 
         if fail_check_signatures {
-            return errors;
+            return;
         }
 
         for fun in tree.0.iter_mut() {
             let p_args = Pos::inner_collect(&fun.type_args);
-            errors.extend(FunctionTypeChecker::run(&mut global_types, p_args, fun));
+            source
+                .errors
+                .extend(FunctionTypeChecker::run(&mut global_types, p_args, fun));
         }
-
-        errors
-    } else {
-        vec![]
     }
 }
 
 struct FunctionTypeChecker<'a> {
     errors: Errors,
-    scope: &'a mut Scope<Pos<Type>>,
+    scope: &'a mut Scope<Type>,
     p_vars: Vec<String>,
 }
 
 impl<'a> FunctionTypeChecker<'a> {
-    pub fn run(
-        globals: &'a mut Scope<Pos<Type>>,
-        p_vars: Vec<String>,
-        ast: &'a mut Function,
-    ) -> Errors {
+    pub fn run(globals: &'a mut Scope<Type>, p_vars: Vec<String>, ast: &'a mut Function) -> Errors {
         let mut checker = Self {
             errors: vec![],
             scope: globals,
@@ -95,11 +89,17 @@ impl<'a> FunctionTypeChecker<'a> {
     }
 
     fn visit_let(&mut self, _mutable: bool, _name: Pos<&str>, ann: Option<&Expr>, value: &Expr) {
-        if let Some(ann) = ann
-            && let Err(e) = annotation(ann, &self.p_vars)
-        {
-            self.errors.push(e);
-        }
+        let _ann = if let Some(ann) = ann {
+            match annotation(ann, &self.p_vars) {
+                Ok(ann) => Some(ann),
+                Err(e) => {
+                    self.errors.push(e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
         self.visit_expr(value);
     }

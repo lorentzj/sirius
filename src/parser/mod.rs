@@ -10,22 +10,20 @@ pub use positioned::Pos;
 lalrpop_util::lalrpop_mod!(#[allow(clippy::all)] pub grammar, "/parser/grammar.rs");
 
 pub struct ParserOutput {
-    pub code: String,
     pub tokens: Vec<Token>,
     pub tree: Option<Tree>,
     pub errors: Errors,
 }
 
-pub fn parse(code: String) -> ParserOutput {
-    let mut tokens = lexer::tokenize(&code);
+pub fn parse(code: &str) -> ParserOutput {
+    let mut tokens = lexer::tokenize(code);
 
     let errors: Vec<_> = tokens
         .iter()
         .enumerate()
-        .filter_map(|(i, t)| match &t.data {
-            Tok::Error(msg) => Some(Error::new(ErrorType::Syntax, msg.clone(), i, i)),
-            Tok::IndentError(msg) => Some(Error::new(ErrorType::Syntax, msg.clone(), i, i)),
-            _ => None,
+        .filter_map(|(i, t)| {
+            t.get_error()
+                .map(|msg| Error::new_with(ErrorType::Syntax, msg.clone(), i, i))
         })
         .collect();
 
@@ -47,14 +45,12 @@ pub fn parse(code: String) -> ParserOutput {
 
         match parser_output {
             Ok(tree) => ParserOutput {
-                code,
                 tokens,
                 tree: Some(tree),
                 errors,
             },
 
             Err(err) => ParserOutput {
-                code,
                 tokens,
                 tree: None,
                 errors: vec![Error::from_lalrpop(err)],
@@ -62,10 +58,30 @@ pub fn parse(code: String) -> ParserOutput {
         }
     } else {
         ParserOutput {
-            code,
             tokens,
             tree: None,
             errors,
         }
     }
+}
+
+#[cfg(test)]
+pub fn parse_expr(code: &str) -> Option<Expr> {
+    let tokens = lexer::tokenize(code);
+
+    for token in &tokens {
+        if token.get_error().is_some() {
+            return None;
+        }
+    }
+
+    let tokens_no_comments_iter = tokens
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| !t.is_comment())
+        .map(|(i, token)| Ok((i, token.data.clone(), i + 1)));
+
+    grammar::ExprParser::new()
+        .parse(&mut vec![], tokens_no_comments_iter)
+        .ok()
 }

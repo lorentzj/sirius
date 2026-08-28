@@ -1,4 +1,5 @@
 use crate::error::{Error, ErrorType};
+use std::fmt;
 
 #[derive(Clone)]
 pub struct Pos<T> {
@@ -16,13 +17,8 @@ impl<T> Pos<T> {
         Self::new(pos.start, data, pos.end)
     }
 
-    pub fn type_error(&self, message: &str) -> Error {
-        Error::new(
-            ErrorType::Type,
-            message.to_string(),
-            self.start,
-            self.end - 1,
-        )
+    pub fn error<S: ToString>(&self, e_type: ErrorType, message: S) -> Error {
+        Error::new_with(e_type, message.to_string(), self.start, self.end - 1)
     }
 }
 
@@ -38,5 +34,14 @@ where
 impl Pos<String> {
     pub fn as_ref(&self) -> Pos<&str> {
         Pos::new(self.start, &self.data, self.end)
+    }
+}
+
+impl<T> fmt::Debug for Pos<T>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?} @ ({}, {})", self.data, self.start, self.end)
     }
 }

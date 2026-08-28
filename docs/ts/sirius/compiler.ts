@@ -18,6 +18,7 @@ export type Poke = {
 export type LintResponse = {
     id: string,
     diagnostics: Diagnostic[],
+    compiler_error: boolean,
     message?: string
 }
 
@@ -45,7 +46,7 @@ async function getWorker(status: StatusLine): Promise<Worker> {
         function handleReady(event: MessageEvent) {
             if (event.data.message === "ready" && worker !== null) {
                 worker.removeEventListener("message", handleReady);
-                status.finished();
+                status.finished(false);
                 resolve(worker); 
             } else if(event.data.message !== undefined) {
                 status.loading(event.data.message);
@@ -89,7 +90,7 @@ export const siriusLinter = (editorId: number) => {
                         editorId,
                         event.data.diagnostics.filter((e) => e.severity === "info"
                     ));
-                    compilerStatus.finished();
+                    compilerStatus.finished(event.data.compiler_error);
                     resolve(event.data.diagnostics);
                 }
             });
@@ -167,16 +168,24 @@ class StatusLine {
         this.root.appendChild(this.compilerMessage);
     }
 
-    finished() {
-        this.compilerMessage.textContent = "ready";
+    finished(compiler_error: boolean) {
         this.compilerLoader.classList.remove("loading");
         this.root.classList.remove("loading");
+
+        if(compiler_error) {
+            this.root.classList.add("error");
+            this.compilerMessage.textContent = "compiler crashed";
+        } else {
+            this.compilerMessage.textContent = "ready";
+        }
     }
 
     loading(message: string | undefined) {
         if(message !== undefined) {
             this.compilerMessage.textContent = message;
         } 
+
+        this.root.classList.remove("error");
         this.compilerLoader.classList.add("loading");
         this.root.classList.add("loading");
     }

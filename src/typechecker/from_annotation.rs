@@ -1,8 +1,8 @@
 use super::{Type, types::T};
-use crate::error::{Error, Errors};
-use crate::parser::Pos;
+use crate::error::{Error, Errors, error_at};
 use crate::parser::ast::{AD, E, Expr, Function};
 use crate::parser::lexer::Op;
+use crate::parser::{Pos, UnaryOp};
 use crate::solver::poly::Poly;
 
 fn scalars(name: &str) -> Option<T> {
@@ -10,12 +10,13 @@ fn scalars(name: &str) -> Option<T> {
         "f32" => Some(T::F32),
         "i32" => Some(T::I32),
         "bool" => Some(T::Bool),
+        "null" => Some(T::Null),
         "void" => Some(T::Void),
         _ => None,
     }
 }
 
-pub fn annotation(ann: &Expr, p_vars: &Vec<String>) -> Result<Type, Error> {
+pub fn annotation(ann: &Expr, p_vars: &[String]) -> Result<Type, Error> {
     match &ann.data {
         E::Ident(s) => {
             if let Some(t) = scalars(s) {
@@ -23,7 +24,7 @@ pub fn annotation(ann: &Expr, p_vars: &Vec<String>) -> Result<Type, Error> {
             } else if let Some(p_position) = p_vars.iter().position(|v| v == s) {
                 Ok(Type::size(Poly::var(p_position as u32, 1), ann))
             } else {
-                Err(ann.type_error(&format!("unknown type \"{}\"", s)))
+                Err(error_at!(ann, Type, format!("unknown type \"{}\"", s)))
             }
         }
         E::Int(i) => Ok(Type::size(Poly::constant(*i as i128), ann)),
@@ -48,11 +49,15 @@ pub fn annotation(ann: &Expr, p_vars: &Vec<String>) -> Result<Type, Error> {
                         {
                             parsed_dims.push(poly);
                         } else {
-                            return Err(e.type_error("dimension must be a poly expression"));
+                            return Err(error_at!(e, Type, "dimension must be a poly expression"));
                         }
                     }
                     AD::Range(_, _) => {
-                        return Err(dim.type_error("ranges not supported in type annotations"));
+                        return Err(error_at!(
+                            dim,
+                            Type,
+                            "ranges not supported in type annotations"
+                        ));
                     }
                 }
             }
@@ -93,10 +98,10 @@ pub fn annotation(ann: &Expr, p_vars: &Vec<String>) -> Result<Type, Error> {
             let (lhs_poly, rhs_poly) = match (lhs_t.data, rhs_t.data) {
                 (T::Size(l), T::Size(r)) => (l, r),
                 (T::Size(_), _) => {
-                    return Err(rhs.type_error("operand must be a poly expression"));
+                    return Err(error_at!(rhs, Type, "operand must be a poly expression"));
                 }
                 (_, _) => {
-                    return Err(lhs.type_error("operand must be a poly expression"));
+                    return Err(error_at!(lhs, Type, "operand must be a poly expression"));
                 }
             };
 
@@ -109,27 +114,33 @@ pub fn annotation(ann: &Expr, p_vars: &Vec<String>) -> Result<Type, Error> {
                         if rhs_const.is_zero() {
                             Ok(Type::size(Poly::constant(1), ann))
                         } else if !rhs_const.is_positive() {
-                            Err(rhs.type_error("power must be non-negative"))
+                            Err(error_at!(rhs, Type, "power must be non-negative"))
                         } else {
                             Ok(Type::size(lhs_poly.pow(rhs_const.get() as u32), ann))
                         }
                     }
-                    None => Err(rhs.type_error("power must be a constant poly expression")),
+                    None => Err(error_at!(
+                        rhs,
+                        Type,
+                        "power must be a constant poly expression"
+                    )),
                 },
-                _ => Err(ann.type_error(&format!(
-                    "invalid binary operation \"{op:?}\" in type annotation"
-                ))),
+                _ => Err(error_at!(
+                    ann,
+                    Type,
+                    format!("invalid binary operation \"{op:?}\" in type annotation")
+                )),
             }
         }
         E::FnCall(fun, p_args, args) => match &fun.data {
             E::Ident(ident) => {
                 if ident == "Ind" {
                     if !p_args.is_empty() {
-                        return Err(ann.type_error("cannot pass typevar here"));
+                        return Err(error_at!(ann, Type, "cannot pass typevar here"));
                     }
 
                     if args.len() != 1 {
-                        return Err(ann.type_error("Ind expects one argument"));
+                        return Err(error_at!(ann, Type, "Ind expects one argument"));
                     }
 
                     let inner_t = annotation(&args[0], p_vars)?;
@@ -137,20 +148,24 @@ pub fn annotation(ann: &Expr, p_vars: &Vec<String>) -> Result<Type, Error> {
                     if let T::Size(p) = inner_t.data {
                         Ok(Type::ind(p.clone(), ann))
                     } else {
-                        Err(ann.type_error("Ind expects size argument"))
+                        Err(error_at!(ann, Type, "Ind expects size argument"))
                     }
                 } else {
-                    Err(ann.type_error("invalid type annotation"))
+                    Err(error_at!(ann, Type, "invalid type annotation"))
                 }
             }
-            _ => Err(ann.type_error("invalid type annotation")),
+            _ => Err(error_at!(ann, Type, "invalid type annotation")),
         },
-        _ => Err(ann.type_error("invalid type annotation")),
+        E::UnOp(UnaryOp::Option, inner) => {
+            let inner_t = annotation(inner, p_vars)?;
+            Ok(Type::new_at(T::Option(Box::new(inner_t)), ann))
+        }
+        _ => Err(error_at!(ann, Type, "invalid type annotation")),
     }
 }
 
 pub fn fun_type(fun: &Function) -> Result<Type, Errors> {
-    let p_vars = Pos::inner_collect(&fun.type_args);
+    let p_vars: Vec<String> = Pos::inner_collect(&fun.type_args);
 
     let mut args = vec![];
     let mut p_constraints = vec![];
@@ -166,7 +181,7 @@ pub fn fun_type(fun: &Function) -> Result<Type, Errors> {
                 p_constraints.push(Pos::new(name.start, (name.data.clone(), p), end));
             }
             Ok(_) => {
-                errors.push(ann.type_error("constraint must be a poly expression"));
+                errors.push(error_at!(ann, Type, "constraint must be a poly expression"));
             }
             Err(e) => {
                 errors.push(e);
@@ -181,17 +196,7 @@ pub fn fun_type(fun: &Function) -> Result<Type, Errors> {
             }
             Err(e) => {
                 errors.push(e);
-            }
-        }
-    }
-
-    for (_, ann) in fun.args.iter() {
-        match annotation(ann, &p_vars) {
-            Ok(t) => {
-                args.push(t);
-            }
-            Err(e) => {
-                errors.push(e);
+                args.push(Type::new_at(T::Error, ann));
             }
         }
     }
@@ -207,5 +212,33 @@ pub fn fun_type(fun: &Function) -> Result<Type, Errors> {
         None => Type::new_at(T::Void, &fun.name),
     };
 
-    Ok(Type::new_fn(fun.type_args.clone(), args, ret_t, &fun.name))
+    if errors.is_empty() {
+        Ok(Type::new_fn(fun.type_args.clone(), args, ret_t, &fun.name))
+    } else {
+        Err(errors)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::annotation;
+    use crate::parser::parse_expr;
+
+    #[test]
+    fn anns() {
+        let ann = annotation(
+            &parse_expr("f32[B, 2*A]").unwrap(),
+            &["A".into(), "B".into()],
+        );
+        assert_eq!(
+            format!("{:?}", ann),
+            "Ok(Array { elem: F32 @ (0, 1), shape: [x1, 2*x0] } @ (0, 8))"
+        );
+
+        let ann = annotation(&parse_expr("(i32, f32[3]?)").unwrap(), &[]);
+        assert_eq!(
+            format!("{:?}", ann),
+            "Ok(Tuple([I32 @ (1, 2), Option(Array { elem: F32 @ (3, 4), shape: [3] } @ (3, 7)) @ (3, 8)]) @ (0, 9))"
+        );
+    }
 }

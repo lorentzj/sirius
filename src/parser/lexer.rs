@@ -189,6 +189,14 @@ impl Token {
     pub fn is_comment(&self) -> bool {
         self.data == Tok::Comment
     }
+
+    pub fn get_error(&self) -> Option<String> {
+        match &self.data {
+            Tok::Error(e) => Some(e.clone()),
+            Tok::IndentError(e) => Some(e.clone()),
+            _ => None,
+        }
+    }
 }
 
 fn parse_keyword(s: &str) -> Option<Tok> {

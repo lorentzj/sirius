@@ -39,13 +39,13 @@ pub fn serialize_error(e: &Error, tokens: &[Token]) -> Option<JsValue> {
     js_sys::Reflect::set(
         &obj,
         &JsValue::from("type"),
-        &JsValue::from(e.error_type.to_string()),
+        &JsValue::from(e.data.error_type.to_string()),
     )
     .ok()?;
     js_sys::Reflect::set(
         &obj,
         &JsValue::from("message"),
-        &JsValue::from(e.message.clone()),
+        &JsValue::from(e.data.message.clone()),
     )
     .ok()?;
     js_sys::Reflect::set(
@@ -118,9 +118,8 @@ pub fn lex(code: &str) -> Vec<JsValue> {
 
 #[wasm_bindgen]
 pub fn compile(code: &str) -> JsValue {
-    let mut output = parse(code.to_string());
-    let type_errors = check_source(&mut output);
-    output.errors.extend(type_errors);
+    let mut output = parse(code);
+    check_source(&mut output);
 
     let errors = output
         .errors
