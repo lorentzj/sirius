@@ -2,7 +2,7 @@ pub mod ast;
 pub mod lexer;
 pub mod positioned;
 
-use crate::error::{Error, ErrorType, Errors};
+use crate::error::{Error, Errors, error_at};
 pub use ast::{AccessDim, Block, Expr, Function, Stmt, Tree, UnaryOp};
 pub use lexer::{Tok, Token};
 pub use positioned::Pos;
@@ -23,7 +23,7 @@ pub fn parse(code: &str) -> ParserOutput {
         .enumerate()
         .filter_map(|(i, t)| {
             t.get_error()
-                .map(|msg| Error::new_with(ErrorType::Syntax, msg.clone(), i, i))
+                .map(|msg| error_at!(Syntax, msg.clone(), i, i))
         })
         .collect();
 

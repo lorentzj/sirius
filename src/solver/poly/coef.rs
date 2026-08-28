@@ -1,6 +1,7 @@
 //! Coefficient, the constant part of a [`Poly`](super::Poly) term.
 
 use std::cmp::{Ord, PartialOrd};
+use std::fmt;
 use std::ops::Neg;
 
 /// Coefficient, represented by `i128`. The constant part of a [`Poly`](super::Poly) term.
@@ -9,8 +10,12 @@ use std::ops::Neg;
 pub struct Coef(i128);
 
 impl Coef {
-    pub fn new(v: i128) -> Self {
-        Self(v)
+    pub fn new<T: Into<i128>>(v: T) -> Self {
+        Self(v.into())
+    }
+
+    pub fn from_size(v: usize) -> Self {
+        Self(v as i128)
     }
 
     pub fn get(&self) -> i128 {
@@ -69,15 +74,15 @@ impl Coef {
     }
 }
 
-impl std::fmt::Debug for Coef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Coef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl From<i128> for Coef {
-    fn from(val: i128) -> Self {
-        Coef(val)
+impl<T: Into<i128>> From<T> for Coef {
+    fn from(val: T) -> Self {
+        Coef::new(val)
     }
 }
 

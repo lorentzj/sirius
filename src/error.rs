@@ -9,7 +9,19 @@ pub type Errors = Vec<Error>;
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __error_at {
-    ($pos:expr, $e_type:ident, $msg:expr) => {{ $pos.error($crate::error::ErrorType::$e_type, $msg) }};
+    ($e_type:ident, $msg:expr, $pos:expr $(,)?) => {{
+        Error::new_at(
+            $crate::error::Er::new($crate::error::ErrorType::$e_type, $msg),
+            $pos,
+        )
+    }};
+    ($e_type:ident, $msg:expr, $from:expr, $to:expr $(,)?) => {{
+        Error::new(
+            $from,
+            $crate::error::Er::new($crate::error::ErrorType::$e_type, $msg),
+            $to,
+        )
+    }};
 }
 
 pub use crate::__error_at as error_at;
@@ -39,37 +51,29 @@ pub struct Er {
     pub message: String,
 }
 
+impl Er {
+    pub fn new<T: ToString>(error_type: ErrorType, message: T) -> Self {
+        Self {
+            error_type,
+            message: message.to_string(),
+        }
+    }
+}
+
 pub type Error = Pos<Er>;
 
 impl Error {
-    pub fn new_with(error_type: ErrorType, message: String, start: usize, end: usize) -> Error {
-        Error {
-            start,
-            data: Er {
-                error_type,
-                message,
-            },
-            end,
-        }
-    }
-
     pub fn from_lalrpop(err: ParseError<usize, Tok, Error>) -> Error {
         match err {
-            ParseError::InvalidToken { location } => Error::new_with(
-                ErrorType::Syntax,
-                "invalid token".into(),
-                location,
-                location,
-            ),
-            ParseError::UnrecognizedEof { location, .. } => Error::new_with(
-                ErrorType::Syntax,
-                "unexpected EOF".into(),
-                location - 1,
-                location - 1,
-            ),
+            ParseError::InvalidToken { location } => {
+                error_at!(Syntax, "invalid token", location, location,)
+            }
+            ParseError::UnrecognizedEof { location, .. } => {
+                error_at!(Syntax, "unexpected EOF", location - 1, location - 1,)
+            }
             ParseError::UnrecognizedToken { token, .. } | ParseError::ExtraToken { token } => {
-                Error::new_with(
-                    ErrorType::Syntax,
+                error_at!(
+                    Syntax,
                     match token.1 {
                         Tok::Identifier(n) => format!("unexpected identifier \"{n}\""),
                         Tok::Op(op) => format!("unexpected operator \"{op:?}\""),

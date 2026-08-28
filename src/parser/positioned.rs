@@ -1,4 +1,3 @@
-use crate::error::{Error, ErrorType};
 use std::fmt;
 
 #[derive(Clone)]
@@ -15,10 +14,6 @@ impl<T> Pos<T> {
 
     pub fn new_at<U>(data: T, pos: &Pos<U>) -> Self {
         Self::new(pos.start, data, pos.end)
-    }
-
-    pub fn error<S: ToString>(&self, e_type: ErrorType, message: S) -> Error {
-        Error::new_with(e_type, message.to_string(), self.start, self.end - 1)
     }
 }
 

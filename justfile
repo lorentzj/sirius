@@ -11,6 +11,7 @@ docs:
     cp docs/node_modules/z3-solver/build/z3-built.wasm docs/public/js/z3
 
 apidocs:
+    just test
     RUSTDOCFLAGS="--html-in-header docs/katex-header.html" cargo doc --no-deps --target-dir docs/public/api
 
 test:

@@ -6,7 +6,7 @@ use super::poly::{
     mono::{Mono, Pow, Var},
 };
 
-/// Closed-form sum of a [`Poly`] over given bounds. [`Count`]s can themselves be summed, since they are represented by a [`Poly`] divided by a constant. Will always be integer-valued.
+/// Closed-form sum of a [`Poly`] over given bounds. [`Count`]s can themselves be summed, since they are represented by a [`Poly`] divided by a constant.
 ///
 /// Given the code:
 /// ```text
@@ -15,7 +15,7 @@ use super::poly::{
 ///         yield 1
 /// ```
 ///
-/// The inner `for` body `yield`s $1$ time, outer `for` body `yield`s $\sum_{j=0}^{i^2-1} (1) = i^2$ times, and the full program `yield`s $\sum_{i=0}^{N-1} i^2 = N(N-1)(2N - 1)/6$ times.
+/// The inner `for` body `yield`s $1$ time, outer `for` body `yield`s $\sum_{j=0}^{i^2-1} 1 = i^2$ times, and the full program `yield`s $\sum_{i=0}^{N-1} i^2 = N(N-1)(2N - 1)/6$ times.
 ///
 /// To count `yield`s in general, we need an algorithm to count lattice points over [`Poly`] bounds. Treating other [`Var`]s as constants, and summing each term independently, the problem reduces to
 /// $\sum_{x=0}^{P-1} x^{n}$ for variable $x$, constant $n$, and polynomial $P$.
@@ -37,9 +37,18 @@ use super::poly::{
 /// $$= \frac{N(N-1)}{2} + \frac{N(N-1)(N-2)}{3}$$
 /// $$= \frac{3(N^2-N) + 2(N^3-3N^2+2N)}{6}$$
 /// $$= \frac{2N^3 - 3N^2 + N}{6}$$
-/// $$ = \frac{N(N−1)(2N−1)}{6}$$
+/// $$= \frac{N(N−1)(2N−1)}{6}$$
 ///
-/// This algorithm is implemented in [`Count::sum_below`].
+/// This algorithm is implemented in [`Count::sum_below`]:
+///
+/// ```
+/// use sirius::solver::{poly::poly, count::Count};
+///
+/// let i2 = Count::ratio(poly!(i^2), 1);
+/// let sum = i2.sum_below('i', &poly!(N));
+/// assert_eq!(sum, Count::ratio(poly!(2*N^3 - 3*N^2 + N), 6));
+/// ```
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Count {
     num: Poly,
@@ -61,14 +70,14 @@ impl Count {
         }
     }
 
-    pub fn var(v: Var, p: Pow) -> Self {
+    pub fn var<T: Into<Var>>(v: T, p: Pow) -> Self {
         Self {
             num: Poly::var(v, p),
             den: 1.into(),
         }
     }
 
-    pub fn new<T: Into<Coef>>(num: Poly, den: T) -> Self {
+    pub fn ratio<T: Into<Coef>>(num: Poly, den: T) -> Self {
         let den = den.into();
         assert!(!den.is_zero());
 
@@ -95,7 +104,6 @@ impl Count {
         self.num.is_zero()
     }
 
-    /// Only possible if denominator is zero.
     pub fn as_poly(&self) -> Option<&Poly> {
         (self.den == 1.into()).then_some(&self.num)
     }
@@ -111,7 +119,7 @@ impl Count {
             .num
             .mul_scalar(lcm / self.den)
             .add(&rhs.num.mul_scalar(lcm / rhs.den));
-        Self::new(num, lcm).debug_checked()
+        Self::ratio(num, lcm).debug_checked()
     }
 
     pub fn neg(&self) -> Self {
@@ -127,15 +135,15 @@ impl Count {
     }
 
     pub fn mul(&self, rhs: &Self) -> Self {
-        Self::new(self.num.mul(&rhs.num), self.den * rhs.den)
+        Self::ratio(self.num.mul(&rhs.num), self.den * rhs.den)
     }
 
     pub fn mul_scalar<T: Into<Coef>>(&self, c: T) -> Self {
-        Self::new(self.num.mul_scalar(c), self.den)
+        Self::ratio(self.num.mul_scalar(c), self.den)
     }
 
     pub fn div_scalar<T: Into<Coef>>(&self, d: T) -> Self {
-        Self::new(self.num.clone(), self.den * d.into())
+        Self::ratio(self.num.clone(), self.den * d.into())
     }
 
     pub fn eval(&self, point: impl FnMut(Var) -> i128) -> (Coef, Coef) {
@@ -150,7 +158,7 @@ impl Count {
     }
 
     pub fn substitute(&self, v: Var, q: &Poly) -> Self {
-        Self::new(self.num.substitute(v, q), self.den)
+        Self::ratio(self.num.substitute(v, q), self.den)
     }
 
     pub fn assert_canonical(&self) {
@@ -175,9 +183,10 @@ impl Count {
         self
     }
 
-    pub fn sum_below(&self, var: Var, hi: &Poly) -> Self {
-        assert_eq!(hi.degree_in(var), 0);
-        let kmax = self.num().degree_in(var);
+    pub fn sum_below<T: Into<Var>>(&self, v: T, hi: &Poly) -> Self {
+        let v = v.into();
+        assert_eq!(hi.degree_in(v), 0);
+        let kmax = self.num().degree_in(v);
         if kmax == 0 {
             return Self::zero();
         }
@@ -186,15 +195,15 @@ impl Count {
 
         let mut groups: Vec<Vec<(Coef, Mono)>> = vec![Vec::new(); kmax + 1];
         for (c, m) in self.num().terms().iter().rev() {
-            let k = m.degree_in(var) as usize;
-            let rest = Mono::new(m.exps().iter().copied().filter(|&(v, _)| v != var));
+            let k = m.degree_in(v) as usize;
+            let rest = Mono::new(m.exps().iter().copied().filter(|&(vi, _)| vi != v));
             groups[k].push((*c, rest));
         }
 
         let mut falling_factorials: Vec<Poly> = Vec::with_capacity(kmax + 1);
         falling_factorials.push(hi.clone());
         for j in 1..=kmax {
-            let factor = hi.sub(&Poly::constant(Coef::new(j as i128)));
+            let factor = hi.sub(&Poly::constant(Coef::from_size(j)));
             falling_factorials.push(falling_factorials[j - 1].mul(&factor));
         }
 
@@ -209,13 +218,13 @@ impl Count {
             let mut a_k = Self::zero();
             for (j, &s) in s2[k].iter().enumerate() {
                 if !s.is_zero() {
-                    a_k = a_k.add(&Self::new(
+                    a_k = a_k.add(&Self::ratio(
                         falling_factorials[j].mul_scalar(s),
-                        Coef::new((j + 1) as i128),
+                        Coef::from_size(j + 1),
                     ));
                 }
             }
-            total = total.add(&Self::new(c_k, 1).mul(&a_k));
+            total = total.add(&Self::ratio(c_k, 1).mul(&a_k));
         }
         total.div_scalar(self.den())
     }
@@ -234,7 +243,7 @@ fn stirling2(kmax: usize) -> Vec<Vec<Coef>> {
         for j in 1..=k {
             let above = if j < k { s2[k - 1][j] } else { Coef::new(0) };
             let diag = s2[k - 1][j - 1];
-            row.push((Coef::new(j as i128) * above) + diag);
+            row.push((Coef::from_size(j) * above) + diag);
         }
         s2.push(row);
     }
@@ -244,23 +253,29 @@ fn stirling2(kmax: usize) -> Vec<Vec<Coef>> {
 #[cfg(test)]
 mod tests {
     use super::{Count, stirling2};
-    use crate::solver::poly::{coef::Coef, mono::Var, poly};
+    use crate::solver::poly::{coef::Coef, poly};
 
     #[test]
     fn ratio_reduce() {
-        let half_n = Count::new(poly!(2 * x), 4);
+        let half_n = Count::ratio(poly!(2 * x), 4);
         assert_eq!(half_n.num(), &poly!(x));
         assert_eq!(half_n.den(), 2.into());
-        assert_eq!(Count::new(poly!(2 * x + 2), 2), Count::new(poly!(x + 1), 1));
-        assert_eq!(Count::new(poly!(2 * x), -1), Count::new(poly!(-2 * x), 1));
+        assert_eq!(
+            Count::ratio(poly!(2 * x + 2), 2),
+            Count::ratio(poly!(x + 1), 1)
+        );
+        assert_eq!(
+            Count::ratio(poly!(2 * x), -1),
+            Count::ratio(poly!(-2 * x), 1)
+        );
     }
 
     #[test]
     fn arith_sanity() {
         // N/2 * N/3 = N^2/6; N/2 − N/2 = 0
-        let (a, b) = (Count::new(poly!(x), 2), Count::new(poly!(x), 3));
-        assert_eq!(a.add(&b), Count::new(poly!(5 * x), 6));
-        assert_eq!(a.sub(&a), Count::new(poly!(), 1))
+        let (a, b) = (Count::ratio(poly!(x), 2), Count::ratio(poly!(x), 3));
+        assert_eq!(a.add(&b), Count::ratio(poly!(5 * x), 6));
+        assert_eq!(a.sub(&a), Count::ratio(poly!(), 1))
     }
 
     #[test]
@@ -282,14 +297,14 @@ mod tests {
     #[test]
     fn faulhaber() {
         // Σ_{0<=i<B} i^3 = B^2(B−1)^2/4
-        let cube = Count::new(poly!(i ^ 3), 1);
-        let s = cube.sum_below('i' as Var, &poly!(b));
+        let cube = Count::ratio(poly!(i ^ 3), 1);
+        let s = cube.sum_below('i', &poly!(b));
         let b2 = poly!(b ^ 2);
         let bm1 = poly!(b - 1);
-        assert_eq!(s, Count::new(b2.mul(&bm1.pow(2)), 4));
+        assert_eq!(s, Count::ratio(b2.mul(&bm1.pow(2)), 4));
 
         // (Σ i)^2 = Σ i^3
-        let triangle = Count::new(poly!(i), 1).sum_below('i' as Var, &poly!(b));
+        let triangle = Count::ratio(poly!(i), 1).sum_below('i', &poly!(b));
         assert_eq!(triangle.mul(&triangle), s);
     }
 }

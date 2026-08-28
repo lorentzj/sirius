@@ -130,7 +130,8 @@ impl Mono {
         Some(Mono::new(vars))
     }
 
-    pub fn degree_in(&self, v: Var) -> Pow {
+    pub fn degree_in<T: Into<Var>>(&self, v: T) -> Pow {
+        let v = v.into();
         self.exps
             .iter()
             .find(|(va, _)| *va == v)

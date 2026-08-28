@@ -13,11 +13,18 @@ pub use arithmetic::monomial_div;
 pub use macros::poly;
 
 use coef::Coef;
-use mono::{Mono, Pow, Var};
+pub use mono::{Mono, Pow, Var};
 
 /// A multivariable polynomial with integer coefficients in canonical form, $\mathbb{Z}[x_1,x_2 \dots x_i]$.
 ///
 /// For example, $4x^2y^5 - 7xz + 3y + 1$.
+///
+/// ```
+/// use sirius::solver::poly::poly;
+///
+/// assert_eq!(poly!(a^2 - b^2).try_divide(&poly!(a - b)), Some(poly!(a + b)));
+/// assert_eq!(poly!(2*x + 5).substitute('x', &poly!(z^2 + 1)), poly!(2*z^2 + 7));
+/// ```
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub struct Poly {
     terms: Vec<(Coef, Mono)>,
@@ -43,11 +50,11 @@ impl Poly {
         }
     }
 
-    pub fn var(v: Var, p: Pow) -> Self {
+    pub fn var<T: Into<Var>>(v: T, p: Pow) -> Self {
         if p == 0 {
             Self::constant(1)
         } else {
-            Self::term(1, Mono::new(vec![(v, p)]))
+            Self::term(1, Mono::new(vec![(v.into(), p)]))
         }
     }
 
@@ -95,7 +102,8 @@ impl Poly {
             .unwrap_or(0)
     }
 
-    pub fn degree_in(&self, v: Var) -> Pow {
+    pub fn degree_in<T: Into<Var>>(&self, v: T) -> Pow {
+        let v = v.into();
         let mut deg = 0;
         for (_, mono) in &self.terms {
             let mut term_deg = 0;
@@ -149,7 +157,8 @@ impl Poly {
         acc
     }
 
-    pub fn substitute(&self, v: Var, q: &Self) -> Self {
+    pub fn substitute<T: Into<Var>>(&self, v: T, q: &Self) -> Self {
+        let v = v.into();
         self.map_vars(|w| if w == v { q.clone() } else { Self::var(w, 1) })
     }
 
@@ -302,9 +311,9 @@ mod test {
                 let ypow = rng.gen_range(0..2);
                 let zpow = rng.gen_range(0..4);
                 let coef = Poly::constant(coef);
-                let xpow = Poly::var('x' as u32, xpow);
-                let ypow = Poly::var('y' as u32, ypow);
-                let zpow = Poly::var('z' as u32, zpow);
+                let xpow = Poly::var('x', xpow);
+                let ypow = Poly::var('y', ypow);
+                let zpow = Poly::var('z', zpow);
 
                 p = p.add(&coef.mul(&xpow).mul(&ypow).mul(&zpow));
             }
