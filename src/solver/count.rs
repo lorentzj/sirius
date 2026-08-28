@@ -6,7 +6,7 @@ use super::poly::{
     mono::{Mono, Pow, Var},
 };
 
-/// Closed-form sum of a [Poly] over given bounds.
+/// Closed-form sum of a [`Poly`] over given bounds. [`Count`]s can themselves be summed, since they are represented by a [`Poly`] divided by a constant. Will always be integer-valued.
 ///
 /// Given the code:
 /// ```text
@@ -15,7 +15,7 @@ use super::poly::{
 ///         yield 1
 /// ```
 ///
-/// The inner `for` body `yield`s $1$ time, outer `for` body `yield`s $\sum_{j=0}^{i^2-1} (1) = i^2$ times, and the full program `yield`s $\sum_{i=0}^{N-1} (i^2) = N(N-1)(2N - 1)/6$ times.
+/// The inner `for` body `yield`s $1$ time, outer `for` body `yield`s $\sum_{j=0}^{i^2-1} (1) = i^2$ times, and the full program `yield`s $\sum_{i=0}^{N-1} i^2 = N(N-1)(2N - 1)/6$ times.
 ///
 /// To count `yield`s in general, we need an algorithm to count lattice points over [`Poly`] bounds. Treating other [`Var`]s as constants, and summing each term independently, the problem reduces to
 /// $\sum_{x=0}^{P-1} x^{n}$ for variable $x$, constant $n$, and polynomial $P$.
@@ -26,14 +26,13 @@ use super::poly::{
 ///
 /// Therefore, $$\sum_{x=0}^{P-1} x^n = \sum_{x=0}^{P-1} \left( \sum_{k=0}^n S(n, k) x_{(k)} \right)$$
 ///
-/// After the inner sum is simplified, each term will be a falling factorial that can be evaluated with the discrete power rule
+/// After the inner sum is expanded, each term will be a falling factorial that can be evaluated with the discrete power rule
 ///
 /// $$\sum_{x=0}^{K-1} x_{(k)} = \frac{K_{(k+1)}}{k+1}$$
 ///
 /// For example, in the case above, $P=N$ and $n=2$, so
 /// $$\sum_{x=0}^{N-1} x^2 = \sum_{x=0}^{N-1} \left( \sum_{k=0}^2 \textcolor{blue}{S(2, k)} \textcolor{red}{x_{(k)}} \right)$$
-/// $$= \sum_{x=0}^{N-1} \textcolor{blue}{(0)}\textcolor{red}{x_{(0)}} + \sum_{x=0}^{N-1} \textcolor{blue}{(1)}\textcolor{red}{x_{(1)}} + \sum_{x=0}^{N-1} \textcolor{blue}{
-/// (1)}\textcolor{red}{x_{(2)}}$$
+/// $$= \textcolor{blue}{0}\sum_{x=0}^{N-1} \textcolor{red}{x_{(0)}} + \textcolor{blue}{1}\sum_{x=0}^{N-1} \textcolor{red}{x_{(1)}} + \textcolor{blue}{1}\sum_{x=0}^{N-1} \textcolor{red}{x_{(2)}}$$
 /// $$= \frac{N\_{(2)}}{2} + \frac{N\_{(3)}}{3}$$
 /// $$= \frac{N(N-1)}{2} + \frac{N(N-1)(N-2)}{3}$$
 /// $$= \frac{3(N^2-N) + 2(N^3-3N^2+2N)}{6}$$

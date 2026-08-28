@@ -15,7 +15,7 @@ pub use macros::poly;
 use coef::Coef;
 use mono::{Mono, Pow, Var};
 
-/// A multivariable polynomial in canonical form.
+/// A multivariable polynomial with integer coefficients in canonical form, $\mathbb{Z}[x_1,x_2 \dots x_i]$.
 ///
 /// For example, $4x^2y^5 - 7xz + 3y + 1$.
 #[derive(PartialEq, Eq, Hash, Clone)]
@@ -229,8 +229,9 @@ impl Poly {
     }
 }
 
+/// [`Poly`], but guaranteed linear.
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub struct LinearPoly(pub Poly);
+pub struct LinearPoly(Poly);
 
 impl LinearPoly {
     pub fn new(p: Poly) -> Option<Self> {
@@ -243,6 +244,10 @@ impl LinearPoly {
         }
 
         Some(Self(p))
+    }
+
+    pub fn get(&self) -> &Poly {
+        &self.0
     }
 }
 

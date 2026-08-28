@@ -113,8 +113,8 @@ impl Solver {
         let mut vars: Vec<Var> = Vec::new();
         for c in facts.iter().chain(std::iter::once(goal)) {
             for p in [&c.lhs, &c.rhs] {
-                debug_assert!(p.0.total_degree() <= 1);
-                for v in p.0.vars() {
+                debug_assert!(p.get().total_degree() <= 1);
+                for v in p.get().vars() {
                     if !vars.contains(&v) {
                         vars.push(v);
                     }
@@ -157,9 +157,9 @@ fn verdict_tag(v: &Verdict) -> &'static str {
 fn render(c: &Constraint, names: &[&str]) -> String {
     format!(
         "{} {} {}",
-        c.lhs.0.display_with(Some(names)),
+        c.lhs.get().display_with(Some(names)),
         c.cmp,
-        c.rhs.0.display_with(Some(names))
+        c.rhs.get().display_with(Some(names))
     )
 }
 
@@ -197,27 +197,28 @@ fn smt_cmp(c: &Constraint) -> String {
 }
 
 fn smt_poly(p: &LinearPoly) -> String {
-    if p.0.is_zero() {
+    if p.get().is_zero() {
         return "0".to_string();
     }
-    let terms: Vec<String> =
-        p.0.terms()
-            .iter()
-            .map(|(c, m)| {
-                let coef = smt_int(*c);
-                match m.exps() {
-                    [] => coef,
-                    [(v, 1)] => {
-                        if *c == 1.into() {
-                            format!("v{}", v)
-                        } else {
-                            format!("(* {coef} v{})", v)
-                        }
+    let terms: Vec<String> = p
+        .get()
+        .terms()
+        .iter()
+        .map(|(c, m)| {
+            let coef = smt_int(*c);
+            match m.exps() {
+                [] => coef,
+                [(v, 1)] => {
+                    if *c == 1.into() {
+                        format!("v{}", v)
+                    } else {
+                        format!("(* {coef} v{})", v)
                     }
-                    _ => unreachable!("not linearized"),
                 }
-            })
-            .collect();
+                _ => unreachable!("not linearized"),
+            }
+        })
+        .collect();
     if terms.len() == 1 {
         terms.into_iter().next().unwrap()
     } else {

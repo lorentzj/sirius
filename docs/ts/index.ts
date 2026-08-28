@@ -7,6 +7,7 @@ import { bracketMatching } from "@codemirror/language";
 import { siriusLinter, highlightTypes, filterTypeInfo } from './sirius/compiler';
 
 function main() {
+    console.log("what are you, some kinda hacker?");
     const extensions = [
         lineNumbers(),
         history(),

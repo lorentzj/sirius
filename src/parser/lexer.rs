@@ -126,7 +126,6 @@ pub enum Tok {
     Indent,
     Dedent,
     NewLine,
-    Pound,
     Op(Op),
     AssignOp(AssnOp),
     Float(f64),
@@ -160,7 +159,6 @@ impl fmt::Debug for Tok {
             Tok::Keyword(k) => write!(f, "{k:?}"),
             Tok::Semicolon => write!(f, ";"),
             Tok::Colon => write!(f, ":"),
-            Tok::Pound => write!(f, "#"),
             Tok::Comment => write!(f, "comment"),
             Tok::Error(m) => write!(f, "error({m})"),
             Tok::IndentError(m) => write!(f, "error({m})"),
@@ -456,24 +454,14 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                         bracket_level.2 -= 1;
                         Token::new(Tok::CloseSqBracket, line, col - 1, col)
                     }
-                    '#' => Token::new(Tok::Pound, line, col - 1, col),
                     '.' => Token::new(Tok::Op(Op::Dot), line, col - 1, col),
                     '^' => Token::new(Tok::Op(Op::Exp), line, col - 1, col),
                     '*' => Token::new(Tok::Op(Op::Mul), line, col - 1, col),
-                    '/' => {
-                        if let Some(Token {
-                            data: Tok::Op(Op::Div),
-                            start,
-                            ..
-                        }) = tokens.last()
-                        {
-                            should_pop = true;
-                            clear_line_whitespace = true;
-                            commenting = true;
-                            Token::new(Tok::Comment, line, *start, col)
-                        } else {
-                            Token::new(Tok::Op(Op::Div), line, col - 1, col)
-                        }
+                    '/' => Token::new(Tok::Op(Op::Div), line, col - 1, col),
+                    '#' => {
+                        clear_line_whitespace = true;
+                        commenting = true;
+                        Token::new(Tok::Comment, line, col - 1, col)
                     }
                     '+' => Token::new(Tok::Op(Op::Add), line, col - 1, col),
                     '-' => Token::new(Tok::Op(Op::Sub), line, col - 1, col),

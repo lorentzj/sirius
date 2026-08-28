@@ -26,7 +26,7 @@ const keywords = new Set([
 export const siriusHLLang = StreamLanguage.define({
     token(stream) {
         if(stream.eatSpace()) return null;
-        if(stream.match(/^\/\/.*/)) return "comment";
+        if(stream.match(/^#.*/)) return "comment";
 
         if(stream.match(/^[a-zA-Z_\\][a-zA-Z0-9_\\]*/)) {
             if (keywords.has(stream.current())) {

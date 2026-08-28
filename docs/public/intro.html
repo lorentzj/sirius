@@ -5,51 +5,58 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="icon" type="image/x-icon" href="./favicon.ico">
         <link rel = "stylesheet" href = "/css/style.css">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/katex.min.css" integrity="sha384-u1zONI5gPXUx0UKI62c75/zww972y0v2rSK5ZYlVdS6xEuWDeZWUI66v6t1gvlXJ" crossorigin="anonymous">
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/katex.min.js" integrity="sha384-ykMNcWQhhTUb0YV9SPpPUFURHZ+tWmubkakGBP+OgNK/UXdO2gtzglWx0Rj9hnO3" crossorigin="anonymous"></script>
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"
+            onload="
+                renderMathInElement(document.body, { delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false},
+                ]});">
+        </script>
         <script src = "./js/z3/z3-built.js"></script>
         <script src = "./js/index.js" type = "module"></script>
         <title>Sirius</title>
     </head>
     <body>
         <div><h1>Sirius</h1></div>
-        
         <p><a href="https://github.com/lorentzj/sirius"><code>Sirius</code></a> is a small, imperative, <a href="https://en.wikipedia.org/wiki/Total_functional_programming">total</a>, polynomially bounded language for pointful array programming.</p>
         
-        <p>Having been stung too many times <a href="https://docs.pytorch.org/docs/2.13/generated/torch.nn.Conv3d.html">massaging PyTorch tensors</a>, I set off to design a type system that handles tensor shape bookkeeping. In the process, I explored a new part of PL design space and stumbled on an interesting feature set.</p>
+        <p>Having been stung too many times <a href="https://docs.pytorch.org/docs/2.13/generated/torch.nn.Conv3d.html">massaging PyTorch tensors</a>, I set off to create a type system that handles tensor shape bookkeeping. In the process, I explored a new part of PL design space and stumbled on an interesting feature set.</p>
 
         <p>It turns out we can avoid runtime shape errors and bounds checks -- without the ergonomic strain of full-blown refinement types like <a href="https://ucsd-progsys.github.io/liquidhaskell/">Liquid Haskell</a> -- provided we surrender shape dynamism. In exchange, we reject more bad programs and expose more complete function contracts. The <code>Sirius</code> type system will also unlock a bit of witchcraft in the backend.</p>
 
-        <p>I embedded a prototype compiler frontend in this page (sorry, Z3 Wasm builds don't seem to play nice on mobile). Here's a <em>hello world</em>: dot product and matrix multiplication.</p>
+        <p>I embedded a prototype compiler frontend in this page (sorry, Z3 Wasm builds don't seem to play nice on mobile). Here's a <code>hello world</code>: dot product and matrix multiplication.</p>
         
-        <pre class="editor">// <code>typevar</code>s, representing integers, come in curly brackets after function name
-// "len(a) == len(b)" is proven at callsites
+        <pre class="editor"># typevars, representing integers, come in curly brackets after function name
+# "len(a) == len(b)" is proven at call sites
 fn dot{N}(a: f32[N], b: f32[N]) -> f32:
     let mut sum = 0.0
     for i from 0 to N:
-        // i is proven valid index into a and b
+        # i is proven valid index into a and b
         sum += a[i] * b[i]
     return sum
 
-// invalid shape calls fail to compile
 fn matmul{I, J, K}(a: f32[I, J], b: f32[J, K]) -> f32[I, K]:
     for i from 0 to I:
         for k from 0 to K:
-            // i is proven valid index into a
-            // k valid into b' (b transpose)
-            // dot_product requires a[i] and b'[k] have same length
-            // total yield count is proven I*K
-            // yield populates the return array in column-major order
+            # i is proven valid index into a
+            # k valid into b' (b transpose)
+            # dot_product requires a[i] and b'[k] have same length
+            # total yield count is proven I*K
+            # yield populates the return array in column-major order
             yield dot(a[i], b'[k])
 </pre>
 
         <p>That program doesn't seem very interesting until you try to change it. The compiler rejects accessing <code>a[i+1]</code> in <code>dot</code>, adding an extra <code>yield</code> in <code>matmul</code>, or modifying any of the <code>typevar</code> constraints in the function signatures. Here are some more examples:</p>
 
-        <pre class="editor">// polynomial expressions in <code>typevar</code>s are valid types
-// "len(return) == A + B" is proven in function body
+        <pre class="editor"># polynomial expressions in typevars are valid types
+# "len(return) == A + B" is proven in function body
 fn concat{A, B}(a: f32[A], b: f32[B]) -> f32[A + B]:
     yield from a
     yield from b
 
-// N + 1 for <code>typevar</code> N is also valid type
+# N + 1 for typevar N is also valid type
 fn push{N}(arr: f32[N], item: f32) -> f32[N + 1]:
     yield from arr
     yield item
@@ -60,19 +67,21 @@ fn fill{N}(val: f32) -> f32[N]:
 
 fn test():
     let x = [1.0, 2.0, 3.0]
-    // dot expects equal-len args
-    // so fill(2) is inferred to be fill{3}(2.0) i.e. [2.0, 2.0, 2.0]
-    let y = dot(x, fill(2)) // == 12.0
+    # dot expects equal-len args
+    # so fill(2) is inferred to be fill{3}(2.0) i.e. [2.0, 2.0, 2.0]
+    let y = dot(x, fill(2)) # == 12.0
 
-    // ! can't satisfy dot's call site constraints
+    # ! can't satisfy dot's call site constraints
     let z = dot(x, fill{4}(2))
 </pre>
 
-        <p>Signatures provide shape bounds, accesses are statically checked, and <code>yield</code>s are statically counted. In short, we're using refinement types with intentionally limited power and a built-in polynomial abstraction (<code>Poly</code>). Since the type system is constrained, <span id="backlink_1" class="backlink">the annotation burden stays low.</span><sup><a href="#footnote_1">[1]</a></sup></p>
+        <p>Signatures provide shape bounds, accesses are statically checked, and <code>yield</code>s are statically counted. In short, we're using value-dependent types with built-in polynomial (<code><a href="/api/doc/sirius/solver/poly/struct.Poly.html">Poly</a></code>) refinement. Since the type system is constrained, <span id="backlink_1" class="backlink">the annotation burden stays low.</span><sup><a href="#footnote_1">[1]</a></sup></p>
         
         <div><h2 id="design_rationale"><a href="#design_rationale">#</a> Design & Rationale</h2></div>
+
+        <img width=200px src="/imgs/curious_tenrec.png" alt="cartoon of a curious lowland streaked tenrec" title="curious lowland streaked tenrec">
         
-        <p>Why make an imperative array language? In my opinion, the humble C-style <code>for</code> loop has gotten a bad rap. Some problems are easier to solve in an imperative, looping style, with mutable state and high locality. <code>Sirius</code> static analysis keeps most of its power and ameliorates the downsides.</p>
+        <p>Why make an imperative array language? In my opinion, the humble C-style <code>for</code> loop has gotten a bad rap. Some problems are easier to solve in an imperative, looping style, with mutable state and manual <a href="https://en.wikipedia.org/wiki/Locality_of_reference">locality</a>. <code>Sirius</code> static analysis keeps most of its power and ameliorates the downsides.</p>
         
         <p>That said, I plan to build functional and array-oriented facilities over the imperative core, like map and filter, broadcasting, fancy indexing, and a checked <a href="https://openreview.net/pdf?id=oapKSVM2bcj">einops</a> primitive integrated like regexes in Perl.</p>
         
@@ -102,7 +111,7 @@ fn test():
                 </tr>
             </dbody>
         </table></div>
-        <p>The desugared expression is a strategy for accessing an element given array coordinates, and it is polynomial in array dimensions. This is a <a href="https://en.wikipedia.org/wiki/Polynomial_ring">polynomial ring</a>. Add two <code>Poly</code>s together, multiply them, or substitute a variable for a new one, and you'll always get a <code>Poly</code> back.</p>
+        <p>The desugared expression is a strategy for accessing an element given array coordinates, and it is polynomial in array dimensions. This is a <a href="https://en.wikipedia.org/wiki/Polynomial_ring">polynomial integer ring</a>, $\mathbb{Z}[x_1,x_2 \dots x_i]$. Add two <code>Poly</code>s together, multiply them, or substitute a variable for a new one, and you'll always get a <code>Poly</code> back.</p>
         <div><table>
             <thead><tr><th>Array</th><th>Access</th><th>Desugar</th></tr></thead>
             <dbody>
@@ -124,7 +133,7 @@ fn test():
             </dbody>
         </table></div>
 
-        <p>The <code>Sirius</code> type system permits the programmer to freely express array dimensions and accesses in terms of <code>Poly</code>s -- <span id="backlink_2" class="backlink">as long as the resulting constraints can be solved by the <a href="https://github.com/Z3Prover/z3">Z3 prover</a>.</span><sup><a href="#footnote_2">[2]</a></sup> The backend represents array access, strides, and offsets the same way.</p>
+        <p>The <code>Sirius</code> type system permits the programmer to freely express array dimensions and accesses in terms of <code>Poly</code>s -- <span id="backlink_2" class="backlink">as long as the resulting constraints can be solved by the <a href="https://github.com/Z3Prover/z3">Z3 prover</a>.</span><sup><a href="#footnote_2">[2]</a></sup> The backend will represent array access, strides, and offsets the same way.</p>
 
         <p>Now you might object: why can't the programmer write a function that <code>yield</code>s an array of super-polynomial size? This is simple in most languages using a <code>while</code> loop or recursion; both are inexpressible in <code>Sirius</code>. Only <code>for</code>-iteration between <code>Poly</code> bounds is permitted.</p>
         
@@ -134,7 +143,7 @@ fn test():
 
         <p>There are various means to navigate the shape-data boundary. <code>typevar</code>s are available at runtime. Some operators can lift a normal value into a <code>typevar</code> by fixing it to known bounds. Iterators behave a bit like <code>typevar</code>s -- more on this later. <code>typevar</code>s compose algebraically, but any division that doesn't immediately simplify will demote the type expression to a plain integer. For example, <code>(N^2-M^2)/(N+M)</code> is the type <code>N-M</code>, but <code>N/M</code> is not a type, even given <code>N=M</code>.</p>
 
-        <svg alt="Diagram describing the transitions to and from the tracked Poly system for Sirius variables." width="100%" viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <svg alt="Diagram describing the transitions to and from the tracked Poly system for Sirius variables." width="600px" viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
             <defs>
                 <marker id="arrowhead" markerWidth="10" markerHeight="20" refX="9" refY="5" orient="auto">
                     <polygon fill="currentColor" points="0 0, 0 10, 10 5"></polygon>
@@ -198,8 +207,8 @@ fn test():
 
         <p>Control flow is dictated by <code>for</code>-loops and <code>if</code>-statements. With flow typing, facts in <code>if</code> conditions are available to the constraint solver inside their scopes. Every <code>yield</code> must be <span id="backlink_3" class="backlink">counted symbolically.</span><sup><a href="#footnote_3">[3]</a></sup> </p>
 
-        <pre class="editor">// a challenge for the yield counter
-// counting engine knows that inner for-body is invoked N(N-1)/2 times
+        <pre class="editor"># a challenge for the yield counter
+# counting engine knows that inner for-body is invoked N(N-1)/2 times
 fn triangle{N}() -> f32[N^2 - N + 1]:
     for i from 0 to N:
         for j from 0 to i:
@@ -214,38 +223,41 @@ fn triangle{N}() -> f32[N^2 - N + 1]:
 fn find{N}(needle: f32, haystack: f32[N]) -> Ind(N)?:
     for i from 0 to N:
         if needle == haystack[i]:
-            // 'Ind(N)' constraint is proven here
+            # 'Ind(N)' constraint is proven here
             return i
-    // Ind(N)? is nullable Ind(N)
+    # Ind(N)? is nullable Ind(N)
     return null
 
 fn test():
     let arr = [1.0, 2.0, 3.0]
     let k = find(2.0, arr)
     if k != null:
-        // find() constraint is available at call sites
-        // so this access is proven safe
+        # find() constraint is available at call sites
+        # so this access is proven safe
         arr[k] += 1.0
 </pre>
 
-        <div><h2 id="backend"><a href="#backend">#</a> Backend?</h2></div>
+        <div><h2 id="backend"><a href="#backend">#</a> Backend</h2></div>
 
-        <p>What I've described so far is a toy language. It wouldn't be suitable for use in anger, even if it had a fast backend. However, I believe a type system like that of <code>Sirius</code> <span id="backlink_5" class="backlink">will transform GPGPU in the coming years.</span><sup><a href="#footnote_5">[5]</a></sup></p>
+        <p>What I've described so far is a toy language. It wouldn't be suitable for use in anger, even if it had a fast backend. However, I believe a type system like that of <code>Sirius</code> will transform GPGPU in the coming years.</p>
 
-        <p>As I mentioned earlier, this project was borne of my frustration with PyTorch. Zooming out, the GPU is a recent technology and it shows in the immaturity of its software ecosystem. The 2026 stack is heavy, fragmented, and over-abstracted. We are out here compiling CNNs with a <a href="https://developer.nvidia.com/cuda-llvm-compiler">proprietary, bespoke LLVM fork</a>.</p>
+        <p>As I mentioned earlier, this project was borne of my frustration with PyTorch. Zooming out, the GPU is a young technology and it shows in the immaturity of its software ecosystem. The 2026 stack is heavy, fragmented, over-abstracted, and sometimes <a href="https://developer.nvidia.com/cuda-llvm-compiler">not even free</a>.</p>
 
-        <p>ROCm is closing the gap with CUDA. AI accelerators are shipping novel architectures. CPU core counts are increasing. We are entering the golden age of array languages. Meanwhile, proof-carrying code will become increasingly fashionable as LLM-assisted programming techniques mature.</p>
+        <p>ROCm is closing the gap with CUDA. AI accelerators are shipping novel architectures. CPU core counts are increasing. As single-core performance progress slows, parallelism increases. Programmers need better software to harness this new hardware. We are entering the golden age of array languages. Meanwhile, advanced static analysis will become increasingly fashionable as LLM-assisted programming techniques mature.</p>
 
-        <p>I envision a high-level language that leverages types to drastically streamline heterogenous hardware optimization. With <code>Poly</code> bounds on all memory and compute, the compiler can build tiling, rolling, and fusion strategies -- monomorphizing on shape bounds.</p>
+        <p>I envision a high-level language that leverages types to drastically streamline heterogenous hardware optimization. With <code>Poly</code> bounds on all memory and compute, the compiler can build tiling, rolling, and fusion strategies -- monomorphizing on shape.</p>
         
-        <p>This is a <a href="https://dl.acm.org/doi/full/10.1145/3674735">polyhedral-like compilation</a> model. <code>Sirius</code> (at least its affine fragment) is polyhedral by construction, using the same familiar <code>Poly</code> abstraction, making it uniquely suited to, say, an <a href="https://mlir.llvm.org/docs/Dialects/Affine/">MLIR</a> toolchain. The compiler can surface everything from memory layout to runtime complexity, behaving like a SQL query planner.</p>
+        <p><code>Sirius</code>, or at least its affine fragment, is <a href="https://dl.acm.org/doi/full/10.1145/3674735">polyhedral</a> by construction, using the same familiar <code>Poly</code> abstraction, making it uniquely suited to an <a href="https://mlir.llvm.org/docs/Dialects/Affine/">MLIR</a> toolchain. The compiler can surface everything from memory layout to runtime complexity, providing detailed performance diagnostics at compile time. It can function like a SQL query planner for specific hardware specifications.</p>
+
+        <p>There are several tools that already accomplish many of <code>Sirius</code>'s goals. <a href="https://triton-lang.org">Triton</a> is an ergonomic Python DSL for GPU kernels with a streamlined backend. <a href="https://futhark-lang.org">Futhark</a> is a functional GPGPU language with shape types (index functions) and an algebra including addition. <code>Sirius</code> will continue to draw inspiration from these projects and academic literature as I hammer out the <code>1.0</code> roadmap. Ideas and PRs are very welcome at the <a href="https://github.com/lorentzj/sirius">repo</a>.</p>
+
+        <img width=200px src="/imgs/sleepy_tenrec.png" alt="cartoon of a sleepy lowland streaked tenrec" title="sleepy lowland streaked tenrec">
 
         <hr>
         
         <p id="footnote_1" class="footnote">[1] Low-ish. Annotation may be lessened in some cases, à la <a href="https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-elision">lifetime elision</a> in the Rust borrow checker. I will refrain from any kind of global inference because I mostly agree with  <a href="https://borretti.me/article/type-inference-was-a-mistake">Fernando Borretti on the topic</a>. Inference and solving strictly go per-function. <a href="#backlink_1">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
         <p id="footnote_2" class="footnote">[2] Solving arbitrary <code>Poly</code> constraints is impossible, courtesy of <a href="https://en.wikipedia.org/wiki/Hilbert%27s_tenth_problem">Matiyasevich et al</a>. For now, I'm sticking with <a href="https://microsoft.github.io/z3guide/docs/theories/Arithmetic">linear integer arithmetic</a> for stability's sake. Although Z3 could safely run more sophisticated constraints, the checker will inevitably return some false negatives. Happily, most constraints are trivial and obtain representationally without invoking Z3 at all. <a href="#backlink_2">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
-        <p id="footnote_3" class="footnote">[3] Details on the algorithm are available in the <a href="/api/doc/sirius/solver/count/struct.Count.html">API docs</a>. <a href="#backlink_3">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
-        <p id="footnote_4" class="footnote">[4] The Dex paper (p. 11) remarks, "This captures one of the most common uses for the reshape operation... [while] not requiring the type system to solve systems of Diophantine equations to check which reshapes are valid." Yeah, but what if we do? <a href="#backlink_4">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
-        <p id="footnote_5" class="footnote">[5] Supposing it falls short of completely blowing up the industry, I hope <code>Sirius</code> can find a niche like <a href="https://futhark-lang.org/">Futhark</a>. <a href="#backlink_5">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
+        <p id="footnote_3" class="footnote">[3] Details of the summation algorithm are available in the <a href="/api/doc/sirius/solver/count/struct.Count.html">solver docs</a>. <a href="#backlink_3">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
+        <p id="footnote_4" class="footnote">[4] The Dex paper (p. 11) remarks, “This captures one of the most common uses for the reshape operation... [while] not requiring the type system to solve systems of Diophantine equations to check which reshapes are valid.” Yeah, but what if we do? <a href="#backlink_4">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
     </body>
 </html>

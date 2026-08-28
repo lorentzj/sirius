@@ -208,7 +208,6 @@ extern {
         "newline"    => Tok::NewLine,
         "indent"     => Tok::Indent,
         "dedent"     => Tok::Dedent,        
-        "#"          => Tok::Pound,
         "?="         => Tok::AssignOp(<lexer::AssnOp>),
         "="         => Tok::AssignOp(lexer::AssnOp::Eq),
         "."          => Tok::Op(Op::Dot),
