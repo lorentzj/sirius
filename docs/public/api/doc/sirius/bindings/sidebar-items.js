@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["compile","lex","log","serialize_error","serialize_token","serialize_type_tokens"]};

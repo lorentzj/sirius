@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["monomial_div"],"macro":[["poly",1]],"mod":["coef","mono"],"struct":["LinearPoly","Poly"]};

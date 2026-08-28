@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"macro":[["mono",1]],"struct":["Mono"],"type":["Pow","Var"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Cmp","Verdict"],"struct":["Constraint","Solver"]};
