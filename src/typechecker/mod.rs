@@ -1,15 +1,22 @@
+mod check_stmt;
 mod from_annotation;
+mod scope;
 mod types;
+mod visit;
 
 use crate::parser::ParserOutput;
 use crate::parser::{
     Pos,
-    ast::{Block, Expr, S},
-    lexer::AssnOp,
+    ast::{Block, S},
 };
-use crate::scope::Scope;
+
+use crate::typechecker::scope::{BlockScope, BlockScopeEntry};
 use crate::typechecker::types::T;
-use crate::{error::Errors, parser::Function};
+use crate::{
+    error::{Errors, error_at},
+    parser::Function,
+};
+use scope::Scopes;
 
 use from_annotation::{annotation, fun_type};
 
@@ -19,17 +26,22 @@ pub fn check_source(source: &mut ParserOutput) {
     if let Some(tree) = &mut source.tree
         && source.errors.is_empty()
     {
-        let mut global_types = Scope::default();
-        global_types.push();
+        let mut scopes = Scopes::new();
+        scopes.push();
+
         let mut fail_check_signatures = false;
 
         for fun in &tree.0 {
             match fun_type(fun) {
                 Ok(t) => {
-                    global_types.insert(fun.name.data.clone(), Pos::new_at(t.data, &fun.name));
+                    scopes.insert(
+                        fun.name.data.clone(),
+                        Type::new_at(t.data, &fun.name),
+                        false,
+                    );
                 }
                 Err(e) => {
-                    global_types.insert(fun.name.data.clone(), Pos::new_at(T::Error, &fun.name));
+                    scopes.insert(fun.name.data.clone(), Type::error_at(&fun.name), false);
                     source.errors.extend(e);
                     fail_check_signatures = true;
                 }
@@ -44,81 +56,53 @@ pub fn check_source(source: &mut ParserOutput) {
             let p_args = Pos::inner_collect(&fun.type_args);
             source
                 .errors
-                .extend(FunctionTypeChecker::run(&mut global_types, p_args, fun));
+                .extend(FunctionTypeChecker::run(&mut scopes, p_args, fun));
         }
     }
 }
 
 struct FunctionTypeChecker<'a> {
     errors: Errors,
-    scope: &'a mut Scope<Type>,
+    ctx: &'a mut Scopes,
     p_vars: Vec<String>,
 }
 
 impl<'a> FunctionTypeChecker<'a> {
-    pub fn run(globals: &'a mut Scope<Type>, p_vars: Vec<String>, ast: &'a mut Function) -> Errors {
+    pub fn run(globals: &'a mut Scopes, p_vars: Vec<String>, ast: &'a mut Function) -> Errors {
         let mut checker = Self {
             errors: vec![],
-            scope: globals,
+            ctx: globals,
             p_vars,
         };
 
-        checker.scope.push();
+        checker.ctx.n_typevars(ast.type_args.len() as u32);
+        checker.ctx.push();
+
         checker.traverse_block(&ast.body);
-        checker.scope.pop();
+
+        checker.ctx.pop();
 
         checker.errors
     }
 
-    fn visit_expr(&mut self, _expr: &Expr) {}
-
-    fn visit_print(&mut self, expr: &Expr) {
-        self.visit_expr(expr);
-    }
-
-    fn visit_return(&mut self, expr: &Expr) {
-        self.visit_expr(expr);
-    }
-
-    fn visit_yield(&mut self, expr: &Expr) {
-        self.visit_expr(expr);
-    }
-
-    fn visit_yield_from(&mut self, expr: &Expr) {
-        self.visit_expr(expr);
-    }
-
-    fn visit_let(&mut self, _mutable: bool, _name: Pos<&str>, ann: Option<&Expr>, value: &Expr) {
-        let _ann = if let Some(ann) = ann {
-            match annotation(ann, &self.p_vars) {
-                Ok(ann) => Some(ann),
-                Err(e) => {
-                    self.errors.push(e);
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
-        self.visit_expr(value);
-    }
-
-    fn visit_assign(&mut self, _place: &Expr, _op: &AssnOp, value: &Expr) {
-        self.visit_expr(value);
-    }
-
-    fn visit_if(&mut self, cond: &Expr) {
-        self.visit_expr(cond);
-    }
-
-    fn visit_for(&mut self, _iter: Pos<&str>, lower: &Expr, upper: &Expr) {
-        self.visit_expr(lower);
-        self.visit_expr(upper);
-    }
-
     fn traverse_block(&mut self, block: &Block) {
+        if !self.errors.is_empty() {
+            return;
+        }
+
         for stmt in block.stmts.iter() {
+            if matches!(
+                self.ctx.peek(),
+                Some(BlockScope {
+                    always_returns: true,
+                    ..
+                })
+            ) {
+                self.errors
+                    .push(error_at!(Flow, stmt, "statement after return"));
+                break;
+            }
+
             match &stmt.data {
                 S::Print(expr) => self.visit_print(expr),
                 S::Return(expr) => self.visit_return(expr),
@@ -135,30 +119,13 @@ impl<'a> FunctionTypeChecker<'a> {
                     cond,
                     true_body,
                     false_body,
-                } => {
-                    self.scope.push();
-                    self.visit_if(cond);
-                    self.scope.push();
-                    self.traverse_block(true_body);
-                    self.scope.pop();
-                    if let Some(false_body) = false_body {
-                        self.scope.push();
-                        self.traverse_block(false_body);
-                        self.scope.pop();
-                    }
-                    self.scope.pop();
-                }
+                } => self.visit_if(cond, true_body, false_body),
                 S::For {
                     iter,
                     lower,
                     upper,
                     body,
-                } => {
-                    self.scope.push();
-                    self.visit_for(iter.as_ref(), lower, upper);
-                    self.traverse_block(body);
-                    self.scope.pop();
-                }
+                } => self.visit_for(iter.as_ref(), lower, upper, body),
             }
         }
     }

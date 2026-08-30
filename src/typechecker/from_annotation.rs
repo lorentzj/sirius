@@ -1,7 +1,7 @@
 use super::{Type, types::T};
 use crate::error::{Error, Errors, error_at};
 use crate::parser::ast::{AD, E, Expr, Function};
-use crate::parser::lexer::Op;
+use crate::parser::lexer::{ArithOp, Op};
 use crate::parser::{Pos, UnaryOp};
 use crate::solver::poly::Poly;
 
@@ -24,7 +24,7 @@ pub fn annotation(ann: &Expr, p_vars: &[String]) -> Result<Type, Error> {
             } else if let Some(p_position) = p_vars.iter().position(|v| v == s) {
                 Ok(Type::size(Poly::var(p_position as u32, 1), ann))
             } else {
-                Err(error_at!(Type, format!("unknown type \"{}\"", s), ann))
+                Err(error_at!(Type, ann, "unknown type \"{}\"", s))
             }
         }
         E::Int(i) => Ok(Type::size(Poly::constant(*i), ann)),
@@ -49,14 +49,14 @@ pub fn annotation(ann: &Expr, p_vars: &[String]) -> Result<Type, Error> {
                         {
                             parsed_dims.push(poly);
                         } else {
-                            return Err(error_at!(Type, "dimension must be a poly expression", e));
+                            return Err(error_at!(Type, e, "dimension must be a poly expression"));
                         }
                     }
                     AD::Range(_, _) => {
                         return Err(error_at!(
                             Type,
-                            "ranges not supported in type annotations",
-                            dim
+                            dim,
+                            "ranges not supported in type annotations"
                         ));
                     }
                 }
@@ -74,21 +74,9 @@ pub fn annotation(ann: &Expr, p_vars: &[String]) -> Result<Type, Error> {
                 // so extend the existing dimensions with the new ones
                 // e.g. a[10][20] == a[10, 20]
                 start_dims.extend(parsed_dims);
-                Ok(Type::new_at(
-                    T::Array {
-                        elem: Box::new(*inner_t),
-                        shape: start_dims,
-                    },
-                    ann,
-                ))
+                Ok(Type::new_array(*inner_t, start_dims, ann))
             } else {
-                Ok(Type::new_at(
-                    T::Array {
-                        elem: Box::new(parsed_t),
-                        shape: parsed_dims,
-                    },
-                    ann,
-                ))
+                Ok(Type::new_array(parsed_t, parsed_dims, ann))
             }
         }
         E::BinOp(lhs, op, rhs) => {
@@ -98,37 +86,37 @@ pub fn annotation(ann: &Expr, p_vars: &[String]) -> Result<Type, Error> {
             let (lhs_poly, rhs_poly) = match (lhs_t.data, rhs_t.data) {
                 (T::Size(l), T::Size(r)) => (l, r),
                 (T::Size(_), _) => {
-                    return Err(error_at!(Type, "operand must be a poly expression", rhs));
+                    return Err(error_at!(Type, rhs, "operand must be a poly expression"));
                 }
                 (_, _) => {
-                    return Err(error_at!(Type, "operand must be a poly expression", lhs));
+                    return Err(error_at!(Type, lhs, "operand must be a poly expression"));
                 }
             };
 
             match op {
-                Op::Add => Ok(Type::size(lhs_poly.add(&rhs_poly), ann)),
-                Op::Sub => Ok(Type::size(lhs_poly.sub(&rhs_poly), ann)),
-                Op::Mul => Ok(Type::size(lhs_poly.mul(&rhs_poly), ann)),
-                Op::Exp => match rhs_poly.as_constant() {
+                Op::Arith(ArithOp::Add) => Ok(Type::size(lhs_poly.add(&rhs_poly), ann)),
+                Op::Arith(ArithOp::Sub) => Ok(Type::size(lhs_poly.sub(&rhs_poly), ann)),
+                Op::Arith(ArithOp::Mul) => Ok(Type::size(lhs_poly.mul(&rhs_poly), ann)),
+                Op::Arith(ArithOp::Exp) => match rhs_poly.as_constant() {
                     Some(rhs_const) => {
                         if rhs_const.is_zero() {
                             Ok(Type::size(Poly::constant(1), ann))
                         } else if !rhs_const.is_positive() {
-                            Err(error_at!(Type, "power must be non-negative", rhs))
+                            Err(error_at!(Type, rhs, "power must be non-negative"))
                         } else {
                             Ok(Type::size(lhs_poly.pow(rhs_const.get() as u32), ann))
                         }
                     }
                     None => Err(error_at!(
                         Type,
-                        "power must be a constant poly expression",
-                        rhs
+                        rhs,
+                        "power must be a constant poly expression"
                     )),
                 },
                 _ => Err(error_at!(
                     Type,
-                    format!("invalid binary operation \"{op:?}\" in type annotation"),
-                    ann
+                    ann,
+                    "invalid binary operation \"{op:?}\" in type annotation"
                 )),
             }
         }
@@ -136,31 +124,31 @@ pub fn annotation(ann: &Expr, p_vars: &[String]) -> Result<Type, Error> {
             E::Ident(ident) => {
                 if ident == "Ind" {
                     if !p_args.is_empty() {
-                        return Err(error_at!(Type, "cannot pass typevar here", ann));
+                        return Err(error_at!(Type, ann, "cannot pass typevar here"));
                     }
 
                     if args.len() != 1 {
-                        return Err(error_at!(Type, "Ind expects one argument", ann));
+                        return Err(error_at!(Type, ann, "Ind expects one argument"));
                     }
 
                     let inner_t = annotation(&args[0], p_vars)?;
 
                     if let T::Size(p) = inner_t.data {
-                        Ok(Type::ind(p.clone(), ann))
+                        Ok(Type::ind_rc(p.clone(), ann))
                     } else {
-                        Err(error_at!(Type, "Ind expects size argument", ann))
+                        Err(error_at!(Type, ann, "Ind expects size argument"))
                     }
                 } else {
-                    Err(error_at!(Type, "invalid type annotation", ann))
+                    Err(error_at!(Type, ann, "invalid type annotation"))
                 }
             }
-            _ => Err(error_at!(Type, "invalid type annotation", ann)),
+            _ => Err(error_at!(Type, ann, "invalid type annotation")),
         },
         E::UnOp(UnaryOp::Option, inner) => {
             let inner_t = annotation(inner, p_vars)?;
             Ok(Type::new_at(T::Option(Box::new(inner_t)), ann))
         }
-        _ => Err(error_at!(Type, "invalid type annotation", ann)),
+        _ => Err(error_at!(Type, ann, "invalid type annotation")),
     }
 }
 
@@ -181,7 +169,7 @@ pub fn fun_type(fun: &Function) -> Result<Type, Errors> {
                 p_constraints.push(Pos::new(name.start, (name.data.clone(), p), end));
             }
             Ok(_) => {
-                errors.push(error_at!(Type, "constraint must be a poly expression", ann));
+                errors.push(error_at!(Type, ann, "constraint must be a poly expression"));
             }
             Err(e) => {
                 errors.push(e);
@@ -196,7 +184,7 @@ pub fn fun_type(fun: &Function) -> Result<Type, Errors> {
             }
             Err(e) => {
                 errors.push(e);
-                args.push(Type::new_at(T::Error, ann));
+                args.push(Type::error_at(ann));
             }
         }
     }

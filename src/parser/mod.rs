@@ -1,11 +1,11 @@
 pub mod ast;
 pub mod lexer;
-pub mod positioned;
+pub mod pos;
 
-use crate::error::{Error, Errors, error_at};
+use crate::error::{Er, Error, ErrorType, Errors};
 pub use ast::{AccessDim, Block, Expr, Function, Stmt, Tree, UnaryOp};
 pub use lexer::{Tok, Token};
-pub use positioned::Pos;
+pub use pos::Pos;
 
 lalrpop_util::lalrpop_mod!(#[allow(clippy::all)] pub grammar, "/parser/grammar.rs");
 
@@ -22,8 +22,16 @@ pub fn parse(code: &str) -> ParserOutput {
         .iter()
         .enumerate()
         .filter_map(|(i, t)| {
-            t.get_error()
-                .map(|msg| error_at!(Syntax, msg.clone(), i, i))
+            t.get_error().map(|msg| {
+                Error::new(
+                    i,
+                    Er {
+                        error_type: ErrorType::Syntax,
+                        message: msg,
+                    },
+                    i + 1,
+                )
+            })
         })
         .collect();
 

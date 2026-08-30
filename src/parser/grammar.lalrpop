@@ -1,6 +1,6 @@
 use crate::parser::{UnaryOp, Pos, Expr, AccessDim, Stmt, Block, Function, Tree};
 use crate::parser::lexer;
-use lexer::{Tok, Op, AssnOp};
+use lexer::{Tok, Op, AssnOp, ArithOp};
 
 grammar(type_tokens: &mut Vec<usize>);
 
@@ -103,19 +103,19 @@ pub Expr: Expr = {
     <start: @L> <inner: Expr> "?" <end: @R> =>                 Expr::un_op(start, UnaryOp::Option, inner, end),
 
     #[precedence(level="3")] #[assoc(side="left")]
-    <start: @L> <lhs: Expr> "^" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Exp, rhs, end),
+    <start: @L> <lhs: Expr> "^" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Arith(ArithOp::Exp), rhs, end),
         
     #[precedence(level="4")] #[assoc(side="left")]
     <start: @L> "!" <inner: Expr> <end: @R> =>                 Expr::un_op(start, UnaryOp::BoolNeg, inner, end),
     <start: @L> "-" <inner: Expr> <end: @R> =>                 Expr::un_op(start, UnaryOp::ArithNeg, inner, end),
 
     #[precedence(level="6")] #[assoc(side="left")]
-    <start: @L> <lhs: Expr> "*" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Mul, rhs, end),
-    <start: @L> <lhs: Expr> "/" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Div, rhs, end),
+    <start: @L> <lhs: Expr> "*" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Arith(ArithOp::Mul), rhs, end),
+    <start: @L> <lhs: Expr> "/" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Arith(ArithOp::Div), rhs, end),
 
     #[precedence(level="7")] #[assoc(side="left")]
-    <start: @L> <lhs: Expr> "+" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Add, rhs, end),
-    <start: @L> <lhs: Expr> "-" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Sub, rhs, end),
+    <start: @L> <lhs: Expr> "+" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Arith(ArithOp::Add), rhs, end),
+    <start: @L> <lhs: Expr> "-" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Arith(ArithOp::Sub), rhs, end),
 
     #[precedence(level="8")] #[assoc(side="left")]
     <start: @L> <lhs: Expr> ">" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Greater, rhs, end),
@@ -211,11 +211,11 @@ extern {
         "?="         => Tok::AssignOp(<lexer::AssnOp>),
         "="         => Tok::AssignOp(lexer::AssnOp::Eq),
         "."          => Tok::Op(Op::Dot),
-        "^"          => Tok::Op(Op::Exp),
-        "*"          => Tok::Op(Op::Mul),
-        "/"          => Tok::Op(Op::Div),
-        "+"          => Tok::Op(Op::Add),
-        "-"          => Tok::Op(Op::Sub),
+        "^"          => Tok::Op(Op::Arith(ArithOp::Exp)),
+        "*"          => Tok::Op(Op::Arith(ArithOp::Mul)),
+        "/"          => Tok::Op(Op::Arith(ArithOp::Div)),
+        "+"          => Tok::Op(Op::Arith(ArithOp::Add)),
+        "-"          => Tok::Op(Op::Arith(ArithOp::Sub)),
         "!"          => Tok::Op(Op::Not),
         "'"          => Tok::Op(Op::Tick),
         ">"          => Tok::Op(Op::Greater),

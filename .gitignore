@@ -1,4 +1,5 @@
-/target
+target
 docs/.parcel-cache
 docs/node_modules
 docs/public/api
+docs/public/js

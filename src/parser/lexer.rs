@@ -1,13 +1,18 @@
 use std::fmt;
 
 #[derive(Clone, PartialEq, Eq)]
-pub enum Op {
-    Dot,
-    Exp,
-    Mul,
-    Div,
+pub enum ArithOp {
     Add,
     Sub,
+    Mul,
+    Div,
+    Exp,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub enum Op {
+    Dot,
+    Arith(ArithOp),
     And,
     Or,
     Not,
@@ -27,11 +32,11 @@ impl fmt::Debug for Op {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Op::Dot => write!(f, "."),
-            Op::Exp => write!(f, "^"),
-            Op::Mul => write!(f, "*"),
-            Op::Div => write!(f, "/"),
-            Op::Add => write!(f, "+"),
-            Op::Sub => write!(f, "-"),
+            Op::Arith(ArithOp::Exp) => write!(f, "^"),
+            Op::Arith(ArithOp::Mul) => write!(f, "*"),
+            Op::Arith(ArithOp::Div) => write!(f, "/"),
+            Op::Arith(ArithOp::Add) => write!(f, "+"),
+            Op::Arith(ArithOp::Sub) => write!(f, "-"),
             Op::And => write!(f, "and"),
             Op::Or => write!(f, "or"),
             Op::Not => write!(f, "!"),
@@ -463,21 +468,21 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                         Token::new(Tok::CloseSqBracket, line, col - 1, col)
                     }
                     '.' => Token::new(Tok::Op(Op::Dot), line, col - 1, col),
-                    '^' => Token::new(Tok::Op(Op::Exp), line, col - 1, col),
-                    '*' => Token::new(Tok::Op(Op::Mul), line, col - 1, col),
-                    '/' => Token::new(Tok::Op(Op::Div), line, col - 1, col),
+                    '^' => Token::new(Tok::Op(Op::Arith(ArithOp::Exp)), line, col - 1, col),
+                    '*' => Token::new(Tok::Op(Op::Arith(ArithOp::Mul)), line, col - 1, col),
+                    '/' => Token::new(Tok::Op(Op::Arith(ArithOp::Div)), line, col - 1, col),
                     '#' => {
                         clear_line_whitespace = true;
                         commenting = true;
                         Token::new(Tok::Comment, line, col - 1, col)
                     }
-                    '+' => Token::new(Tok::Op(Op::Add), line, col - 1, col),
-                    '-' => Token::new(Tok::Op(Op::Sub), line, col - 1, col),
+                    '+' => Token::new(Tok::Op(Op::Arith(ArithOp::Add)), line, col - 1, col),
+                    '-' => Token::new(Tok::Op(Op::Arith(ArithOp::Sub)), line, col - 1, col),
                     '!' => Token::new(Tok::Op(Op::Not), line, col - 1, col),
                     '\'' => Token::new(Tok::Op(Op::Tick), line, col - 1, col),
                     '>' => {
                         if let Some(Token {
-                            data: Tok::Op(Op::Sub),
+                            data: Tok::Op(Op::Arith(ArithOp::Sub)),
                             start,
                             ..
                         }) = tokens.last()
@@ -518,19 +523,19 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                                     should_pop = true;
                                     Token::new(Tok::Op(Op::NotEq), line, *start, col)
                                 }
-                                Op::Add => {
+                                Op::Arith(ArithOp::Add) => {
                                     should_pop = true;
                                     Token::new(Tok::AssignOp(AssnOp::Add), line, *start, col)
                                 }
-                                Op::Sub => {
+                                Op::Arith(ArithOp::Sub) => {
                                     should_pop = true;
                                     Token::new(Tok::AssignOp(AssnOp::Sub), line, *start, col)
                                 }
-                                Op::Mul => {
+                                Op::Arith(ArithOp::Mul) => {
                                     should_pop = true;
                                     Token::new(Tok::AssignOp(AssnOp::Mul), line, *start, col)
                                 }
-                                Op::Div => {
+                                Op::Arith(ArithOp::Div) => {
                                     should_pop = true;
                                     Token::new(Tok::AssignOp(AssnOp::Div), line, *start, col)
                                 }
@@ -596,7 +601,7 @@ pub fn tokenize(code: &str) -> Vec<Token> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Op, Tok, Token, tokenize};
+    use super::{ArithOp, Op, Tok, Token, tokenize};
 
     #[test]
     fn empty() {
@@ -612,14 +617,14 @@ mod tests {
         let expected_tokens = vec![
             Token::new(Tok::OpenParen, 0, 0, 1),
             Token::new(Tok::Identifier("abcdef".into()), 0, 1, 7),
-            Token::new(Tok::Op(Op::Add), 0, 8, 9),
+            Token::new(Tok::Op(Op::Arith(ArithOp::Add)), 0, 8, 9),
             Token::new(Tok::Identifier("g".into()), 0, 10, 11),
-            Token::new(Tok::Op(Op::Mul), 0, 12, 13),
+            Token::new(Tok::Op(Op::Arith(ArithOp::Mul)), 0, 12, 13),
             Token::new(Tok::Int(12), 0, 14, 16),
             Token::new(Tok::CloseParen, 0, 16, 17),
-            Token::new(Tok::Op(Op::Exp), 0, 17, 18),
+            Token::new(Tok::Op(Op::Arith(ArithOp::Exp)), 0, 17, 18),
             Token::new(Tok::Float(2.0), 0, 18, 21),
-            Token::new(Tok::Op(Op::Div), 0, 21, 22),
+            Token::new(Tok::Op(Op::Arith(ArithOp::Div)), 0, 21, 22),
             Token::new(Tok::Identifier("hij".into()), 0, 22, 25),
         ];
 
@@ -635,10 +640,10 @@ mod tests {
             Token::new(Tok::Identifier("this".into()), 0, 0, 4),
             Token::new(Tok::Identifier("is".into()), 0, 5, 7),
             Token::new(Tok::NewLine, 1, 0, 0),
-            Token::new(Tok::Op(Op::Mul), 1, 0, 1),
+            Token::new(Tok::Op(Op::Arith(ArithOp::Mul)), 1, 0, 1),
             Token::new(Tok::Identifier("a".into()), 1, 1, 2),
             Token::new(Tok::Identifier("test".into()), 1, 3, 7),
-            Token::new(Tok::Op(Op::Mul), 1, 7, 8),
+            Token::new(Tok::Op(Op::Arith(ArithOp::Mul)), 1, 7, 8),
             Token::new(Tok::NewLine, 2, 0, 0),
             Token::new(Tok::Identifier("with".into()), 2, 0, 4),
             Token::new(Tok::Identifier("lots".into()), 2, 5, 9),
@@ -672,11 +677,11 @@ mod tests {
             Token::new(Tok::Identifier("a".into()), 0, 0, 1),
             Token::new(Tok::Op(Op::Dot), 0, 1, 2),
             Token::new(Tok::Identifier("b".into()), 0, 2, 3),
-            Token::new(Tok::Op(Op::Add), 0, 4, 5),
+            Token::new(Tok::Op(Op::Arith(ArithOp::Add)), 0, 4, 5),
             Token::new(Tok::Float(12.3), 0, 6, 10),
-            Token::new(Tok::Op(Op::Sub), 0, 11, 12),
+            Token::new(Tok::Op(Op::Arith(ArithOp::Sub)), 0, 11, 12),
             Token::new(Tok::Error("invalid float literal".into()), 0, 13, 18),
-            Token::new(Tok::Op(Op::Mul), 0, 19, 20),
+            Token::new(Tok::Op(Op::Arith(ArithOp::Mul)), 0, 19, 20),
             Token::new(Tok::Error("invalid float literal".into()), 0, 21, 28),
         ];
 

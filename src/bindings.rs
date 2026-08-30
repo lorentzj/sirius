@@ -63,13 +63,13 @@ pub fn serialize_error(e: &Error, tokens: &[Token]) -> Option<JsValue> {
     js_sys::Reflect::set(
         &obj,
         &JsValue::from("end_line"),
-        &JsValue::from(tokens[e.end].line),
+        &JsValue::from(tokens[e.end - 1].line),
     )
     .ok()?;
     js_sys::Reflect::set(
         &obj,
         &JsValue::from("end_column"),
-        &JsValue::from(tokens[e.end].end),
+        &JsValue::from(tokens[e.end - 1].end),
     )
     .ok()?;
     Some(obj.into())

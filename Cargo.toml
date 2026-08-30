@@ -15,7 +15,6 @@ js-sys = "0.3"
 web-sys = "0.3"
 lalrpop-util = "0.20"
 console_error_panic_hook = "0.1"
-num = "0.4"
 
 [build-dependencies]
 lalrpop = { version = "0.20", default-features = false }
