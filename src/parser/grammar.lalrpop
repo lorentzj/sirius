@@ -1,6 +1,6 @@
 use crate::parser::{UnaryOp, Pos, Expr, AccessDim, Stmt, Block, Function, Tree};
 use crate::parser::lexer;
-use lexer::{Tok, Op, AssnOp, ArithOp};
+use lexer::{Tok, Op, AssnOp, ArithOp, ArithCmpOp, BoolOp};
 
 grammar(type_tokens: &mut Vec<usize>);
 
@@ -118,16 +118,16 @@ pub Expr: Expr = {
     <start: @L> <lhs: Expr> "-" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Arith(ArithOp::Sub), rhs, end),
 
     #[precedence(level="8")] #[assoc(side="left")]
-    <start: @L> <lhs: Expr> ">" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Greater, rhs, end),
-    <start: @L> <lhs: Expr> "<" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Less, rhs, end),
-    <start: @L> <lhs: Expr> ">=" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::GreaterOrEq, rhs, end),
-    <start: @L> <lhs: Expr> "<=" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::LessOrEq, rhs, end),
-    <start: @L> <lhs: Expr> "==" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::Eq, rhs, end),
-    <start: @L> <lhs: Expr> "!=" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::NotEq, rhs, end),
+    <start: @L> <lhs: Expr> ">" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::ArithCmp(ArithCmpOp::Greater), rhs, end),
+    <start: @L> <lhs: Expr> "<" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::ArithCmp(ArithCmpOp::Less), rhs, end),
+    <start: @L> <lhs: Expr> ">=" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::ArithCmp(ArithCmpOp::GreaterOrEq), rhs, end),
+    <start: @L> <lhs: Expr> "<=" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::ArithCmp(ArithCmpOp::LessOrEq), rhs, end),
+    <start: @L> <lhs: Expr> "==" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::ArithCmp(ArithCmpOp::Eq), rhs, end),
+    <start: @L> <lhs: Expr> "!=" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::ArithCmp(ArithCmpOp::NotEq), rhs, end),
 
     #[precedence(level="9")] #[assoc(side="left")]
-    <start: @L> <lhs: Expr> "and" <rhs: Expr> <end: @R> =>     Expr::bin_op(start, lhs, Op::And, rhs, end),
-    <start: @L> <lhs: Expr> "or" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::Or, rhs, end),
+    <start: @L> <lhs: Expr> "and" <rhs: Expr> <end: @R> =>     Expr::bin_op(start, lhs, Op::Bool(BoolOp::And), rhs, end),
+    <start: @L> <lhs: Expr> "or" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::Bool(BoolOp::Or), rhs, end),
     <start: @L> <lhs: Expr> "->" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::Apply, rhs, end),
 }
 
@@ -218,12 +218,12 @@ extern {
         "-"          => Tok::Op(Op::Arith(ArithOp::Sub)),
         "!"          => Tok::Op(Op::Not),
         "'"          => Tok::Op(Op::Tick),
-        ">"          => Tok::Op(Op::Greater),
-        "<"          => Tok::Op(Op::Less),
-        ">="         => Tok::Op(Op::GreaterOrEq),
-        "<="         => Tok::Op(Op::LessOrEq),
-        "=="         => Tok::Op(Op::Eq),
-        "!="         => Tok::Op(Op::NotEq),
+        ">"          => Tok::Op(Op::ArithCmp(ArithCmpOp::Greater)),
+        "<"          => Tok::Op(Op::ArithCmp(ArithCmpOp::Less)),
+        ">="         => Tok::Op(Op::ArithCmp(ArithCmpOp::GreaterOrEq)),
+        "<="         => Tok::Op(Op::ArithCmp(ArithCmpOp::LessOrEq)),
+        "=="         => Tok::Op(Op::ArithCmp(ArithCmpOp::Eq)),
+        "!="         => Tok::Op(Op::ArithCmp(ArithCmpOp::NotEq)),
         "->"         => Tok::Op(Op::Apply),
         "?"          => Tok::Op(Op::Option),
         ","          => Tok::Op(Op::Comma),

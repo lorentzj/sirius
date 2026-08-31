@@ -1,4 +1,5 @@
 use super::Type;
+use crate::parser::Pos;
 use crate::solver::poly::{Poly, Var};
 use std::collections::HashMap;
 
@@ -106,8 +107,11 @@ impl Scopes {
         }
     }
 
-    pub fn n_typevars(&mut self, n: u32) {
-        self.curr_fresh_typevar = n;
+    pub fn add_typevars(&mut self, vars: &[Pos<String>]) {
+        for i in 0..vars.len() {
+            self.insert(&vars[i].data, Type::size(Poly::var(i as u32, 1), &vars[i]), false);
+        }
+        self.curr_fresh_typevar = vars.len() as u32;
     }
 
     pub fn _get_fresh_typevar(&mut self) -> Var {

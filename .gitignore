@@ -3,3 +3,4 @@ docs/.parcel-cache
 docs/node_modules
 docs/public/api
 docs/public/js
+docs/ts/sirius/wasm/sirius_bg.wasm

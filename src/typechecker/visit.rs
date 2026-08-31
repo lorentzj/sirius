@@ -5,8 +5,9 @@ use super::{BlockScopeEntry, Scopes, annotation};
 use super::{T, Type};
 use crate::error::{Error, error_at};
 use crate::parser::Block;
-use crate::parser::lexer::Op as LexerOp;
-use crate::parser::{Expr, Pos, ast::E, lexer::AssnOp};
+use crate::parser::lexer::{Op as LexerOp, AssnOp};
+use crate::parser::{Expr, Pos, ast::E};
+use crate::parser::ast::AD;
 use crate::solver::poly::{Poly, poly};
 
 fn parse_place(place: &Expr, ctx: &Scopes) -> Result<Type, Error> {
@@ -14,12 +15,12 @@ fn parse_place(place: &Expr, ctx: &Scopes) -> Result<Type, Error> {
         E::Ident(name) => match ctx.get(name) {
             Some(BlockScopeEntry { t, mutable }) => {
                 if *mutable {
-                    Err(error_at!(Type, place, "\"{name}\" is immutable"))
+                    Ok(t.clone())                    
                 } else {
-                    Ok(t.clone())
+                    Err(error_at!(Type, place, "\"{name}\" is immutable"))
                 }
             }
-            None => Err(error_at!(NameResolution, place, "unknown name \"{name}\"",)),
+            None => Err(error_at!(NameResolution, place, "cannot find name \"{name}\" in scope",)),
         },
 
         E::Access(inner, dims) => {
@@ -73,7 +74,17 @@ impl<'a> super::FunctionTypeChecker<'a> {
             E::Bool(_) => Type::new_at(T::Bool, expr),
             E::Float(_) => Type::new_at(T::F32, expr),
             E::Int(val) => Type::new_at(T::Size(Rc::new(Poly::constant(*val))), expr),
-            E::Ident(_) => todo!(),
+            E::Ident(ident) => match self.ctx.get(ident) {
+                Some(entry) => entry.t.clone(),
+                None => {
+                    self.errors.push(error_at!(
+                        NameResolution,
+                        expr,
+                        "cannot find name \"{ident}\" in scope",
+                    ));
+                    Type::error_at(expr)
+                },
+            },
             E::Tuple(items) => {
                 let mut i_types = vec![];
                 for i in items {
@@ -162,7 +173,7 @@ impl<'a> super::FunctionTypeChecker<'a> {
                                 T::Bool => Type::new_array(*elem, shape, expr),
                                 T::Error => Type::error_at(expr),
                                 _ => {
-                                    self.errors.push(error_at!(Type, expr, "cannot boolean-negate array with elements of type \"{:?}\"", elem.data));
+                                    self.errors.push(error_at!(Type, expr, "cannot negate type \"{:?}\"", elem.data));
                                     Type::error_at(expr)
                                 }
                             },
@@ -206,6 +217,7 @@ impl<'a> super::FunctionTypeChecker<'a> {
                         match inner_t.data {
                             T::Option(inner_inner_t) => {
                                 // TODO: check return type
+                                self.ctx.set_can_return();
                                 Type::new_at(inner_inner_t.data.clone(), expr)
                             }
                             T::Error => Type::error_at(expr),
@@ -233,14 +245,20 @@ impl<'a> super::FunctionTypeChecker<'a> {
                             Type::error_at(expr)
                         }
                     },
-                    LexerOp::And | LexerOp::Or => {
-                        todo!()
-                    }
-                    LexerOp::Greater | LexerOp::GreaterOrEq | LexerOp::Less | LexerOp::LessOrEq => {
-                        todo!()
-                    }
-                    LexerOp::Eq => todo!(),
-                    LexerOp::NotEq => todo!(),
+                    LexerOp::ArithCmp(cmp_op) => match lhs_t.try_compare(cmp_op, &rhs_t) {
+                        Ok(t) => t.but_at(expr),
+                        Err(err) => {
+                            self.errors.push(err.but_at(expr));
+                            Type::error_at(expr)
+                        }
+                    },
+                    LexerOp::Bool(op) => match lhs_t.try_bool_op(op, &rhs_t) {
+                        Ok(t) => t.but_at(expr),
+                        Err(err) => {
+                            self.errors.push(err.but_at(expr));
+                            Type::error_at(expr)
+                        }
+                    },
                     LexerOp::Dot => todo!(),
                     LexerOp::Tick
                     | LexerOp::Apply
@@ -249,8 +267,101 @@ impl<'a> super::FunctionTypeChecker<'a> {
                     | LexerOp::Not => unreachable!(),
                 }
             }
-            E::FnCall(_, _, _) => todo!(),
-            E::Access(_, _) => todo!(),
+            E::Access(inner, access_dims) => {
+                let inner_t = self.visit_expr(inner);
+                let (elem, old_shape) = match inner_t.data {
+                    T::Array { elem, shape } => (elem, shape),
+                    T::Error => return Type::error_at(expr),
+                    not_arr => {
+                        self.errors.push(error_at!(
+                            Type,
+                            expr,
+                            "cannot index type \"{:?}\"",
+                            not_arr
+                        ));
+                        return Type::error_at(expr);
+                    }
+                };
+
+                let mut new_shape = vec![];
+                let mut reduce_inds = 0;
+                for (i, dim) in access_dims.iter().enumerate() {
+                    match old_shape.get(i) {
+                        Some(expected_dim) => {
+                            match &dim.data {
+                                AD::Range(None, None) => {
+                                    reduce_inds += 1;
+                                    new_shape.push(expected_dim.clone());
+                                }
+                                AD::Range(_, _) => {
+                                    self.errors.push(error_at!(
+                                        NotImplmented,
+                                        expr,
+                                        "range access not implemented yet",
+                                    ));
+                                    return Type::error_at(expr);
+                                }
+                                AD::Point(point) => {
+                                    let point_t = self.visit_expr(point);
+                                    match point_t.data {
+                                        T::Ind(index) => {
+                                            reduce_inds += 1;
+                                            if index == *expected_dim {
+                                                reduce_inds += 1;
+                                                new_shape.push(Rc::new(poly!(1)));
+                                            } else {
+                                                self.errors.push(error_at!(
+                                                    Type,
+                                                    expr,
+                                                    "\"{:?}\" cannot access dim of size \"{:?}\"",
+                                                    index,
+                                                    expected_dim
+                                                ));
+                                                return Type::error_at(expr);
+                                            }
+                                        }
+                                        T::Error => return Type::error_at(expr),
+                                        _ => {
+                                            self.errors.push(error_at!(
+                                                Type,
+                                                expr,
+                                                "\"{:?}\" cannot index array",
+                                                point_t.data
+                                            ));
+                                            return Type::error_at(expr);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        None => {
+                            self.errors.push(error_at!(
+                                Type,
+                                expr,
+                                "array has \"{}\" dims",
+                                old_shape.len()
+                            ));
+                            return Type::error_at(expr);
+                        }
+                    }
+                }
+
+                new_shape.extend(old_shape.into_iter().skip(reduce_inds));
+
+                while let Some(p) = new_shape.pop() {
+                    if *p != poly!(1) {
+                        new_shape.push(p);
+                        break;
+                    }
+                }
+
+                if new_shape.is_empty() {
+                    *elem
+                } else {
+                    Type::new_array(*elem, new_shape, expr)
+                }
+            }
+            E::FnCall(_, _, _) => todo!()
         }
     }
 
@@ -338,9 +449,6 @@ impl<'a> super::FunctionTypeChecker<'a> {
     }
 
     pub fn visit_for(&mut self, _iter: Pos<&str>, lower: &Expr, upper: &Expr, body: &Block) {
-        self.visit_expr(lower);
-        self.visit_expr(upper);
-
         self.ctx.push();
         self.visit_expr(lower);
         self.visit_expr(upper);

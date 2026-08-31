@@ -53,10 +53,9 @@ pub fn check_source(source: &mut ParserOutput) {
         }
 
         for fun in tree.0.iter_mut() {
-            let p_args = Pos::inner_collect(&fun.type_args);
             source
                 .errors
-                .extend(FunctionTypeChecker::run(&mut scopes, p_args, fun));
+                .extend(FunctionTypeChecker::run(&mut scopes, fun));
         }
     }
 }
@@ -64,18 +63,30 @@ pub fn check_source(source: &mut ParserOutput) {
 struct FunctionTypeChecker<'a> {
     errors: Errors,
     ctx: &'a mut Scopes,
-    p_vars: Vec<String>,
+    p_vars: Vec<Pos<String>>,
 }
 
 impl<'a> FunctionTypeChecker<'a> {
-    pub fn run(globals: &'a mut Scopes, p_vars: Vec<String>, ast: &'a mut Function) -> Errors {
+    pub fn run(globals: &'a mut Scopes, ast: &'a mut Function) -> Errors {
         let mut checker = Self {
             errors: vec![],
             ctx: globals,
-            p_vars,
+            p_vars: ast.type_args.clone(),
         };
 
-        checker.ctx.n_typevars(ast.type_args.len() as u32);
+        for (name, ann) in ast.args.iter() {
+            match annotation(ann, &ast.type_args) {
+                Ok(t) => {
+                    checker.ctx.insert(name.data.clone(), t, false);
+                }
+                Err(err) => {
+                    checker.errors.push(err);
+                    checker.ctx.insert(name.data.clone(), Type::error_at(ann), false);
+                }
+            }
+        }
+
+        checker.ctx.add_typevars(&ast.type_args);
         checker.ctx.push();
 
         checker.traverse_block(&ast.body);

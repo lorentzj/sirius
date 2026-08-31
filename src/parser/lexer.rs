@@ -10,18 +10,28 @@ pub enum ArithOp {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub enum Op {
-    Dot,
-    Arith(ArithOp),
-    And,
-    Or,
-    Not,
+pub enum ArithCmpOp {
     Greater,
     GreaterOrEq,
     Less,
     LessOrEq,
     Eq,
-    NotEq,
+    NotEq
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub enum BoolOp {
+    And,
+    Or,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub enum Op {
+    Dot,
+    Arith(ArithOp),
+    ArithCmp(ArithCmpOp),
+    Bool(BoolOp),
+    Not,
     Tick,
     Apply,
     Option,
@@ -37,15 +47,15 @@ impl fmt::Debug for Op {
             Op::Arith(ArithOp::Div) => write!(f, "/"),
             Op::Arith(ArithOp::Add) => write!(f, "+"),
             Op::Arith(ArithOp::Sub) => write!(f, "-"),
-            Op::And => write!(f, "and"),
-            Op::Or => write!(f, "or"),
+            Op::Bool(BoolOp::And) => write!(f, "and"),
+            Op::Bool(BoolOp::Or) => write!(f, "or"),
             Op::Not => write!(f, "!"),
-            Op::GreaterOrEq => write!(f, ">="),
-            Op::Greater => write!(f, ">"),
-            Op::Less => write!(f, "<"),
-            Op::LessOrEq => write!(f, "<="),
-            Op::Eq => write!(f, "=="),
-            Op::NotEq => write!(f, "!="),
+            Op::ArithCmp(ArithCmpOp::GreaterOrEq) => write!(f, ">="),
+            Op::ArithCmp(ArithCmpOp::Greater) => write!(f, ">"),
+            Op::ArithCmp(ArithCmpOp::Less) => write!(f, "<"),
+            Op::ArithCmp(ArithCmpOp::LessOrEq) => write!(f, "<="),
+            Op::ArithCmp(ArithCmpOp::Eq) => write!(f, "=="),
+            Op::ArithCmp(ArithCmpOp::NotEq) => write!(f, "!="),
             Op::Tick => write!(f, "'"),
             Op::Apply => write!(f, "->"),
             Op::Option => write!(f, "?"),
@@ -490,10 +500,10 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                             should_pop = true;
                             Token::new(Tok::Op(Op::Apply), line, *start, col)
                         } else {
-                            Token::new(Tok::Op(Op::Greater), line, col - 1, col)
+                            Token::new(Tok::Op(Op::ArithCmp(ArithCmpOp::Greater)), line, col - 1, col)
                         }
                     }
-                    '<' => Token::new(Tok::Op(Op::Less), line, col - 1, col),
+                    '<' => Token::new(Tok::Op(Op::ArithCmp(ArithCmpOp::Less)), line, col - 1, col),
                     '?' => Token::new(Tok::Op(Op::Option), line, col - 1, col),
                     '=' => {
                         if let Some(Token {
@@ -503,7 +513,7 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                         }) = tokens.last()
                         {
                             should_pop = true;
-                            Token::new(Tok::Op(Op::Eq), line, *start, col)
+                            Token::new(Tok::Op(Op::ArithCmp(ArithCmpOp::Eq)), line, *start, col)
                         } else if let Some(Token {
                             data: Tok::Op(last_op),
                             start,
@@ -511,17 +521,17 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                         }) = tokens.last()
                         {
                             match last_op {
-                                Op::Greater => {
+                                Op::ArithCmp(ArithCmpOp::Greater) => {
                                     should_pop = true;
-                                    Token::new(Tok::Op(Op::GreaterOrEq), line, *start, col)
+                                    Token::new(Tok::Op(Op::ArithCmp(ArithCmpOp::GreaterOrEq)), line, *start, col)
                                 }
-                                Op::Less => {
+                                Op::ArithCmp(ArithCmpOp::Less) => {
                                     should_pop = true;
-                                    Token::new(Tok::Op(Op::LessOrEq), line, *start, col)
+                                    Token::new(Tok::Op(Op::ArithCmp(ArithCmpOp::LessOrEq)), line, *start, col)
                                 }
                                 Op::Not => {
                                     should_pop = true;
-                                    Token::new(Tok::Op(Op::NotEq), line, *start, col)
+                                    Token::new(Tok::Op(Op::ArithCmp(ArithCmpOp::NotEq)), line, *start, col)
                                 }
                                 Op::Arith(ArithOp::Add) => {
                                     should_pop = true;

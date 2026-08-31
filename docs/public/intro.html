@@ -141,69 +141,7 @@ fn test():
 
         <p>Dynamic values and shapes cannot mix without blowing up the type system. However, some navigation along their boundary is necessary to write useful programs. My design started with purely constant array shapes and I am adding features slowly in order to increase the space of useful <code>Sirius</code> programs.</p>
 
-        <p>There are various means to navigate the shape-data boundary. <code>typevar</code>s are available at runtime. Some operators can lift a normal value into a <code>typevar</code> by fixing it to known bounds. Iterators behave a bit like <code>typevar</code>s -- more on this later. <code>typevar</code>s compose algebraically, but any division that doesn't immediately simplify will demote the type expression to a plain integer. For example, <code>(N^2-M^2)/(N+M)</code> is the type <code>N-M</code>, but <code>N/M</code> is not a type, even given <code>N=M</code>.</p>
-
-        <svg alt="Diagram describing the transitions to and from the tracked Poly system for Sirius variables." width="600px" viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-            <defs>
-                <marker id="arrowhead" markerWidth="10" markerHeight="20" refX="9" refY="5" orient="auto">
-                    <polygon fill="currentColor" points="0 0, 0 10, 10 5"></polygon>
-                </marker>
-                <g id="box">
-                    <path stroke="currentColor" fill="transparent" d="M -50 -15
-                        h100
-                        a5,5 0 0 1 5,5
-                        v20
-                        a5,5 0 0 1 -5,5
-                        h-100
-                        a5,5 0 0 1 -5,-5
-                        v-20
-                        a5,5 0 0 1 5,-5
-                        z"></path>
-                </g>
-            </defs>
-
-            <text x="100" y="40" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Typevar</text>
-            <line stroke="currentColor" marker-end="url(#arrowhead)" x1="100" y1="50" x2="100" y2="74"></line>
-            <text x="300" y="40" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Argument/Variable</text>
-            <line stroke="currentColor" marker-end="url(#arrowhead)" x1="300" y1="50" x2="300" y2="74"></line>
-
-            <line stroke="currentColor" marker-end="url(#arrowhead)" x1="245" y1="90" x2="156" y2="90"></line>
-            <text x="200" y="75" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Modulo</text>
-
-            <g transform="translate(100 90)">
-                <use xlink:href="#box"></use>
-                <text x="0" y="0" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Poly</text>
-            </g>
-
-            <g transform="translate(300 90)">
-                <use xlink:href="#box"></use>
-                <text x="0" y="0" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Plain Integer</text>
-            </g>
-
-            <path stroke="currentColor" fill="transparent" marker-end="url(#arrowhead)" d="M 60 105
-                v40
-                a5,5 0 0 0 5,5
-                h70
-                a5,5 0 0 0 5,-5
-                v-39
-                "></path>
-            
-            <text x="100" y="135" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Arithmetic</text>
-            <text x="300" y="135" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Arithmetic</text>
-
-            <line stroke="currentColor" marker-end="url(#arrowhead)" x1="105" y1="150" x2="205" y2="150"></line>
-            <line stroke="currentColor" marker-start="url(#arrowhead)" marker-end="url(#arrowhead)" x1="105" y1="150" x2="305" y2="150"></line>
-
-            <path stroke="currentColor" fill="transparent" marker-end="url(#arrowhead)" d="M 260 105
-                v40
-                a5,5 0 0 0 5,5
-                h70
-                a5,5 0 0 0 5,-5
-                v-39
-                "></path>
-
-            <text x="200" y="165" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="0.8rem">Inexact Division</text>
-        </svg>
+        <p>There are various means to navigate the shape-data boundary. <code>typevar</code>s are available at runtime. Some operators can lift a normal value into a <code>typevar</code> by fixing it to known bounds. Iterators behave a bit like <code>typevar</code>s -- more on this later. <code>typevar</code>s compose algebraically</p>
 
         <p>Control flow is dictated by <code>for</code>-loops and <code>if</code>-statements. With flow typing, facts in <code>if</code> conditions are available to the constraint solver inside their scopes. Every <code>yield</code> must be <span id="backlink_3" class="backlink">counted symbolically.</span><sup><a href="#footnote_3">[3]</a></sup> </p>
 

@@ -26,6 +26,7 @@ pub enum ErrorType {
     Flow,
     Mutation,
     Type,
+    NotImplmented
 }
 
 impl fmt::Display for ErrorType {
@@ -36,6 +37,7 @@ impl fmt::Display for ErrorType {
             ErrorType::Flow => write!(f, "Flow"),
             ErrorType::Mutation => write!(f, "Mutation"),
             ErrorType::Type => write!(f, "Type"),
+            ErrorType::NotImplmented => write!(f, "NotImplmented"),
         }
     }
 }

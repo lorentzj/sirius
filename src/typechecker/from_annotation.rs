@@ -16,12 +16,12 @@ fn scalars(name: &str) -> Option<T> {
     }
 }
 
-pub fn annotation(ann: &Expr, p_vars: &[String]) -> Result<Type, Error> {
+pub fn annotation(ann: &Expr, p_vars: &[Pos<String>]) -> Result<Type, Error> {
     match &ann.data {
         E::Ident(s) => {
             if let Some(t) = scalars(s) {
                 Ok(Type::new_at(t, ann))
-            } else if let Some(p_position) = p_vars.iter().position(|v| v == s) {
+            } else if let Some(p_position) = p_vars.iter().position(|v| v.data == *s) {
                 Ok(Type::size(Poly::var(p_position as u32, 1), ann))
             } else {
                 Err(error_at!(Type, ann, "unknown type \"{}\"", s))
@@ -153,14 +153,12 @@ pub fn annotation(ann: &Expr, p_vars: &[String]) -> Result<Type, Error> {
 }
 
 pub fn fun_type(fun: &Function) -> Result<Type, Errors> {
-    let p_vars: Vec<String> = Pos::inner_collect(&fun.type_args);
-
     let mut args = vec![];
     let mut p_constraints = vec![];
     let mut errors = vec![];
 
     for (name, ann) in fun.type_constraints.iter() {
-        match annotation(ann, &p_vars) {
+        match annotation(ann, &fun.type_args) {
             Ok(Type {
                 data: T::Size(p),
                 end,
@@ -178,7 +176,7 @@ pub fn fun_type(fun: &Function) -> Result<Type, Errors> {
     }
 
     for (_, ann) in fun.args.iter() {
-        match annotation(ann, &p_vars) {
+        match annotation(ann, &fun.type_args) {
             Ok(t) => {
                 args.push(t);
             }
@@ -190,7 +188,7 @@ pub fn fun_type(fun: &Function) -> Result<Type, Errors> {
     }
 
     let ret_t = match &fun.ret {
-        Some(ret) => match annotation(ret, &p_vars) {
+        Some(ret) => match annotation(ret, &fun.type_args) {
             Ok(t) => t,
             Err(e) => {
                 errors.push(e);
@@ -211,12 +209,13 @@ pub fn fun_type(fun: &Function) -> Result<Type, Errors> {
 mod tests {
     use super::annotation;
     use crate::parser::parse_expr;
+    use crate::parser::Pos;
 
     #[test]
     fn anns() {
         let ann = annotation(
             &parse_expr("f32[B, 2*A]").unwrap(),
-            &["A".into(), "B".into()],
+            &[Pos::new(0, "A".into(), 1), Pos::new(0, "B".into(), 1)],
         );
         assert_eq!(
             format!("{:?}", ann),

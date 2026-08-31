@@ -1,5 +1,5 @@
 use crate::error::{Error, error_at};
-use crate::parser::lexer::ArithOp;
+use crate::parser::lexer::{ArithOp, ArithCmpOp, BoolOp};
 use crate::{parser::Pos, solver::poly::Poly};
 
 use std::rc::Rc;
@@ -105,6 +105,11 @@ impl Type {
             },
             (T::Size(a), ArithOp::Add, T::Size(b)) => Ok(Self::size(a.add(b), other)),
             (T::Size(a), ArithOp::Sub, T::Size(b)) => Ok(Self::size(a.sub(b), other)),
+            (T::Size(a), ArithOp::Add, T::Ind(b)) => Ok(Self::ind(a.add(b), other)),
+            (T::Size(a), ArithOp::Sub, T::Ind(b)) => Ok(Self::ind(a.sub(b), other)),
+            (T::Ind(a), ArithOp::Add, T::Size(b)) => Ok(Self::ind(a.add(b), other)),
+            (T::Ind(a), ArithOp::Sub, T::Size(b)) => Ok(Self::ind(a.sub(b), other)),
+            (T::Ind(_), _, T::Ind(_)) => Ok(Self::new_at(T::I32, other)),
             (
                 T::Array {
                     elem: a_elem,
@@ -134,6 +139,96 @@ impl Type {
                 Type,
                 other,
                 "cannot perform arithmetic between \"{:?}\" and \"{:?}\"",
+                self.data,
+                other.data
+            )),
+        }
+    }
+
+    pub fn try_compare(&self, op: &ArithCmpOp, other: &Self) -> Result<Self, Error> {
+        match (&self.data, op, &other.data) {
+            (T::F32, _, T::F32) => Ok(Self::new_at(T::Bool, other)),
+            (T::I32, _, T::I32) => Ok(Self::new_at(T::Bool, other)),
+            (T::I32, _, T::Size(_)) | (T::Size(_), _, T::I32) => Ok(Self::new_at(T::Bool, other)),
+            (T::I32, _, T::Ind(_)) | (T::Ind(_), _, T::I32) => Ok(Self::new_at(T::Bool, other)),
+            (T::Size(_) | T::Ind(_), _, T::Size(_) | T::Ind(_)) => Ok(Self::new_at(T::Bool, other)),
+            (T::Bool, _, T::Bool) => match op {
+                ArithCmpOp::Eq | ArithCmpOp::NotEq => Ok(Self::new_at(T::Bool, other)),
+                _ => Err(error_at!(
+                    Type,
+                    other,
+                    "cannot perform comparison between \"{:?}\" and \"{:?}\"",
+                    self.data,
+                    other.data
+                ))
+            }
+            (
+                T::Array {
+                    elem: a_elem,
+                    shape: a_shape,
+                },
+                op,
+                T::Array {
+                    elem: b_elem,
+                    shape: b_shape,
+                },
+            ) => {
+                if a_shape == b_shape {
+                    let elementwise = a_elem.try_compare(op, b_elem)?;
+                    Ok(Type::new_array(elementwise, a_shape.clone(), other))
+                } else {
+                    Err(error_at!(
+                        Type,
+                        other,
+                        "array shapes cannot match; found \"{:?}\" and \"{:?}\"",
+                        a_shape,
+                        b_shape
+                    ))
+                }
+            }
+            (T::Error, _, _) | (_, _, T::Error) => Ok(Self::error_at(other)),
+            _ => Err(error_at!(
+                Type,
+                other,
+                "cannot perform comparison between \"{:?}\" and \"{:?}\"",
+                self.data,
+                other.data
+            )),
+        }
+    }
+
+    pub fn try_bool_op(&self, op: &BoolOp, other: &Self) -> Result<Self, Error> {
+        match (&self.data, op, &other.data) {
+            (T::Bool, _, T::Bool) => Ok(Self::new_at(T::Bool, other)),
+            (T::Error, _, _) | (_, _, T::Error) => Ok(Self::error_at(other)),
+            (
+                T::Array {
+                    elem: a_elem,
+                    shape: a_shape,
+                },
+                op,
+                T::Array {
+                    elem: b_elem,
+                    shape: b_shape,
+                },
+            ) => {
+                if a_shape == b_shape {
+                    let elementwise = a_elem.try_bool_op(op, b_elem)?;
+                    Ok(Type::new_array(elementwise, a_shape.clone(), other))
+                } else {
+                    Err(error_at!(
+                        Type,
+                        other,
+                        "array shapes cannot match; found \"{:?}\" and \"{:?}\"",
+                        a_shape,
+                        b_shape
+                    ))
+                }
+            }
+            _ => Err(error_at!(
+                Type,
+                other,
+                "cannot perform comparison between \"{:?}\" and \"{:?}\"",
                 self.data,
                 other.data
             )),
