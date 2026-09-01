@@ -1,11 +1,11 @@
 //! Wasm bindings.
 
-use crate::parser::ParserOutput;
-
 use super::error::Error;
-use super::parser::lexer::{Tok, Token, tokenize};
-use super::parser::parse;
-use super::typechecker::check_source;
+use super::parser::{
+    ParserOutput,
+    lexer::{Tok, Token, tokenize},
+};
+use super::typechecker::check;
 
 use wasm_bindgen::prelude::*;
 
@@ -118,8 +118,9 @@ pub fn lex(code: &str) -> Vec<JsValue> {
 
 #[wasm_bindgen]
 pub fn compile(code: &str) -> JsValue {
-    let mut output = parse(code);
-    check_source(&mut output);
+    let mut output = ParserOutput::parse(code);
+    let type_errors = check(&output, None);
+    output.errors.extend(type_errors);
 
     let errors = output
         .errors

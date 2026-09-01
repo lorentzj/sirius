@@ -6,7 +6,7 @@ use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-use super::poly::{LinearPoly, Poly, coef::Coef, mono::Var};
+use super::poly::{Poly, coef::Coef, mono::Var};
 
 /// Obligation vocabulary.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -59,19 +59,14 @@ impl fmt::Display for Cmp {
 /// Format for facts and goals, e.g. `X > 2*Y`.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Constraint {
-    pub lhs: LinearPoly,
+    pub lhs: Poly,
     pub cmp: Cmp,
-    pub rhs: LinearPoly,
+    pub rhs: Poly,
 }
 
 impl Constraint {
-    pub fn new(lhs: LinearPoly, cmp: Cmp, rhs: LinearPoly) -> Self {
+    pub fn new(lhs: Poly, cmp: Cmp, rhs: Poly) -> Self {
         Self { lhs, cmp, rhs }
-    }
-
-    pub fn try_new(lhs: Poly, cmp: Cmp, rhs: Poly) -> Option<Self> {
-        let (lhs, rhs) = (LinearPoly::new(lhs)?, LinearPoly::new(rhs)?);
-        Some(Self::new(lhs, cmp, rhs))
     }
 }
 
@@ -113,8 +108,8 @@ impl Solver {
         let mut vars: Vec<Var> = Vec::new();
         for c in facts.iter().chain(std::iter::once(goal)) {
             for p in [&c.lhs, &c.rhs] {
-                debug_assert!(p.get().total_degree() <= 1);
-                for v in p.get().vars() {
+                debug_assert!(p.total_degree() <= 1);
+                for v in p.vars() {
                     if !vars.contains(&v) {
                         vars.push(v);
                     }
@@ -157,9 +152,9 @@ fn verdict_tag(v: &Verdict) -> &'static str {
 fn render(c: &Constraint, names: &[&str]) -> String {
     format!(
         "{} {} {}",
-        c.lhs.get().display_with(Some(names)),
+        c.lhs.display_with(Some(names)),
         c.cmp,
-        c.rhs.get().display_with(Some(names))
+        c.rhs.display_with(Some(names))
     )
 }
 
@@ -196,12 +191,11 @@ fn smt_cmp(c: &Constraint) -> String {
     )
 }
 
-fn smt_poly(p: &LinearPoly) -> String {
-    if p.get().is_zero() {
+fn smt_poly(p: &Poly) -> String {
+    if p.is_zero() {
         return "0".to_string();
     }
     let terms: Vec<String> = p
-        .get()
         .terms()
         .iter()
         .map(|(c, m)| {
@@ -314,19 +308,15 @@ mod tests {
     use super::super::poly::poly;
     use super::*;
 
-    fn solver() -> Option<Solver> {
-        Solver::new(None)
-    }
-
     #[test]
     fn entailment_with_context() {
-        let mut s = solver().unwrap();
+        let mut s = Solver::new(None).unwrap();
         // N >= 1 => 0 < N
-        let facts = [Constraint::try_new(poly!(n), Cmp::Ge, poly!(1)).unwrap()];
-        let goal = Constraint::try_new(poly!(0), Cmp::Lt, poly!(n)).unwrap();
+        let facts = [Constraint::new(poly!(n), Cmp::Ge, poly!(1))];
+        let goal = Constraint::new(poly!(0), Cmp::Lt, poly!(n));
         assert_eq!(s.entails_lia(&facts, &goal, &[], &["N"]), Verdict::Proved);
         // N >= 1 =/> 1 < N
-        let goal = Constraint::try_new(poly!(1), Cmp::Lt, poly!(n)).unwrap();
+        let goal = Constraint::new(poly!(1), Cmp::Lt, poly!(n));
         match s.entails_lia(&facts, &goal, &['n' as Var], &["N"]) {
             Verdict::Refuted(model) => assert_eq!(model, vec![('n' as Var, 1)]),
             v => panic!("expected refutation, got {v:?}"),
@@ -335,19 +325,19 @@ mod tests {
 
     #[test]
     fn integer_reasoning_not_real() {
-        let mut s = solver().unwrap();
+        let mut s = Solver::new(None).unwrap();
         // 2N >= 1 => N >= 1
-        let facts = [Constraint::try_new(poly!(2 * n), Cmp::Ge, poly!(1)).unwrap()];
-        let goal = Constraint::try_new(poly!(n), Cmp::Ge, poly!(1)).unwrap();
+        let facts = [Constraint::new(poly!(2 * n), Cmp::Ge, poly!(1))];
+        let goal = Constraint::new(poly!(n), Cmp::Ge, poly!(1));
         assert_eq!(s.entails_lia(&facts, &goal, &[], &["N"]), Verdict::Proved);
     }
 
     #[test]
     fn commute() {
-        let mut s = solver().unwrap();
+        let mut s = Solver::new(None).unwrap();
         // N == M => M == N
-        let facts = [Constraint::try_new(poly!(n), Cmp::Eq, poly!(m)).unwrap()];
-        let goal = Constraint::try_new(poly!(m), Cmp::Eq, poly!(n)).unwrap();
+        let facts = [Constraint::new(poly!(n), Cmp::Eq, poly!(m))];
+        let goal = Constraint::new(poly!(m), Cmp::Eq, poly!(n));
         assert_eq!(
             s.entails_lia(&facts, &goal, &[], &["N", "M"]),
             Verdict::Proved

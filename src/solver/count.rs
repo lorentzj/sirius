@@ -271,7 +271,7 @@ mod tests {
     }
 
     #[test]
-    fn arith_sanity() {
+    fn arithmetic_sanity() {
         // N/2 * N/3 = N^2/6; N/2 − N/2 = 0
         let (a, b) = (Count::ratio(poly!(x), 2), Count::ratio(poly!(x), 3));
         assert_eq!(a.add(&b), Count::ratio(poly!(5 * x), 6));

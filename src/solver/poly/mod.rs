@@ -216,6 +216,12 @@ impl Poly {
         vs
     }
 
+    pub fn always_nonneg(&self, nonneg: &dyn Fn(Var) -> bool) -> bool {
+        self.terms().iter().all(|(c, m)| {
+            c.is_positive() && m.exps().iter().all(|&(v, pow)| nonneg(v) || pow % 2 == 0)
+        })
+    }
+
     pub fn assert_canonical(&self) {
         for w in self.terms.windows(2) {
             assert!(
@@ -238,30 +244,8 @@ impl Poly {
     }
 }
 
-/// [`Poly`], but guaranteed linear.
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub struct LinearPoly(Poly);
-
-impl LinearPoly {
-    pub fn new(p: Poly) -> Option<Self> {
-        for (_, m) in &p.terms {
-            match m.exps() {
-                [] => continue,
-                [(_, 1)] => continue,
-                _ => return None,
-            }
-        }
-
-        Some(Self(p))
-    }
-
-    pub fn get(&self) -> &Poly {
-        &self.0
-    }
-}
-
 #[cfg(test)]
-mod test {
+mod tests {
     use super::{Coef, Poly, monomial_div, poly};
 
     #[test]
@@ -276,7 +260,7 @@ mod test {
     }
 
     #[test]
-    fn arith_sanity() {
+    fn arithmetic_sanity() {
         let x = poly!(a ^ 2 + 2 * b + c);
         let y = poly!(2 * a ^ 2 - c ^ 3 + d);
         assert!(x.add(&y) == poly!(-1 * c ^ 3 + 3 * a ^ 2 + 2 * b + c + d));
@@ -295,7 +279,7 @@ mod test {
     }
 
     #[test]
-    fn arith_fuzz() {
+    fn arithmetic_fuzz() {
         use rand::prelude::*;
 
         use super::Poly;

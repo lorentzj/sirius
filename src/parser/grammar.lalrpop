@@ -1,12 +1,12 @@
-use crate::parser::{UnaryOp, Pos, Expr, AccessDim, Stmt, Block, Function, Tree};
+use crate::parser::{UnaryOp, Pos, Expr, AccessDim, Stmt, Block, Function};
 use crate::parser::lexer;
 use lexer::{Tok, Op, AssnOp, ArithOp, ArithCmpOp, BoolOp};
 
 grammar(type_tokens: &mut Vec<usize>);
 
-pub Tree: Tree = {
+pub Tree: Vec<Function> = {
     "newline"* <fns: (Fn "newline"*)*> => {
-        Tree(fns.into_iter().map(|s| s.0).collect())
+        fns.into_iter().map(|s| s.0).collect()
     }
 }
 

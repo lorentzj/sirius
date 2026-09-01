@@ -1,39 +1,38 @@
-use super::{Type, types::T};
-use crate::error::{Error, Errors, error_at};
-use crate::parser::ast::{AD, E, Expr, Function};
+use super::Ty;
+use crate::error::{Error, error_at};
+use crate::parser::UnaryOp;
+use crate::parser::ast::{AD, E, Expr};
 use crate::parser::lexer::{ArithOp, Op};
-use crate::parser::{Pos, UnaryOp};
 use crate::solver::poly::Poly;
 
-fn scalars(name: &str) -> Option<T> {
+fn scalars(name: &str) -> Option<Ty> {
     match name {
-        "f32" => Some(T::F32),
-        "i32" => Some(T::I32),
-        "bool" => Some(T::Bool),
-        "null" => Some(T::Null),
-        "void" => Some(T::Void),
+        "f32" => Some(Ty::F32),
+        "f64" => Some(Ty::F64),
+        "i64" => Some(Ty::I64),
+        "bool" => Some(Ty::Bool),
         _ => None,
     }
 }
 
-pub fn annotation(ann: &Expr, p_vars: &[Pos<String>]) -> Result<Type, Error> {
+pub fn annotation(ann: &Expr, p_vars: &[&str]) -> Result<Ty, Error> {
     match &ann.data {
         E::Ident(s) => {
             if let Some(t) = scalars(s) {
-                Ok(Type::new_at(t, ann))
-            } else if let Some(p_position) = p_vars.iter().position(|v| v.data == *s) {
-                Ok(Type::size(Poly::var(p_position as u32, 1), ann))
+                Ok(t)
+            } else if let Some(p_position) = p_vars.iter().position(|v| v == s) {
+                Ok(Ty::Size(Poly::var(p_position as u32, 1)))
             } else {
                 Err(error_at!(Type, ann, "unknown type \"{}\"", s))
             }
         }
-        E::Int(i) => Ok(Type::size(Poly::constant(*i), ann)),
+        E::Int(i) => Ok(Ty::Size(Poly::constant(*i))),
         E::Tuple(inner) => {
             let mut types = vec![];
             for e in inner {
                 types.push(annotation(e, p_vars)?);
             }
-            Ok(Type::new_at(T::Tuple(types), ann))
+            Ok(Ty::Tuple(types))
         }
         E::Access(t, dims) => {
             let parsed_t = annotation(t, p_vars)?;
@@ -42,11 +41,7 @@ pub fn annotation(ann: &Expr, p_vars: &[Pos<String>]) -> Result<Type, Error> {
                 match &dim.data {
                     AD::Point(e) => {
                         let p = annotation(e, p_vars)?;
-                        if let Type {
-                            data: T::Size(poly),
-                            ..
-                        } = p
-                        {
+                        if let Ty::Size(poly) = p {
                             parsed_dims.push(poly);
                         } else {
                             return Err(error_at!(Type, e, "dimension must be a poly expression"));
@@ -61,31 +56,27 @@ pub fn annotation(ann: &Expr, p_vars: &[Pos<String>]) -> Result<Type, Error> {
                     }
                 }
             }
-            if let Type {
-                data:
-                    T::Array {
-                        elem: inner_t,
-                        shape: mut start_dims,
-                    },
-                ..
+            if let Ty::Array {
+                elem: inner_t,
+                shape: mut start_dims,
             } = parsed_t
             {
                 // array dimensions are cumulative
                 // so extend the existing dimensions with the new ones
-                // e.g. a[10][20] == a[10, 20]
+                // a[10][20] == a[10, 20]
                 start_dims.extend(parsed_dims);
-                Ok(Type::new_array(*inner_t, start_dims, ann))
+                Ok(Ty::new_arr(*inner_t, start_dims))
             } else {
-                Ok(Type::new_array(parsed_t, parsed_dims, ann))
+                Ok(Ty::new_arr(parsed_t, parsed_dims))
             }
         }
         E::BinOp(lhs, op, rhs) => {
             let lhs_t = annotation(lhs, p_vars)?;
             let rhs_t = annotation(rhs, p_vars)?;
 
-            let (lhs_poly, rhs_poly) = match (lhs_t.data, rhs_t.data) {
-                (T::Size(l), T::Size(r)) => (l, r),
-                (T::Size(_), _) => {
+            let (lhs_poly, rhs_poly) = match (lhs_t, rhs_t) {
+                (Ty::Size(l), Ty::Size(r)) => (l, r),
+                (Ty::Size(_), _) => {
                     return Err(error_at!(Type, rhs, "operand must be a poly expression"));
                 }
                 (_, _) => {
@@ -94,17 +85,17 @@ pub fn annotation(ann: &Expr, p_vars: &[Pos<String>]) -> Result<Type, Error> {
             };
 
             match op {
-                Op::Arith(ArithOp::Add) => Ok(Type::size(lhs_poly.add(&rhs_poly), ann)),
-                Op::Arith(ArithOp::Sub) => Ok(Type::size(lhs_poly.sub(&rhs_poly), ann)),
-                Op::Arith(ArithOp::Mul) => Ok(Type::size(lhs_poly.mul(&rhs_poly), ann)),
+                Op::Arith(ArithOp::Add) => Ok(Ty::Size(lhs_poly.add(&rhs_poly))),
+                Op::Arith(ArithOp::Sub) => Ok(Ty::Size(lhs_poly.sub(&rhs_poly))),
+                Op::Arith(ArithOp::Mul) => Ok(Ty::Size(lhs_poly.mul(&rhs_poly))),
                 Op::Arith(ArithOp::Exp) => match rhs_poly.as_constant() {
                     Some(rhs_const) => {
                         if rhs_const.is_zero() {
-                            Ok(Type::size(Poly::constant(1), ann))
+                            Ok(Ty::Size(Poly::constant(1)))
                         } else if !rhs_const.is_positive() {
                             Err(error_at!(Type, rhs, "power must be non-negative"))
                         } else {
-                            Ok(Type::size(lhs_poly.pow(rhs_const.get() as u32), ann))
+                            Ok(Ty::Size(lhs_poly.pow(rhs_const.get() as u32)))
                         }
                     }
                     None => Err(error_at!(
@@ -133,8 +124,8 @@ pub fn annotation(ann: &Expr, p_vars: &[Pos<String>]) -> Result<Type, Error> {
 
                     let inner_t = annotation(&args[0], p_vars)?;
 
-                    if let T::Size(p) = inner_t.data {
-                        Ok(Type::ind_rc(p.clone(), ann))
+                    if let Ty::Size(p) = inner_t {
+                        Ok(Ty::Ind(p.clone()))
                     } else {
                         Err(error_at!(Type, ann, "Ind expects size argument"))
                     }
@@ -146,62 +137,9 @@ pub fn annotation(ann: &Expr, p_vars: &[Pos<String>]) -> Result<Type, Error> {
         },
         E::UnOp(UnaryOp::Option, inner) => {
             let inner_t = annotation(inner, p_vars)?;
-            Ok(Type::new_at(T::Option(Box::new(inner_t)), ann))
+            Ok(Ty::Option(Box::new(inner_t)))
         }
         _ => Err(error_at!(Type, ann, "invalid type annotation")),
-    }
-}
-
-pub fn fun_type(fun: &Function) -> Result<Type, Errors> {
-    let mut args = vec![];
-    let mut p_constraints = vec![];
-    let mut errors = vec![];
-
-    for (name, ann) in fun.type_constraints.iter() {
-        match annotation(ann, &fun.type_args) {
-            Ok(Type {
-                data: T::Size(p),
-                end,
-                ..
-            }) => {
-                p_constraints.push(Pos::new(name.start, (name.data.clone(), p), end));
-            }
-            Ok(_) => {
-                errors.push(error_at!(Type, ann, "constraint must be a poly expression"));
-            }
-            Err(e) => {
-                errors.push(e);
-            }
-        }
-    }
-
-    for (_, ann) in fun.args.iter() {
-        match annotation(ann, &fun.type_args) {
-            Ok(t) => {
-                args.push(t);
-            }
-            Err(e) => {
-                errors.push(e);
-                args.push(Type::error_at(ann));
-            }
-        }
-    }
-
-    let ret_t = match &fun.ret {
-        Some(ret) => match annotation(ret, &fun.type_args) {
-            Ok(t) => t,
-            Err(e) => {
-                errors.push(e);
-                Type::new_at(T::Void, ret)
-            }
-        },
-        None => Type::new_at(T::Void, &fun.name),
-    };
-
-    if errors.is_empty() {
-        Ok(Type::new_fn(fun.type_args.clone(), args, ret_t, &fun.name))
-    } else {
-        Err(errors)
     }
 }
 
@@ -209,23 +147,19 @@ pub fn fun_type(fun: &Function) -> Result<Type, Errors> {
 mod tests {
     use super::annotation;
     use crate::parser::parse_expr;
-    use crate::parser::Pos;
 
     #[test]
     fn anns() {
-        let ann = annotation(
-            &parse_expr("f32[B, 2*A]").unwrap(),
-            &[Pos::new(0, "A".into(), 1), Pos::new(0, "B".into(), 1)],
-        );
+        let ann = annotation(&parse_expr("f32[B, 2*A]").unwrap(), &["A", "B"]);
         assert_eq!(
             format!("{:?}", ann),
-            "Ok(Array { elem: F32 @ (0, 1), shape: [x1, 2*x0] } @ (0, 8))"
+            "Ok(Array { elem: F32, shape: [x1, 2*x0] })"
         );
 
-        let ann = annotation(&parse_expr("(i32, f32[3]?)").unwrap(), &[]);
+        let ann = annotation(&parse_expr("(i64, f32[3]?)").unwrap(), &[]);
         assert_eq!(
             format!("{:?}", ann),
-            "Ok(Tuple([I32 @ (1, 2), Option(Array { elem: F32 @ (3, 4), shape: [3] } @ (3, 7)) @ (3, 8)]) @ (0, 9))"
+            "Ok(Tuple([I64, Option(Array { elem: F32, shape: [3] })]))"
         );
     }
 }

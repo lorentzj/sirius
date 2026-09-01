@@ -3,7 +3,7 @@ pub mod lexer;
 pub mod pos;
 
 use crate::error::{Er, Error, ErrorType, Errors};
-pub use ast::{AccessDim, Block, Expr, Function, Stmt, Tree, UnaryOp};
+pub use ast::{AccessDim, Block, Expr, Function, Stmt, UnaryOp};
 pub use lexer::{Tok, Token};
 pub use pos::Pos;
 
@@ -11,64 +11,66 @@ lalrpop_util::lalrpop_mod!(#[allow(clippy::all)] pub grammar, "/parser/grammar.r
 
 pub struct ParserOutput {
     pub tokens: Vec<Token>,
-    pub tree: Option<Tree>,
+    pub tree: Option<Vec<Function>>,
     pub errors: Errors,
 }
 
-pub fn parse(code: &str) -> ParserOutput {
-    let mut tokens = lexer::tokenize(code);
+impl ParserOutput {
+    pub fn parse(code: &str) -> Self {
+        let mut tokens = lexer::tokenize(code);
 
-    let errors: Vec<_> = tokens
-        .iter()
-        .enumerate()
-        .filter_map(|(i, t)| {
-            t.get_error().map(|msg| {
-                Error::new(
-                    i,
-                    Er {
-                        error_type: ErrorType::Syntax,
-                        message: msg,
-                    },
-                    i + 1,
-                )
+        let errors: Vec<_> = tokens
+            .iter()
+            .enumerate()
+            .filter_map(|(i, t)| {
+                t.get_error().map(|msg| {
+                    Error::new(
+                        i,
+                        Er {
+                            error_type: ErrorType::Syntax,
+                            message: msg,
+                        },
+                        i + 1,
+                    )
+                })
             })
-        })
-        .collect();
+            .collect();
 
-    let tokens_no_comments_iter = tokens
-        .iter()
-        .enumerate()
-        .filter(|(_, t)| !t.is_comment())
-        .map(|(i, token)| Ok((i, token.data.clone(), i + 1)));
+        let tokens_no_comments_iter = tokens
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| !t.is_comment())
+            .map(|(i, token)| Ok((i, token.data.clone(), i + 1)));
 
-    let mut type_tokens = vec![];
+        let mut type_tokens = vec![];
 
-    if errors.is_empty() {
-        let parser_output =
-            grammar::TreeParser::new().parse(&mut type_tokens, tokens_no_comments_iter);
+        if errors.is_empty() {
+            let parser_output =
+                grammar::TreeParser::new().parse(&mut type_tokens, tokens_no_comments_iter);
 
-        for i in type_tokens {
-            tokens[i].is_type_ann = true;
-        }
+            for i in type_tokens {
+                tokens[i].is_type_ann = true;
+            }
 
-        match parser_output {
-            Ok(tree) => ParserOutput {
-                tokens,
-                tree: Some(tree),
-                errors,
-            },
+            match parser_output {
+                Ok(tree) => Self {
+                    tokens,
+                    tree: Some(tree),
+                    errors,
+                },
 
-            Err(err) => ParserOutput {
+                Err(err) => Self {
+                    tokens,
+                    tree: None,
+                    errors: vec![Error::from_lalrpop(err)],
+                },
+            }
+        } else {
+            Self {
                 tokens,
                 tree: None,
-                errors: vec![Error::from_lalrpop(err)],
-            },
-        }
-    } else {
-        ParserOutput {
-            tokens,
-            tree: None,
-            errors,
+                errors,
+            }
         }
     }
 }

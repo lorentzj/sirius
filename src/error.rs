@@ -26,7 +26,7 @@ pub enum ErrorType {
     Flow,
     Mutation,
     Type,
-    NotImplmented
+    NotImplmented,
 }
 
 impl fmt::Display for ErrorType {

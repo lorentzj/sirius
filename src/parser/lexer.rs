@@ -16,7 +16,7 @@ pub enum ArithCmpOp {
     Less,
     LessOrEq,
     Eq,
-    NotEq
+    NotEq,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -500,7 +500,12 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                             should_pop = true;
                             Token::new(Tok::Op(Op::Apply), line, *start, col)
                         } else {
-                            Token::new(Tok::Op(Op::ArithCmp(ArithCmpOp::Greater)), line, col - 1, col)
+                            Token::new(
+                                Tok::Op(Op::ArithCmp(ArithCmpOp::Greater)),
+                                line,
+                                col - 1,
+                                col,
+                            )
                         }
                     }
                     '<' => Token::new(Tok::Op(Op::ArithCmp(ArithCmpOp::Less)), line, col - 1, col),
@@ -523,15 +528,30 @@ pub fn tokenize(code: &str) -> Vec<Token> {
                             match last_op {
                                 Op::ArithCmp(ArithCmpOp::Greater) => {
                                     should_pop = true;
-                                    Token::new(Tok::Op(Op::ArithCmp(ArithCmpOp::GreaterOrEq)), line, *start, col)
+                                    Token::new(
+                                        Tok::Op(Op::ArithCmp(ArithCmpOp::GreaterOrEq)),
+                                        line,
+                                        *start,
+                                        col,
+                                    )
                                 }
                                 Op::ArithCmp(ArithCmpOp::Less) => {
                                     should_pop = true;
-                                    Token::new(Tok::Op(Op::ArithCmp(ArithCmpOp::LessOrEq)), line, *start, col)
+                                    Token::new(
+                                        Tok::Op(Op::ArithCmp(ArithCmpOp::LessOrEq)),
+                                        line,
+                                        *start,
+                                        col,
+                                    )
                                 }
                                 Op::Not => {
                                     should_pop = true;
-                                    Token::new(Tok::Op(Op::ArithCmp(ArithCmpOp::NotEq)), line, *start, col)
+                                    Token::new(
+                                        Tok::Op(Op::ArithCmp(ArithCmpOp::NotEq)),
+                                        line,
+                                        *start,
+                                        col,
+                                    )
                                 }
                                 Op::Arith(ArithOp::Add) => {
                                     should_pop = true;

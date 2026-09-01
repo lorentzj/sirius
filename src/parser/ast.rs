@@ -291,5 +291,3 @@ pub struct Function {
     pub ret: Option<Expr>,
     pub body: Block,
 }
-
-pub struct Tree(pub Vec<Function>);

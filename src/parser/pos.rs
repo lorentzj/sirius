@@ -7,6 +7,12 @@ pub struct Pos<T> {
     pub end: usize,
 }
 
+impl Pos<()> {
+    pub fn span(start: usize, end: usize) -> Self {
+        Self::new(start, (), end)
+    }
+}
+
 impl<T> Pos<T> {
     pub fn new(start: usize, data: T, end: usize) -> Self {
         Self { start, data, end }
