@@ -217,9 +217,9 @@ impl Poly {
     }
 
     pub fn always_nonneg(&self, nonneg: &dyn Fn(Var) -> bool) -> bool {
-        self.terms().iter().all(|(c, m)| {
-            c.is_positive() && m.exps().iter().all(|&(v, pow)| nonneg(v) || pow % 2 == 0)
-        })
+        self.terms()
+            .iter()
+            .all(|(c, m)| c.is_positive() && m.always_nonneg(nonneg))
     }
 
     pub fn assert_canonical(&self) {

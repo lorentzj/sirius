@@ -57,7 +57,7 @@ async function getWorker(status: StatusLine): Promise<Worker> {
         }
     });
 
-    worker.postMessage({message: "poke"});
+    worker.postMessage({message: "poke"} as Poke);
 
     return p;
 }
@@ -176,7 +176,7 @@ class StatusLine {
             this.root.classList.add("error");
             this.compilerMessage.textContent = "compiler crashed";
         } else {
-            this.compilerMessage.textContent = "ready";
+            this.compilerMessage.textContent = "idle";
         }
     }
 

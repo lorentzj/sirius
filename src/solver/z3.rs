@@ -68,6 +68,15 @@ impl Constraint {
     pub fn new(lhs: Poly, cmp: Cmp, rhs: Poly) -> Self {
         Self { lhs, cmp, rhs }
     }
+
+    pub fn display_with(&self, names: &[&str]) -> String {
+        format!(
+            "{} {} {}",
+            self.lhs.display_with(Some(names)),
+            self.cmp,
+            self.rhs.display_with(Some(names))
+        )
+    }
 }
 
 /// Z3 response. Refutations provide counterexamples.

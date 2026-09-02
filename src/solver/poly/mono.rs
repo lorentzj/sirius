@@ -53,6 +53,12 @@ impl Mono {
         self.exps.iter().map(|&(_, e)| e).sum()
     }
 
+    pub fn always_nonneg(&self, nonneg: &dyn Fn(Var) -> bool) -> bool {
+        self.exps()
+            .iter()
+            .all(|&(v, pow)| nonneg(v) || pow % 2 == 0)
+    }
+
     pub fn mul(&self, other: &Self) -> Self {
         // Merge sorted `exps` and combine like vars to maintain canonical form.
         let mut exps = Vec::with_capacity(self.exps.len() + other.exps.len());

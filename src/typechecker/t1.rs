@@ -77,7 +77,11 @@ impl Linearized {
         }
     }
 
-    pub fn prove(&self, solver: &mut Solver) -> Verdict {
+    pub fn entails_lia(&self, solver: &mut Solver) -> Verdict {
+        if self.facts.contains(&self.goal) {
+            return Verdict::Proved;
+        }
+
         if t0::prove(self.goal.cmp, &self.goal.lhs, &self.goal.rhs, &|v| {
             self.nonneg.contains(&v)
         }) {
@@ -86,6 +90,41 @@ impl Linearized {
 
         let name_strs: Vec<_> = self.names.iter().map(String::as_str).collect();
         solver.entails_lia(&self.facts, &self.goal, &self.nonneg, &name_strs)
+    }
+}
+
+pub fn prove(
+    solver: &mut Solver,
+    facts: &[Constraint],
+    goal: &Constraint,
+    names: &[String],
+    nonneg: &[Var],
+) -> Option<String> {
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    let lin = Linearized::new(facts, goal, &names, &|v| nonneg.contains(&v));
+
+    match lin.entails_lia(solver) {
+        Verdict::Proved => None,
+        Verdict::Refuted(model) => {
+            let mut msg = format!("cannot prove \"{}\"", goal.display_with(&names));
+
+            // a model over linearized atoms need not be a real counterexample, so only quote
+            // one when nothing was abstracted away
+            if lin.pure_linear {
+                let mut goal_vars = goal.lhs.vars();
+                goal_vars.extend(goal.rhs.vars());
+                let point: Vec<String> = model
+                    .iter()
+                    .filter(|(v, _)| goal_vars.contains(v))
+                    .map(|(v, val)| format!("{} = {val}", names.get(*v as usize).unwrap_or(&"?")))
+                    .collect();
+                if !point.is_empty() {
+                    msg.push_str(&format!("; counterexample: {}", point.join(", ")));
+                }
+            }
+            Some(msg)
+        }
+        Verdict::Unknown => Some(format!("cannot decide \"{}\"", goal.display_with(&names))),
     }
 }
 
@@ -118,6 +157,9 @@ mod tests {
 
         assert!(lin.nonneg.contains(&2));
         assert_eq!(lin.names[2], "N*M");
-        assert_eq!(lin.prove(&mut Solver::new(None).unwrap()), Verdict::Proved);
+        assert_eq!(
+            lin.entails_lia(&mut Solver::new(None).unwrap()),
+            Verdict::Proved
+        );
     }
 }

@@ -186,12 +186,12 @@ impl Count {
     pub fn sum_below<T: Into<Var>>(&self, v: T, hi: &Poly) -> Self {
         let v = v.into();
         assert_eq!(hi.degree_in(v), 0);
-        let kmax = self.num().degree_in(v);
-        if kmax == 0 {
+        if self.is_zero() {
             return Self::zero();
         }
 
-        let kmax = kmax as usize;
+        // a summand of degree 0 in v still sums to (summand * hi), handled by the k = 0 group
+        let kmax = self.num().degree_in(v) as usize;
 
         let mut groups: Vec<Vec<(Coef, Mono)>> = vec![Vec::new(); kmax + 1];
         for (c, m) in self.num().terms().iter().rev() {
@@ -252,7 +252,7 @@ fn stirling2(kmax: usize) -> Vec<Vec<Coef>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Count, stirling2};
+    use super::{Count, Var, stirling2};
     use crate::solver::poly::{coef::Coef, poly};
 
     #[test]
@@ -291,6 +291,20 @@ mod tests {
                 Coef::vec(&[0, 1, 7, 6, 1]),
                 Coef::vec(&[0, 1, 15, 25, 10, 1]),
             ]
+        );
+    }
+
+    #[test]
+    fn constant_summand() {
+        // Σ_{0<=i<B} 1 = B
+        let one = Count::ratio(poly!(1), 1);
+        assert_eq!(one.sum_below('i', &poly!(b)), Count::ratio(poly!(b), 1));
+
+        // Σ_{2<=i<B} 3 = 3B − 6
+        let three = Count::ratio(poly!(3), 1);
+        assert_eq!(
+            three.sum_range('i' as Var, &poly!(2), &poly!(b)),
+            Count::ratio(poly!(3 * b - 6), 1)
         );
     }
 

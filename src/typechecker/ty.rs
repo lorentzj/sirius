@@ -2,13 +2,15 @@ use std::collections::HashMap;
 
 use crate::solver::poly::{Poly, Var};
 
+pub const MAX_POW: i128 = 64;
+
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum Ty {
+pub enum Type {
     Bool,
     F32,
     F64,
     I64,
-    Array { elem: Box<Ty>, shape: Vec<Poly> },
+    Array { elem: Box<Type>, shape: Vec<Poly> },
     Ind(Poly),
     Size(Poly),
     Option(Box<Self>),
@@ -17,7 +19,7 @@ pub enum Ty {
     Error,
 }
 
-impl Ty {
+impl Type {
     pub fn is_error(&self) -> bool {
         matches!(self, Self::Error)
     }
@@ -26,16 +28,19 @@ impl Ty {
         matches!(self, Self::I64 | Self::Ind(_) | Self::Size(_))
     }
 
-    pub fn is_numeric(&self) -> bool {
-        self.is_int_like() || matches!(self, Self::F32 | Self::F64)
+    pub fn as_size(&self) -> Option<&Poly> {
+        match self {
+            Self::Size(p) => Some(p),
+            _ => None,
+        }
     }
 
     pub fn render(&self, names: &[&str]) -> String {
         match self {
             Self::Bool => "bool".to_string(),
-            Self::I64 => "I64".to_string(),
-            Self::F32 => "F32".to_string(),
-            Self::F64 => "F64".to_string(),
+            Self::I64 => "i64".to_string(),
+            Self::F32 => "f32".to_string(),
+            Self::F64 => "f64".to_string(),
             Self::Array { elem, shape } => {
                 let dims: Vec<String> = shape.iter().map(|p| p.display_with(Some(names))).collect();
                 format!("{}[{}]", elem.render(names), dims.join(", "))
@@ -67,7 +72,7 @@ impl Ty {
 
         Ok(match self {
             Self::Array { elem, shape } => Self::Array {
-                elem: elem.clone(),
+                elem: Box::new(elem.instantiate(subst)?),
                 shape: shape.iter().map(&poly).collect::<Result<_, _>>()?,
             },
             Self::Ind(p) => Self::Ind(poly(p)?),
@@ -82,7 +87,7 @@ impl Ty {
         })
     }
 
-    pub fn new_arr(elem: Ty, shape: Vec<Poly>) -> Self {
+    pub fn new_arr(elem: Type, shape: Vec<Poly>) -> Self {
         Self::Array {
             elem: Box::new(elem),
             shape,
@@ -92,30 +97,30 @@ impl Ty {
 
 #[cfg(test)]
 mod tests {
-    use super::Ty;
+    use super::Type;
     use crate::solver::poly::{Poly, Var, poly};
     use std::collections::HashMap;
 
     #[test]
     fn instantiation() {
-        let sig = Ty::new_arr(Ty::F32, vec![poly!(n + 1)]);
+        let sig = Type::new_arr(Type::F32, vec![poly!(n + 1)]);
         let subst = HashMap::from([('n' as Var, poly!(3))]);
         assert_eq!(
             sig.instantiate(&subst),
-            Ok(Ty::new_arr(Ty::F32, vec![poly!(4)]))
+            Ok(Type::new_arr(Type::F32, vec![poly!(4)]))
         );
     }
 
     #[test]
     fn poly_render() {
         let names = &["N", "M"];
-        let t = Ty::new_arr(
-            Ty::F32,
+        let t = Type::new_arr(
+            Type::F32,
             vec![
                 Poly::var(0u32, 1),
                 Poly::var(1u32, 1).add(&Poly::constant(1)),
             ],
         );
-        assert_eq!(t.render(names), "F32[N, M + 1]");
+        assert_eq!(t.render(names), "f32[N, M + 1]");
     }
 }

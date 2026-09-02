@@ -24,7 +24,7 @@ onmessage = async (e: MessageEvent<EditRequest | Poke>) => {
                 from: lineOffsets[error.start_line] + error.start_column,
                 to: lineOffsets[error.end_line] + error.end_column,
                 severity: "error",
-                message: `${error.type}: ${error.message}`
+                message: `${error.type}Error: ${error.message}`
             });
         }
 
