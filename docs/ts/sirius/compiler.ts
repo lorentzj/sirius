@@ -1,18 +1,18 @@
 import { linter, Diagnostic, setDiagnosticsEffect } from "@codemirror/lint";
 import { EditorView, Decoration, ViewPlugin, ViewUpdate, DecorationSet } from "@codemirror/view";
 import { RangeSetBuilder } from "@codemirror/state";
-import { init as z3init, Context as Z3Context } from 'z3-solver/build/browser';
 export { Diagnostic } from "@codemirror/lint";
 
-import { init } from "z3-solver";
+import * as z3 from "./z3";
 
 export type EditRequest = {
     id: string,
     code: string
 }
 
-export type Poke = {
-    message: "poke"
+export type CheckReady = {
+    message: "poke",
+    channel: z3.Channel
 }
 
 export type LintResponse = {
@@ -23,22 +23,14 @@ export type LintResponse = {
 }
 
 let worker: Worker | null = null;
-let z3Context: Z3Context | null = null;
-const decorationData: Map<number, Diagnostic[]> = new Map();
+let z3Channel = z3.channel(128*1024);
 
-async function loadZ3(): Promise<Z3Context> {
-    if(z3Context === null) {
-        const { Context } = await init();
-        z3Context = new Context("main");
-        return z3Context;
-    } else {
-        return z3Context;
-    }
-}
+const decorationData: Map<number, Diagnostic[]> = new Map();
 
 async function getWorker(status: StatusLine): Promise<Worker> {
     if(worker === null) {
         status.loading("loading compiler");
+        z3.processWhenAny(z3Channel, 100);
         worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     }
 
@@ -57,7 +49,7 @@ async function getWorker(status: StatusLine): Promise<Worker> {
         }
     });
 
-    worker.postMessage({message: "poke"} as Poke);
+    worker.postMessage({message: "poke", channel: z3Channel} as CheckReady);
 
     return p;
 }

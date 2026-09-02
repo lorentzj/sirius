@@ -1,10 +1,13 @@
 //! A pipe to [Z3](https://github.com/z3prover/z3) for passing QF_LIA constraints.
 
+use crate::bindings::log;
+use js_sys::Function;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use wasm_bindgen::prelude::*;
 
 use super::poly::{Poly, coef::Coef, mono::Var};
 
@@ -87,24 +90,53 @@ pub enum Verdict {
     Unknown,
 }
 
-/// Z3 instance, possibly with a filesystem cache.
+enum Z3Kind {
+    Callback(Box<dyn Fn(&str) -> String>),
+    Cli,
+}
+
 pub struct Solver {
     cache: HashMap<u64, Verdict>,
-    corpus_dir: Option<PathBuf>,
+    kind: Z3Kind,
+    // optional filesystem cache
+    cache_dir: Option<PathBuf>,
 }
 
 impl Solver {
-    pub fn new(cache_dir: Option<PathBuf>) -> Option<Solver> {
+    pub fn new_cli(cache_dir: Option<PathBuf>) -> Option<Solver> {
         let z3_available = Command::new("z3")
             .arg("-version")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
             .is_ok_and(|s| s.success());
+
         z3_available.then_some(Solver {
             cache: HashMap::new(),
-            corpus_dir: cache_dir,
+            kind: Z3Kind::Cli,
+            cache_dir,
         })
+    }
+
+    pub fn new_wasm(callback: Function) -> Solver {
+        let wrapped_callback = move |s: &str| {
+            let res = callback
+                .call1(&JsValue::NULL, &JsValue::from_str(s))
+                .and_then(|val| val.as_string().ok_or("callback returned non-string".into()));
+            match res {
+                Ok(model) => model,
+                Err(err) => {
+                    log(&format!("z3 failed: {err:?}"));
+                    "".into()
+                }
+            }
+        };
+
+        Solver {
+            cache: HashMap::new(),
+            kind: Z3Kind::Callback(Box::new(wrapped_callback)),
+            cache_dir: None,
+        }
     }
 
     pub fn entails_lia(
@@ -133,8 +165,8 @@ impl Solver {
             return v.clone();
         }
 
-        let verdict = run_z3(&script, &vars);
-        if let Some(dir) = &self.corpus_dir {
+        let verdict = self.run_z3(&script, &vars);
+        if let Some(dir) = &self.cache_dir {
             let _ = std::fs::create_dir_all(dir);
             let mut file = String::new();
             file.push_str(&format!("; obligation: {}\n", render(goal, names)));
@@ -147,6 +179,47 @@ impl Solver {
         }
         self.cache.insert(key, verdict.clone());
         verdict
+    }
+
+    fn run_z3(&mut self, script: &str, vars: &[Var]) -> Verdict {
+        let stdout = match &mut self.kind {
+            Z3Kind::Cli => {
+                let Ok(mut child) = Command::new("z3")
+                    .arg("-in")
+                    .arg("-smt2")
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::null())
+                    .spawn()
+                else {
+                    return Verdict::Unknown;
+                };
+                if let Some(stdin) = child.stdin.take() {
+                    let mut stdin = stdin;
+                    if stdin.write_all(script.as_bytes()).is_err() {
+                        let _ = child.kill();
+                        return Verdict::Unknown;
+                    }
+                }
+                let Ok(out) = child.wait_with_output() else {
+                    return Verdict::Unknown;
+                };
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                stdout.to_string()
+            }
+            Z3Kind::Callback(callback) => callback(script),
+        };
+
+        let mut stdout_lines = stdout.lines();
+
+        match stdout_lines.next().map(str::trim) {
+            Some("unsat") => Verdict::Proved,
+            Some("sat") => {
+                let rest: String = stdout_lines.collect::<Vec<_>>().join(" ");
+                Verdict::Refuted(parse_model(&rest, vars))
+            }
+            _ => Verdict::Unknown,
+        }
     }
 }
 
@@ -237,38 +310,6 @@ fn smt_int(c: Coef) -> String {
     }
 }
 
-fn run_z3(script: &str, vars: &[Var]) -> Verdict {
-    let Ok(mut child) = Command::new("z3")
-        .arg("-in")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-    else {
-        return Verdict::Unknown;
-    };
-    if let Some(stdin) = child.stdin.take() {
-        let mut stdin = stdin;
-        if stdin.write_all(script.as_bytes()).is_err() {
-            let _ = child.kill();
-            return Verdict::Unknown;
-        }
-    }
-    let Ok(out) = child.wait_with_output() else {
-        return Verdict::Unknown;
-    };
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    let mut lines = stdout.lines();
-    match lines.next().map(str::trim) {
-        Some("unsat") => Verdict::Proved,
-        Some("sat") => {
-            let rest: String = lines.collect::<Vec<_>>().join(" ");
-            Verdict::Refuted(parse_model(&rest, vars))
-        }
-        _ => Verdict::Unknown,
-    }
-}
-
 fn parse_model(text: &str, vars: &[Var]) -> Vec<(Var, i128)> {
     let mut model = Vec::new();
     let cleaned = text.replace(['(', ')'], " ");
@@ -318,8 +359,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn model_script() {
+        let facts = [Constraint::new(poly!(n), Cmp::Eq, poly!(m))];
+        let goal = Constraint::new(poly!(m), Cmp::Eq, poly!(n));
+        let script = "(set-option :timeout 2000)
+(set-logic QF_LIA)
+(declare-const v109 Int)
+(declare-const v110 Int)
+(assert (= v110 v109))
+(assert (not (= v109 v110)))
+(check-sat)
+(get-value (v109 v110))
+";
+        assert_eq!(script, build_script(&facts, &goal, &[], &[109, 110]))
+    }
+
+    #[test]
     fn entailment_with_context() {
-        let mut s = Solver::new(None).unwrap();
+        let mut s = Solver::new_cli(None).unwrap();
         // N >= 1 => 0 < N
         let facts = [Constraint::new(poly!(n), Cmp::Ge, poly!(1))];
         let goal = Constraint::new(poly!(0), Cmp::Lt, poly!(n));
@@ -334,7 +391,7 @@ mod tests {
 
     #[test]
     fn integer_reasoning_not_real() {
-        let mut s = Solver::new(None).unwrap();
+        let mut s = Solver::new_cli(None).unwrap();
         // 2N >= 1 => N >= 1
         let facts = [Constraint::new(poly!(2 * n), Cmp::Ge, poly!(1))];
         let goal = Constraint::new(poly!(n), Cmp::Ge, poly!(1));
@@ -343,7 +400,7 @@ mod tests {
 
     #[test]
     fn commute() {
-        let mut s = Solver::new(None).unwrap();
+        let mut s = Solver::new_cli(None).unwrap();
         // N == M => M == N
         let facts = [Constraint::new(poly!(n), Cmp::Eq, poly!(m))];
         let goal = Constraint::new(poly!(m), Cmp::Eq, poly!(n));

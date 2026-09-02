@@ -1,20 +1,33 @@
 import compilerInit, { compile } from "./wasm/sirius";
-import type { EditRequest, Poke, Diagnostic, LintResponse } from "./compiler";
+import type { EditRequest, CheckReady, Diagnostic, LintResponse } from "./compiler";
+import * as z3 from "./z3";
 
 let initWasm = false;
+let channel: z3.Channel | null = null;
 
-onmessage = async (e: MessageEvent<EditRequest | Poke>) => {
+onmessage = async (e: MessageEvent<EditRequest | CheckReady>) => {
     if(!initWasm) {
         return;
     }
 
     if("message" in e.data) {
-        postMessage({message: "ready"});
+        if(e.data.message == "poke") {
+            channel = e.data.channel;
+            postMessage({message: "ready"});
+        }        
         return;
     }
 
     try {
-        const output = compile(e.data.code);
+        function get_z3(smt2: string): string {
+            if(channel === null) {
+                throw new Error("Z3 channel not initialized");
+            }
+
+            return z3.runSync(channel, smt2);
+        }
+
+        const output = compile(e.data.code, get_z3);
 
         const lineOffsets = [0, ...[...e.data.code.matchAll(/\n/g)].map(match => match.index + 1)];
         const diagnostics: Diagnostic[] = [];

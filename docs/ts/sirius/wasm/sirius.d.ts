@@ -1,7 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export function compile(code: string): any;
+export function compile(code: string, z3_callback: Function): any;
 
 export function lex(code: string): any[];
 
@@ -11,15 +11,15 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly compile: (a: number, b: number) => any;
+    readonly compile: (a: number, b: number, c: any) => any;
     readonly lex: (a: number, b: number) => [number, number];
     readonly start: () => void;
-    readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+    readonly __wbindgen_malloc: (a: number, b: number) => number;
+    readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;
     readonly __externref_table_alloc: () => number;
     readonly __wbindgen_externrefs: WebAssembly.Table;
-    readonly __wbindgen_malloc: (a: number, b: number) => number;
-    readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+    readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __externref_drop_slice: (a: number, b: number) => void;
     readonly __wbindgen_start: () => void;
 }

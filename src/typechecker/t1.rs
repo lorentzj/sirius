@@ -158,7 +158,7 @@ mod tests {
         assert!(lin.nonneg.contains(&2));
         assert_eq!(lin.names[2], "N*M");
         assert_eq!(
-            lin.entails_lia(&mut Solver::new(None).unwrap()),
+            lin.entails_lia(&mut Solver::new_cli(None).unwrap()),
             Verdict::Proved
         );
     }

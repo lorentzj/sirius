@@ -8,7 +8,7 @@ use super::typed::TypedAst;
 fn check(src: &str) -> (TypedAst, Errors) {
     let parse = ParserOutput::parse(src);
     assert!(parse.errors.is_empty(), "parse errors: {:?}", parse.errors);
-    let mut solver = Solver::new(None).expect("z3 must be on PATH");
+    let mut solver = Solver::new_cli(None).expect("z3 must be on PATH");
     check_program(parse.tree.as_ref().expect("no parse tree"), &mut solver)
 }
 

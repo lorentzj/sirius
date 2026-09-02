@@ -12,16 +12,11 @@ mod typed;
 #[cfg(test)]
 mod tests;
 
-use std::path::PathBuf;
-
-use crate::error::{Error, error_at};
-use crate::parser::{ParserOutput, Pos};
+use crate::error::Errors;
+use crate::parser::ParserOutput;
 use crate::solver::z3::Solver;
 pub use ty::Type;
 
-pub fn check(parse: &ParserOutput, cache_dir: Option<PathBuf>) -> Vec<Error> {
-    match Solver::new(cache_dir) {
-        Some(mut solver) => check::check_file(parse.tree.as_ref().unwrap_or(&vec![]), &mut solver),
-        None => vec![error_at!(Type, &Pos::span(0, 0), "failed to initialize z3")],
-    }
+pub fn check(parse: &ParserOutput, solver: &mut Solver) -> Errors {
+    check::check_file(parse.tree.as_ref().unwrap_or(&vec![]), solver)
 }

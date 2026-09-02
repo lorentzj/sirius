@@ -1,15 +1,18 @@
 //! Wasm bindings.
 
+use js_sys::Function;
+use wasm_bindgen::prelude::*;
+
+extern crate console_error_panic_hook;
+
+use crate::solver::z3::Solver;
+
 use super::error::Error;
 use super::parser::{
     ParserOutput,
     lexer::{Tok, Token, tokenize},
 };
 use super::typechecker::check;
-
-use wasm_bindgen::prelude::*;
-
-extern crate console_error_panic_hook;
 
 pub fn serialize_token(t: &Token) -> Option<JsValue> {
     let d = match &t.data {
@@ -117,9 +120,10 @@ pub fn lex(code: &str) -> Vec<JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn compile(code: &str) -> JsValue {
+pub fn compile(code: &str, z3_callback: Function) -> JsValue {
     let mut output = ParserOutput::parse(code);
-    let type_errors = check(&output, None);
+    let mut solver = Solver::new_wasm(z3_callback);
+    let type_errors = check(&output, &mut solver);
     output.errors.extend(type_errors);
 
     let errors = output
