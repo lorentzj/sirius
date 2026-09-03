@@ -30,7 +30,6 @@ const decorationData: Map<number, Diagnostic[]> = new Map();
 async function getWorker(status: StatusLine): Promise<Worker> {
     if(worker === null) {
         status.loading("loading compiler");
-        z3.processWhenAny(z3Channel, 100);
         worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     }
 
@@ -46,6 +45,11 @@ async function getWorker(status: StatusLine): Promise<Worker> {
         };
         if(worker !== null) {
             worker.addEventListener("message", handleReady);
+            worker.addEventListener("message", (event: MessageEvent) => {
+                if(event.data.message === "callZ3") {
+                    z3.serve(z3Channel);
+                }
+            })
         }
     });
 

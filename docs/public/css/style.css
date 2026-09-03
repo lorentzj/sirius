@@ -214,7 +214,6 @@ a:active, a:active svg {
     @keyframes spin720 {
         0% {
             transform: rotate(0deg);
-            border-left-color: black;
         }
         50% {
             transform: rotate(-360deg);
