@@ -36,26 +36,47 @@ impl FnChecker<'_> {
                 Some(Type::F64) => Type::F64,
                 _ => Type::Size(Poly::constant(*val)),
             },
-
-            E::Ident(name) => match self.scope.get(name) {
-                Some(binding) => binding.ty.clone(),
-                None if self.sigs.contains_key(name) => {
-                    self.errors.push(error_at!(
-                        Type,
-                        expr,
-                        "\"{name}\" is a function; call it with \"{name}(...)\""
-                    ));
-                    Type::Error
+            E::Ident(name) => {
+                if name == "null" {
+                    Type::Null
+                } else {
+                    match self.scope.get(name) {
+                        Some(binding) => {
+                            if self.scope.not_nulls().contains(&binding.id) {
+                                if let Type::Option(t) = &binding.ty {
+                                    *t.clone()
+                                } else {
+                                    binding.ty.clone()
+                                }
+                            } else if self.scope.is_nulls().contains(&binding.id) {
+                                if let Type::Option(_) = &binding.ty {
+                                    Type::Null
+                                } else {
+                                    binding.ty.clone()
+                                }
+                            } else {
+                                binding.ty.clone()
+                            }
+                        }
+                        None if self.sigs.contains_key(name) => {
+                            self.errors.push(error_at!(
+                                Type,
+                                expr,
+                                "\"{name}\" is a function; call it with \"{name}(...)\""
+                            ));
+                            Type::Error
+                        }
+                        None => {
+                            self.errors.push(error_at!(
+                                NameResolution,
+                                expr,
+                                "cannot find name \"{name}\" in scope"
+                            ));
+                            Type::Error
+                        }
+                    }
                 }
-                None => {
-                    self.errors.push(error_at!(
-                        NameResolution,
-                        expr,
-                        "cannot find name \"{name}\" in scope"
-                    ));
-                    Type::Error
-                }
-            },
+            }
 
             E::Tuple(items) if items.is_empty() => Type::Unit,
 
@@ -380,7 +401,8 @@ impl FnChecker<'_> {
         match (lhs, rhs) {
             (Type::Error, _) | (_, Type::Error) => Type::Error,
             (Type::F32, Type::F32) | (Type::F64, Type::F64) => Type::Bool,
-            (Type::Bool, Type::Bool) if matches!(op, ArithCmpOp::Eq | ArithCmpOp::NotEq) => {
+            (Type::Bool, Type::Bool) if op.is_eq_or_neq() => Type::Bool,
+            (Type::Option(_), Type::Null) | (Type::Null, Type::Option(_)) if op.is_eq_or_neq() => {
                 Type::Bool
             }
             (

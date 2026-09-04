@@ -7,7 +7,9 @@ pub struct Pos<T> {
     pub end: usize,
 }
 
-impl Pos<()> {
+pub type Span = Pos<()>;
+
+impl Span {
     pub fn span(start: usize, end: usize) -> Self {
         Self::new(start, (), end)
     }

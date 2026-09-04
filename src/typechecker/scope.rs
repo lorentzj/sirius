@@ -5,7 +5,7 @@ use crate::solver::count::Count;
 use crate::solver::z3::Constraint;
 
 use super::ty::Type;
-use super::typed::{Binding, BlockId, BlockKind, TypedBlock};
+use super::typed::{Binding, BindingId, BlockId, BlockKind, Fact, TypedBlock};
 
 pub struct Frame {
     pub block: BlockId,
@@ -17,6 +17,7 @@ pub struct Frame {
 pub struct Scope {
     blocks: Vec<TypedBlock>,
     stack: Vec<Frame>,
+    binding_id: BindingId,
 }
 
 impl Scope {
@@ -24,6 +25,7 @@ impl Scope {
         Self {
             blocks: vec![],
             stack: vec![],
+            binding_id: 0,
         }
     }
 
@@ -55,10 +57,12 @@ impl Scope {
     pub fn insert(&mut self, name: &str, ty: Type, mutable: bool) {
         let block = self.current();
         self.blocks[block].bindings.push(Binding {
+            id: self.binding_id,
             name: name.to_string(),
             ty,
             mutable,
         });
+        self.binding_id += 1;
     }
 
     pub fn get(&self, name: &str) -> Option<&Binding> {
@@ -68,16 +72,48 @@ impl Scope {
             .find_map(|f| self.blocks[f.block].binding(name))
     }
 
-    pub fn add_fact(&mut self, fact: Constraint) {
+    pub fn add_fact(&mut self, fact: Fact) {
         let block = self.current();
         self.blocks[block].facts.push(fact);
     }
 
+    pub fn add_constraint(&mut self, c: Constraint) {
+        self.add_fact(Fact::Constraint(c));
+    }
+
     // outermost first
-    pub fn facts(&self) -> Vec<Constraint> {
+    pub fn constraints(&self) -> Vec<Constraint> {
         self.stack
             .iter()
             .flat_map(|f| self.blocks[f.block].facts.iter().cloned())
+            .filter_map(|fact| match fact {
+                Fact::Constraint(c) => Some(c),
+                _ => None,
+            })
+            .collect()
+    }
+
+    // outermost first
+    pub fn not_nulls(&self) -> Vec<BindingId> {
+        self.stack
+            .iter()
+            .flat_map(|f| self.blocks[f.block].facts.iter().cloned())
+            .filter_map(|fact| match fact {
+                Fact::NotNull(b) => Some(b),
+                _ => None,
+            })
+            .collect()
+    }
+
+    // outermost first
+    pub fn is_nulls(&self) -> Vec<BindingId> {
+        self.stack
+            .iter()
+            .flat_map(|f| self.blocks[f.block].facts.iter().cloned())
+            .filter_map(|fact| match fact {
+                Fact::IsNull(b) => Some(b),
+                _ => None,
+            })
             .collect()
     }
 

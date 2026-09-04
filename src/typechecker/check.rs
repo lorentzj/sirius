@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::error::{Errors, error_at};
 use crate::parser::ast::{Block, E, Expr, Function, S};
 use crate::parser::lexer::{ArithCmpOp, ArithOp, AssnOp, BoolOp, Op};
-use crate::parser::{Pos, UnaryOp};
+use crate::parser::{Pos, Span, UnaryOp};
 use crate::solver::count::Count;
 use crate::solver::poly::{Poly, Var};
 use crate::solver::z3::{Cmp, Constraint, Solver};
@@ -14,7 +14,7 @@ use super::annotation::annotation;
 use super::scope::{Frame, Scope};
 use super::sig::{FnSig, check_recursion, signatures};
 use super::ty::Type;
-use super::typed::{BlockKind, TypedAst, TypedFn};
+use super::typed::{Binding, BlockKind, Fact, TypedAst, TypedFn};
 use super::{t0, t1};
 
 pub fn check_file(parse: &[Function], solver: &mut Solver) -> Errors {
@@ -54,8 +54,8 @@ pub struct FnChecker<'a> {
     pub nonneg: Vec<Var>,
     pub errors: Errors,
     pub exprs: HashMap<(usize, usize), Type>,
-    pub yield_pos: Option<Pos<()>>,
-    pub return_pos: Option<Pos<()>>,
+    pub yield_pos: Option<Span>,
+    pub return_pos: Option<Span>,
     /// Set when a yield could not be counted, so the total is not worth reporting on.
     pub yields_unknown: bool,
 }
@@ -91,8 +91,8 @@ impl<'a> FnChecker<'a> {
         for (name, ty) in checker.sig.params.clone() {
             checker.scope.insert(&name, ty, false);
         }
-        for fact in checker.sig.constraints.clone() {
-            checker.scope.add_fact(fact);
+        for constraint in checker.sig.constraints.clone() {
+            checker.scope.add_constraint(constraint);
         }
 
         checker.check_block(&f.body);
@@ -252,6 +252,15 @@ impl<'a> FnChecker<'a> {
                 ann,
                 value,
             } => {
+                if name.data == "null" {
+                    self.errors.push(error_at!(
+                        NameResolution,
+                        &name,
+                        "\"null\" is a reserved name",
+                    ));
+
+                    return;
+                }
                 let ann = ann.as_ref().map(|a| self.parse_ann(a));
                 let found = self.check_expr(value, ann.as_ref());
                 let bound = match ann {
@@ -286,15 +295,24 @@ impl<'a> FnChecker<'a> {
 
     fn check_assign(&mut self, stmt: &Pos<S>, place: &Expr, op: &AssnOp, value: &Expr) {
         match place_root(place) {
-            Some(root) => match self.scope.get(&root.data) {
-                Some(b) if !b.mutable => self.errors.push(error_at!(
-                    Mutation,
-                    &root,
-                    "\"{}\" is immutable; declare it with \"let mut\"",
-                    root.data
-                )),
-                _ => {}
-            },
+            Some(root) => {
+                if let Some(b) = self.scope.get(&root.data) {
+                    if !b.mutable {
+                        self.errors.push(error_at!(
+                            Mutation,
+                            &root,
+                            "\"{}\" is immutable; declare it with \"let mut\"",
+                            root.data
+                        ));
+                    } else if matches!((&place.data, &b.ty), (E::Ident(_), Type::Array { .. })) {
+                        self.errors.push(error_at!(
+                            Mutation,
+                            &root,
+                            "only array elements may be mutated",
+                        ));
+                    }
+                }
+            }
             None => self
                 .errors
                 .push(error_at!(Type, place, "expression is not a place")),
@@ -384,14 +402,23 @@ impl<'a> FnChecker<'a> {
 
         let var = self.fresh_var(&iter.data);
         self.scope.push(BlockKind::For);
-        self.scope
-            .insert(&iter.data, Type::Size(Poly::var(var, 1)), false);
+
+        if iter.data == "null" {
+            self.errors.push(error_at!(
+                NameResolution,
+                &iter,
+                "\"null\" is a reserved name",
+            ));
+        } else {
+            self.scope
+                .insert(&iter.data, Type::Size(Poly::var(var, 1)), false);
+        }
 
         if let Some((lo, hi)) = &bounds {
             self.scope
-                .add_fact(Constraint::new(Poly::var(var, 1), Cmp::Ge, lo.clone()));
+                .add_constraint(Constraint::new(Poly::var(var, 1), Cmp::Ge, lo.clone()));
             self.scope
-                .add_fact(Constraint::new(Poly::var(var, 1), Cmp::Lt, hi.clone()));
+                .add_constraint(Constraint::new(Poly::var(var, 1), Cmp::Lt, hi.clone()));
             if self.t0(Cmp::Ge, lo, &Poly::zero()) {
                 self.nonneg.push(var);
             }
@@ -433,13 +460,13 @@ impl<'a> FnChecker<'a> {
 
     /// Facts a condition contributes to its branch. Only comparisons between statically known
     /// values say anything the solver can use.
-    fn cond_facts(&self, cond: &Expr, positive: bool) -> Vec<Constraint> {
+    fn cond_facts(&self, cond: &Expr, positive: bool) -> Vec<Fact> {
         let mut out = vec![];
         self.collect_facts(cond, positive, &mut out);
         out
     }
 
-    fn collect_facts(&self, cond: &Expr, positive: bool, out: &mut Vec<Constraint>) {
+    fn collect_facts(&self, cond: &Expr, positive: bool, out: &mut Vec<Fact>) {
         match &cond.data {
             E::BinOp(lhs, Op::ArithCmp(op), rhs) => {
                 if let (Some(l), Some(r)) = (self.size_of(lhs), self.size_of(rhs)) {
@@ -452,7 +479,30 @@ impl<'a> FnChecker<'a> {
                         ArithCmpOp::NotEq => Cmp::Ne,
                     };
                     let cmp = if positive { cmp } else { cmp.negated() };
-                    out.push(Constraint::new(l, cmp, r));
+                    out.push(Fact::Constraint(Constraint::new(l, cmp, r)));
+                } else {
+                    // x == null, x != null
+                    if let (E::Ident(lhs_name), E::Ident(rhs_name)) = (&lhs.data, &rhs.data) {
+                        let target_name = if rhs_name == "null" {
+                            lhs_name
+                        } else if lhs_name == "null" {
+                            rhs_name
+                        } else {
+                            return;
+                        };
+
+                        if let Some(Binding { id, .. }) = self.scope.get(target_name) {
+                            match (op, positive) {
+                                (&ArithCmpOp::Eq, true) | (&ArithCmpOp::NotEq, false) => {
+                                    out.push(Fact::IsNull(*id))
+                                }
+                                (&ArithCmpOp::Eq, false) | (&ArithCmpOp::NotEq, true) => {
+                                    out.push(Fact::NotNull(*id))
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
                 }
             }
             // only the side that distributes over the connective is sound
@@ -510,8 +560,8 @@ impl<'a> FnChecker<'a> {
     }
 
     pub fn prove_quiet(&mut self, goal: &Constraint) -> Option<String> {
-        let facts = self.scope.facts();
-        t1::prove(self.solver, &facts, goal, &self.vars, &self.nonneg)
+        let constraints = self.scope.constraints();
+        t1::prove(self.solver, &constraints, goal, &self.vars, &self.nonneg)
     }
 
     pub fn prove<T>(&mut self, goal: Constraint, pos: &Pos<T>, ctx: &str) -> bool {

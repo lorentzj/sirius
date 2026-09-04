@@ -15,6 +15,7 @@ pub enum Type {
     Size(Poly),
     Option(Box<Self>),
     Tuple(Vec<Self>),
+    Null,
     Unit,
     Error,
 }
@@ -55,6 +56,7 @@ impl Type {
                 format!("({})", parts.join(", "))
             }
             Self::Unit => "()".to_string(),
+            Self::Null => "null".to_string(),
             Self::Error => "?".to_string(),
         }
     }

@@ -1,3 +1,5 @@
+use crate::parser::lexer::ArithCmpOp;
+
 use super::Pos;
 use super::lexer::{AssnOp, Op};
 
@@ -286,7 +288,7 @@ pub struct Block {
 pub struct Function {
     pub name: Pos<String>,
     pub type_args: Vec<Pos<String>>,
-    pub type_constraints: Vec<(Pos<String>, Expr)>,
+    pub type_constraints: Vec<(Pos<String>, ArithCmpOp, Expr)>,
     pub args: Vec<(Pos<String>, Expr)>,
     pub ret: Option<Expr>,
     pub body: Block,

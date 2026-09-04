@@ -4,8 +4,8 @@
 use std::collections::HashMap;
 
 use crate::error::{Errors, error_at};
-use crate::parser::Pos;
 use crate::parser::ast::{AD, Block, E, Expr, Function, S};
+use crate::parser::{Pos, Span};
 use crate::solver::poly::coef::Coef;
 use crate::solver::poly::{Poly, Var};
 use crate::solver::z3::{Cmp, Constraint};
@@ -54,7 +54,23 @@ pub fn signatures(fns: &[Function]) -> (HashMap<String, FnSig>, Errors) {
 
 fn build(f: &Function, errors: &mut Errors) -> FnSig {
     let mut tv_names: Vec<String> = vec![];
+
+    if f.name.data == "null" {
+        errors.push(error_at!(
+            NameResolution,
+            &f.name,
+            "\"null\" is a reserved name",
+        ));
+    }
+
     for tv in &f.type_args {
+        if tv.data == "null" {
+            errors.push(error_at!(
+                NameResolution,
+                &tv,
+                "\"null\" is a reserved name",
+            ));
+        }
         if tv_names.contains(&tv.data) {
             errors.push(error_at!(
                 NameResolution,
@@ -75,6 +91,16 @@ fn build(f: &Function, errors: &mut Errors) -> FnSig {
         }
     };
 
+    for (arg_name, _) in &f.args {
+        if arg_name.data == "null" {
+            errors.push(error_at!(
+                NameResolution,
+                &arg_name,
+                "\"null\" is a reserved name",
+            ));
+        }
+    }
+
     let params = f
         .args
         .iter()
@@ -86,9 +112,8 @@ fn build(f: &Function, errors: &mut Errors) -> FnSig {
         None => Type::Unit,
     };
 
-    // typevars are sizes, so nonnegativity is assumed everywhere; `st T \in Ind(P)` adds the upper bound
     let mut constraints = vec![];
-    for (tv, ann) in &f.type_constraints {
+    for (tv, op, ann) in &f.type_constraints {
         let Some(v) = names.iter().position(|n| *n == tv.data) else {
             errors.push(error_at!(
                 NameResolution,
@@ -99,15 +124,15 @@ fn build(f: &Function, errors: &mut Errors) -> FnSig {
             continue;
         };
         match annotation(ann, &names) {
-            Ok(Type::Ind(bound)) => constraints.push(Constraint::new(
+            Ok(Type::Size(bound)) => constraints.push(Constraint::new(
                 Poly::var(v as Var, 1),
-                Cmp::Lt,
+                Cmp::from_lex(op),
                 bound.clone(),
             )),
             Ok(t) => errors.push(error_at!(
                 NotImplmented,
                 ann,
-                "typevar constraint must be an index set, e.g. \"Ind(N)\"; found \"{}\"",
+                "typevar constraint must be a poly; found \"{}\"",
                 t.render(&names)
             )),
             Err(e) => errors.push(e),
@@ -187,7 +212,7 @@ fn match_poly(param: &Poly, arg: &Poly, subst: &mut HashMap<Var, Poly>) {
 
 /// Sirius is total, so the call graph must be acyclic.
 pub fn check_recursion(fns: &[Function], sigs: &HashMap<String, FnSig>) -> Errors {
-    let mut graph: HashMap<&str, Vec<(String, Pos<()>)>> = HashMap::new();
+    let mut graph: HashMap<&str, Vec<(String, Span)>> = HashMap::new();
     for f in fns {
         let mut calls = vec![];
         block_calls(&f.body, &mut calls);
@@ -206,7 +231,7 @@ pub fn check_recursion(fns: &[Function], sigs: &HashMap<String, FnSig>) -> Error
 
 fn walk<'a>(
     name: &'a str,
-    graph: &'a HashMap<&str, Vec<(String, Pos<()>)>>,
+    graph: &'a HashMap<&str, Vec<(String, Span)>>,
     path: &mut Vec<&'a str>,
     done: &mut Vec<&'a str>,
     errors: &mut Errors,
@@ -230,7 +255,7 @@ fn walk<'a>(
     done.push(name);
 }
 
-fn block_calls(block: &Block, out: &mut Vec<(String, Pos<()>)>) {
+fn block_calls(block: &Block, out: &mut Vec<(String, Span)>) {
     for stmt in &block.stmts {
         match &stmt.data {
             S::Print(e) | S::Return(e) | S::Yield(e) | S::YieldFrom(e) => expr_calls(e, out),
@@ -266,7 +291,7 @@ fn block_calls(block: &Block, out: &mut Vec<(String, Pos<()>)>) {
     }
 }
 
-fn expr_calls(expr: &Expr, out: &mut Vec<(String, Pos<()>)>) {
+fn expr_calls(expr: &Expr, out: &mut Vec<(String, Span)>) {
     match &expr.data {
         E::FnCall(caller, type_args, args) => {
             if let E::Ident(name) = &caller.data {

@@ -1,6 +1,7 @@
 //! A pipe to [Z3](https://github.com/z3prover/z3) for passing QF_LIA constraints.
 
 use crate::bindings::log;
+use crate::parser::lexer::ArithCmpOp;
 use js_sys::Function;
 use std::collections::HashMap;
 use std::fmt;
@@ -42,6 +43,17 @@ impl Cmp {
             Cmp::Lt => "<",
             Cmp::Ge => ">=",
             Cmp::Gt => ">",
+        }
+    }
+
+    pub fn from_lex(op: &ArithCmpOp) -> Self {
+        match op {
+            ArithCmpOp::Greater => Cmp::Gt,
+            ArithCmpOp::GreaterOrEq => Cmp::Ge,
+            ArithCmpOp::Less => Cmp::Lt,
+            ArithCmpOp::LessOrEq => Cmp::Le,
+            ArithCmpOp::Eq => Cmp::Eq,
+            ArithCmpOp::NotEq => Cmp::Ne,
         }
     }
 }
@@ -185,8 +197,8 @@ impl Solver {
         let stdout = match &mut self.kind {
             Z3Kind::Cli => {
                 let Ok(mut child) = Command::new("z3")
-                    .arg("-in")
                     .arg("-smt2")
+                    .arg("-in")
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::null())

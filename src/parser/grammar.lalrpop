@@ -18,26 +18,25 @@ Fn: Function = {
     }
 }
 
-SigTypeArgs: (Vec<Pos<String>>, Vec<(Pos<String>, Expr)>) = {
+SigTypeArgs: (Vec<Pos<String>>, Vec<(Pos<String>, ArithCmpOp, Expr)>) = {
     <start: @L> "{" <args: CommaSep<PosString>> <constraints: CommaSep<SigTypeConstraint>> "}" <end: @R> => {                
         for arg in &args {
             type_tokens.extend(arg.start..arg.end);
         }
         for constraint in &constraints {
             type_tokens.extend(constraint.0.start..constraint.0.end);
-            type_tokens.extend(constraint.1.start..constraint.1.end);
+            type_tokens.extend(constraint.2.start..constraint.2.end);
         }
 
         (args, constraints)
     }
 }
 
-SigTypeConstraint: (Pos<String>, Expr) = {
-    <start: @L> "st" <lhs: PosString> "\\in" <rhs: Expr> <end: @R> => {
-        (lhs, rhs)
+SigTypeConstraint: (Pos<String>, ArithCmpOp, Expr) = {
+    <start: @L> "st" <lhs: PosString> <op: "cmp"> <rhs: Expr> <end: @R> => {
+        (lhs, op, rhs)
     }
 }
-
 
 SigArgs: Vec<(Pos<String>, Expr)> = {
     <start: @L> "(" <args: CommaSep<(PosString ":" TypeAnn)>> ")" <end: @R> => {
@@ -104,7 +103,7 @@ pub Expr: Expr = {
 
     #[precedence(level="3")] #[assoc(side="left")]
     <start: @L> <lhs: Expr> "^" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Arith(ArithOp::Exp), rhs, end),
-        
+
     #[precedence(level="4")] #[assoc(side="left")]
     <start: @L> "!" <inner: Expr> <end: @R> =>                 Expr::un_op(start, UnaryOp::BoolNeg, inner, end),
     <start: @L> "-" <inner: Expr> <end: @R> =>                 Expr::un_op(start, UnaryOp::ArithNeg, inner, end),
@@ -118,12 +117,7 @@ pub Expr: Expr = {
     <start: @L> <lhs: Expr> "-" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::Arith(ArithOp::Sub), rhs, end),
 
     #[precedence(level="8")] #[assoc(side="left")]
-    <start: @L> <lhs: Expr> ">" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::ArithCmp(ArithCmpOp::Greater), rhs, end),
-    <start: @L> <lhs: Expr> "<" <rhs: Expr> <end: @R> =>       Expr::bin_op(start, lhs, Op::ArithCmp(ArithCmpOp::Less), rhs, end),
-    <start: @L> <lhs: Expr> ">=" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::ArithCmp(ArithCmpOp::GreaterOrEq), rhs, end),
-    <start: @L> <lhs: Expr> "<=" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::ArithCmp(ArithCmpOp::LessOrEq), rhs, end),
-    <start: @L> <lhs: Expr> "==" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::ArithCmp(ArithCmpOp::Eq), rhs, end),
-    <start: @L> <lhs: Expr> "!=" <rhs: Expr> <end: @R> =>      Expr::bin_op(start, lhs, Op::ArithCmp(ArithCmpOp::NotEq), rhs, end),
+    <start: @L> <lhs: Expr> <op: "cmp"> <rhs: Expr> <end: @R> => Expr::bin_op(start, lhs, Op::ArithCmp(op), rhs, end),
 
     #[precedence(level="9")] #[assoc(side="left")]
     <start: @L> <lhs: Expr> "and" <rhs: Expr> <end: @R> =>     Expr::bin_op(start, lhs, Op::Bool(BoolOp::And), rhs, end),
@@ -218,12 +212,7 @@ extern {
         "-"          => Tok::Op(Op::Arith(ArithOp::Sub)),
         "!"          => Tok::Op(Op::Not),
         "'"          => Tok::Op(Op::Tick),
-        ">"          => Tok::Op(Op::ArithCmp(ArithCmpOp::Greater)),
-        "<"          => Tok::Op(Op::ArithCmp(ArithCmpOp::Less)),
-        ">="         => Tok::Op(Op::ArithCmp(ArithCmpOp::GreaterOrEq)),
-        "<="         => Tok::Op(Op::ArithCmp(ArithCmpOp::LessOrEq)),
-        "=="         => Tok::Op(Op::ArithCmp(ArithCmpOp::Eq)),
-        "!="         => Tok::Op(Op::ArithCmp(ArithCmpOp::NotEq)),
+        "cmp"        => Tok::Op(Op::ArithCmp(<ArithCmpOp>)),
         "->"         => Tok::Op(Op::Apply),
         "?"          => Tok::Op(Op::Option),
         ","          => Tok::Op(Op::Comma),

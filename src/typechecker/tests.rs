@@ -46,7 +46,7 @@ fn dot_product() {
     assert!(dot.render_var(0, "i").is_none());
 
     // the loop contributes `0 <= i` and `i < N`
-    assert_eq!(dot.facts(1).len(), 2);
+    assert_eq!(dot.constraints(1).len(), 2);
     assert!(dot.yields.is_zero());
 }
 
@@ -191,6 +191,34 @@ fn shift{N}(a: f32[N]) -> f32:
 }
 
 #[test]
+fn find() {
+    let guarded_nullable = "
+fn find{N}(needle: f32, haystack: f32[N]) -> Ind(N)?:
+    for i from 0 to N:
+        if needle == haystack[i]:
+            # 'Ind(N)' constraint is proven here
+            return i
+    # Ind(N)? is nullable Ind(N)
+    return null
+
+fn test():
+    let mut arr = [1.0, 2.0, 3.0]
+    let k = find(2.0, arr)
+    if k != null:
+        # find() constraint is available at call sites
+        # so this access is proven safe
+        arr[k] += 1.0";
+
+    expect_ok(guarded_nullable);
+
+    let msg = expect_error(&guarded_nullable.replace("k != null", "k == null"));
+    assert!(
+        msg.starts_with("cannot index with \"null\""),
+        "{msg}"
+    );
+}
+
+#[test]
 fn index_types_cross_call_boundaries() {
     let ast = expect_ok(
         "
@@ -223,7 +251,7 @@ fn test{M}(a: f32[M + 1], b: f32[M]) -> f32:
 #[test]
 fn typevar_constraints() {
     let src = "
-fn get{N, K, st K \\in Ind(N)}(a: f32[N]) -> f32:
+fn get{N, K, st K < N}(a: f32[N]) -> f32:
     return a[K]
 
 fn test():

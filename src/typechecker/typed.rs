@@ -11,6 +11,7 @@ use super::sig::FnSig;
 use super::ty::Type;
 
 pub type BlockId = usize;
+pub type BindingId = usize;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BlockKind {
@@ -23,9 +24,17 @@ pub enum BlockKind {
 
 #[derive(Clone, Debug)]
 pub struct Binding {
+    pub id: BindingId,
     pub name: String,
     pub ty: Type,
     pub mutable: bool,
+}
+
+#[derive(Clone, Debug)]
+pub enum Fact {
+    Constraint(Constraint),
+    NotNull(BindingId),
+    IsNull(BindingId),
 }
 
 #[derive(Debug)]
@@ -35,7 +44,7 @@ pub struct TypedBlock {
     /// In source order; a name may appear twice if it is shadowed.
     pub bindings: Vec<Binding>,
     /// Facts the block adds to its enclosing scope (loop bounds, `if` conditions).
-    pub facts: Vec<Constraint>,
+    pub facts: Vec<Fact>,
 }
 
 impl TypedBlock {
@@ -103,8 +112,8 @@ impl TypedFn {
             .collect()
     }
 
-    /// Facts in scope at `block`, innermost last.
-    pub fn facts(&self, block: BlockId) -> Vec<&Constraint> {
+    /// Constraint facts in scope at `block`, innermost last.
+    pub fn constraints(&self, block: BlockId) -> Vec<&Constraint> {
         let mut chain = vec![];
         let mut curr = Some(block);
         while let Some(id) = curr {
@@ -115,6 +124,10 @@ impl TypedFn {
             .into_iter()
             .rev()
             .flat_map(|id| self.blocks[id].facts.iter())
+            .filter_map(|fact| match fact {
+                Fact::Constraint(c) => Some(c),
+                _ => None,
+            })
             .collect()
     }
 }

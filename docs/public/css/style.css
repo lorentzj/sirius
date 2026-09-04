@@ -125,7 +125,7 @@ a:active, a:active svg {
 
 .editor {
     background-color: white;
-    max-width: min(1200px, 100%);
+    width: min(1200px, 100%);
     margin: auto;
     outline: 1px solid black;
     overflow-x: auto;
@@ -137,7 +137,7 @@ a:active, a:active svg {
 .cm-editor {
     padding: 5px;
     padding-bottom: 0;
-    width: fit-content !important;
+    width: min(1200px, 100%);
 }
 
 .editor:has(.cm-focused) {
@@ -170,6 +170,7 @@ a:active, a:active svg {
 }
 
 .cm-panels {
+    width: 100% !important;
     position: unset !important;
 }
 
@@ -196,7 +197,7 @@ a:active, a:active svg {
 
 .loader {
     display: inline-block;
-    border: 0.1em solid currentColor;
+    border: none;
     border-radius: 50%;
     width: 1.2em;
     height: 1.2em;
@@ -204,6 +205,7 @@ a:active, a:active svg {
 
 .loader.loading {
     animation: spin720 2s ease-in-out infinite;
+    border: 0.1em solid currentColor;
     border-left-color: transparent;
     border-right-color: transparent;
 }

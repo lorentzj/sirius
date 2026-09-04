@@ -60,6 +60,8 @@ impl FnChecker<'_> {
                 .zip(want)
                 .all(|(f, w)| self.coerce_inner(f, w, detail)),
             (Type::Option(found), Type::Option(want)) => self.coerce_inner(found, want, detail),
+            (Type::Null, Type::Option(_)) => true,
+            (found, Type::Option(want)) => self.coerce_inner(found, want, detail),
             _ => false,
         }
     }

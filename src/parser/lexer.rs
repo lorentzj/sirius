@@ -19,6 +19,12 @@ pub enum ArithCmpOp {
     NotEq,
 }
 
+impl ArithCmpOp {
+    pub fn is_eq_or_neq(&self) -> bool {
+        matches!(&self, ArithCmpOp::Eq | ArithCmpOp::NotEq)
+    }
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub enum BoolOp {
     And,

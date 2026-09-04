@@ -5,7 +5,7 @@ pub mod pos;
 use crate::error::{Er, Error, ErrorType, Errors};
 pub use ast::{AccessDim, Block, Expr, Function, Stmt, UnaryOp};
 pub use lexer::{Tok, Token};
-pub use pos::Pos;
+pub use pos::{Pos, Span};
 
 lalrpop_util::lalrpop_mod!(#[allow(clippy::all)] pub grammar, "/parser/grammar.rs");
 

@@ -28,8 +28,8 @@
 
         <p>I embedded a prototype compiler frontend in this page (sorry, Z3 Wasm builds don't seem to play nice on mobile). Here's a <code>hello world</code>: dot product and matrix multiplication.</p>
         
-        <pre class="editor"># typevars, representing integers, come in curly brackets after function name
-# "len(a) == len(b)" is proven at call sites
+        <pre class="editor"># typevars, representing natural numbers, come in curly brackets after function name
+# "a.len == b.len" is proven at call sites
 fn dot{N}(a: f32[N], b: f32[N]) -> f32:
     let mut sum = 0.0
     for i from 0 to N:
@@ -42,7 +42,7 @@ fn matmul{I, J, K}(a: f32[I, J], b: f32[J, K]) -> f32[I, K]:
         for k from 0 to K:
             # i is proven valid index into a
             # k valid into b' (b transpose)
-            # dot_product requires a[i] and b'[k] have same length
+            # dot_product requires a[i].len == b'[k].len
             # total yield count is proven I*K
             # yield populates the return array in column-major order
             yield dot(a[i], b'[k])
@@ -51,7 +51,7 @@ fn matmul{I, J, K}(a: f32[I, J], b: f32[J, K]) -> f32[I, K]:
         <p>That program doesn't seem very interesting until you try to change it. The compiler rejects accessing <code>a[i+1]</code> in <code>dot</code>, adding an extra <code>yield</code> in <code>matmul</code>, or modifying any of the <code>typevar</code> constraints in the function signatures. Here are some more examples:</p>
 
         <pre class="editor"># polynomial expressions in typevars are valid types
-# "len(return) == A + B" is proven in function body
+# "return.len == A + B" is proven in function body
 fn concat{A, B}(a: f32[A], b: f32[B]) -> f32[A + B]:
     yield from a
     yield from b
@@ -67,12 +67,19 @@ fn fill{N}(val: f32) -> f32[N]:
 
 fn test():
     let x = [1.0, 2.0, 3.0]
-    # dot expects equal-len args
-    # so fill(2) is inferred to be fill{3}(2.0) i.e. [2.0, 2.0, 2.0]
-    let y = dot(x, fill(2)) # == 12.0
+    
+    # compiler knows fill(2) must be fill{7}(2)
+    let y = concat{3, 7}(x, fill(2))
 
-    # ! can't satisfy dot's call site constraints
-    let z = dot(x, fill{4}(2))
+    # compiler knows concat must be concat{3, 7}
+    let y: f32[10] = concat(x, fill{7}(2))
+    let z = concat(x, fill{7}(2))
+    
+    #! can't match x.len with concat{2, *}
+    # let z = concat{2, 3}(x, fill(2)) 
+
+    # ! can't match fill{4} with concat{*, 3}
+    # let w = concat{3, 3}(x, fill{4}(2))
 </pre>
 
         <p>Signatures provide shape bounds, accesses are statically checked, and <code>yield</code>s are statically counted. In short, we're using value-dependent types with built-in polynomial (<code><a href="/api/doc/sirius/solver/poly/struct.Poly.html">Poly</a></code>) refinement. Since the type system is constrained, <span id="backlink_1" class="backlink">the annotation burden stays low.</span><sup><a href="#footnote_1">[1]</a></sup></p>
@@ -167,7 +174,7 @@ fn find{N}(needle: f32, haystack: f32[N]) -> Ind(N)?:
     return null
 
 fn test():
-    let arr = [1.0, 2.0, 3.0]
+    let mut arr = [1.0, 2.0, 3.0]
     let k = find(2.0, arr)
     if k != null:
         # find() constraint is available at call sites
