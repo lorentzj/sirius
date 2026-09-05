@@ -13,13 +13,32 @@ pub Tree: Vec<Function> = {
 Fn: Function = {
     "fn" <name: PosString> <type_args: SigTypeArgs?> <args: SigArgs> <ret: ("->" TypeAnn)?> ":" "newline" <body: Block> => {
         let ret = ret.map(|(_, r)| r);
-        let type_args = type_args.unwrap_or((vec![], vec![]));
-        Function { name, type_args: type_args.0, type_constraints: type_args.1, args, ret, body }
+        let (type_args, ex_type_args) = type_args.unwrap_or(((vec![], vec![]), (vec![], vec![])));
+        Function {
+            name,
+            type_args: type_args.0,
+            ex_type_args: ex_type_args.0,
+            type_constraints: type_args.1,
+            ex_type_constraints: ex_type_args.1,
+            args,
+            ret,
+            body
+        }
     }
 }
 
-SigTypeArgs: (Vec<Pos<String>>, Vec<(Pos<String>, ArithCmpOp, Expr)>) = {
-    <start: @L> "{" <args: CommaSep<PosString>> <constraints: CommaSep<SigTypeConstraint>> "}" <end: @R> => {                
+SigTypeArgs: ((Vec<Pos<String>>, Vec<(Pos<String>, ArithCmpOp, Expr)>), (Vec<Pos<String>>, Vec<(Pos<String>, ArithCmpOp, Expr)>)) = {
+    <start: @L> "{" "all" <args: TypeArgsWithConstraints> "}" "{" "ex" <ex_args: TypeArgsWithConstraints> "}" <end: @R> => {                
+        (args, ex_args)
+    },
+
+    <start: @L> "{" "all"? <args: TypeArgsWithConstraints> "}" <end: @R> => {                
+        (args, (vec![], vec![]))
+    }
+}
+
+TypeArgsWithConstraints: (Vec<Pos<String>>, Vec<(Pos<String>, ArithCmpOp, Expr)>) = {
+    <start: @L> <args: CommaSep<PosString>> <constraints: CommaSep<SigTypeConstraint>> <end: @R> => {                
         for arg in &args {
             type_tokens.extend(arg.start..arg.end);
         }
@@ -236,6 +255,8 @@ extern {
         "st"         => Tok::Keyword(lexer::Keyword::SuchThat),
         "yield"      => Tok::Keyword(lexer::Keyword::Yield),
         "mut"        => Tok::Keyword(lexer::Keyword::Mut),
+        "all"        => Tok::Keyword(lexer::Keyword::All),
+        "ex"        => Tok::Keyword(lexer::Keyword::Ex),
         ";"          => Tok::Semicolon,
         ":"          => Tok::Colon,
         "error"      => Tok::Error(<String>),

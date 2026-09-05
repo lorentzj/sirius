@@ -109,6 +109,9 @@ enum Z3Kind {
 
 pub struct Solver {
     cache: HashMap<u64, Verdict>,
+    /// Obligations submitted, and of those, the ones that actually reached z3.
+    pub queries: usize,
+    pub z3_calls: usize,
     kind: Z3Kind,
     // optional filesystem cache
     cache_dir: Option<PathBuf>,
@@ -125,6 +128,8 @@ impl Solver {
 
         z3_available.then_some(Solver {
             cache: HashMap::new(),
+            queries: 0,
+            z3_calls: 0,
             kind: Z3Kind::Cli,
             cache_dir,
         })
@@ -146,6 +151,8 @@ impl Solver {
 
         Solver {
             cache: HashMap::new(),
+            queries: 0,
+            z3_calls: 0,
             kind: Z3Kind::Callback(Box::new(wrapped_callback)),
             cache_dir: None,
         }
@@ -158,6 +165,7 @@ impl Solver {
         nonneg: &[Var],
         names: &[&str],
     ) -> Verdict {
+        self.queries += 1;
         let mut vars: Vec<Var> = Vec::new();
         for c in facts.iter().chain(std::iter::once(goal)) {
             for p in [&c.lhs, &c.rhs] {
@@ -177,6 +185,7 @@ impl Solver {
             return v.clone();
         }
 
+        self.z3_calls += 1;
         let verdict = self.run_z3(&script, &vars);
         if let Some(dir) = &self.cache_dir {
             let _ = std::fs::create_dir_all(dir);

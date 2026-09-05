@@ -12,6 +12,7 @@ use crate::solver::z3::{Cmp, Constraint};
 
 use super::annotation::annotation;
 use super::ty::Type;
+use super::check::reserved_name;
 
 /// [`Poly`]s here are expressed in function's typevar space,
 /// where [`Var`] `i` is `tv_names[i]`; call sites map it into their own with [`Type::instantiate`].
@@ -55,22 +56,26 @@ pub fn signatures(fns: &[Function]) -> (HashMap<String, FnSig>, Errors) {
 fn build(f: &Function, errors: &mut Errors) -> FnSig {
     let mut tv_names: Vec<String> = vec![];
 
-    if f.name.data == "null" {
+    if reserved_name(&f.name.data) {
         errors.push(error_at!(
             NameResolution,
             &f.name,
-            "\"null\" is a reserved name",
+            "\"{}\" is a reserved name",
+            f.name.data
         ));
     }
 
     for tv in &f.type_args {
-        if tv.data == "null" {
+
+        if reserved_name(&tv.data) {
             errors.push(error_at!(
                 NameResolution,
                 &tv,
-                "\"null\" is a reserved name",
+                "\"{}\" is a reserved name",
+                tv.data
             ));
         }
+
         if tv_names.contains(&tv.data) {
             errors.push(error_at!(
                 NameResolution,
@@ -92,11 +97,12 @@ fn build(f: &Function, errors: &mut Errors) -> FnSig {
     };
 
     for (arg_name, _) in &f.args {
-        if arg_name.data == "null" {
+        if reserved_name(&arg_name.data) {
             errors.push(error_at!(
                 NameResolution,
                 &arg_name,
-                "\"null\" is a reserved name",
+                "\"{}\" is a reserved name",
+                arg_name.data
             ));
         }
     }

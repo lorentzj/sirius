@@ -212,10 +212,7 @@ fn test():
     expect_ok(guarded_nullable);
 
     let msg = expect_error(&guarded_nullable.replace("k != null", "k == null"));
-    assert!(
-        msg.starts_with("cannot index with \"null\""),
-        "{msg}"
-    );
+    assert!(msg.starts_with("cannot index with \"null\""), "{msg}");
 }
 
 #[test]
@@ -447,4 +444,58 @@ fn test():
     );
     println!("checked in {:?}", start.elapsed());
     assert_eq!(ast.fns.len(), 7);
+}
+
+/// Pins where linearization gives up. A product of two typevars is abstracted to an opaque
+/// atom, so `i < A` no longer implies `i*B < A*B`. See the notes on Handelman certificates.
+#[test]
+fn nonlinear_strides() {
+    // constant strides stay linear and check
+    expect_ok(
+        "
+fn even{A}(arr: f32[2*A]) -> f32[A]:
+    for i from 0 to A:
+        yield arr[i*2]
+
+fn odd{A}(arr: f32[2*A]) -> f32[A]:
+    for i from 0 to A:
+        yield arr[i*2 + 1]
+
+fn tile{A}(arr: f32[A*4]) -> f32[A*4]:
+    for i from 0 to A:
+        for j from 0 to 4:
+            yield arr[i*4 + j]
+",
+    );
+
+    // a symbolic stride does not
+    let msg = expect_error(
+        "
+fn every_n{A, B st B > 0}(arr: f32[A*B]) -> f32[A]:
+    for i from 0 to A:
+        yield arr[i*B]
+",
+    );
+    assert!(
+        msg.starts_with("index: cannot prove \"B*i < A*B\""),
+        "{msg}"
+    );
+    // no counterexample is quoted, since the model is over abstracted atoms
+    assert!(!msg.contains("counterexample"), "{msg}");
+}
+
+#[test]
+fn nullable_place_narrowing() {
+    let msg = expect_error(
+        "
+fn get(a: f32?) -> f32:
+    let mut x = a
+    if x != null:
+        x = null        # rejected
+        return x
+    return 0.0
+",
+    );
+
+    assert!(msg.starts_with("assigned value: expected \"f32\""));
 }

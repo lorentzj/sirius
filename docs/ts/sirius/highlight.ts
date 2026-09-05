@@ -16,8 +16,9 @@ const keywords = new Set([
     "for",
     "from",
     "to",
-    "\\in",
     "st",
+    "all",
+    "ex",
     "yield",
     "mut",
     "null"

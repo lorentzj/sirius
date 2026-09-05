@@ -628,6 +628,12 @@ impl FnChecker<'_> {
         }
 
         for (i, arg) in type_args.iter().enumerate() {
+            if let E::Ident(s) = &arg.data {
+                if s == "_" {
+                    continue;
+                }
+            }
+            
             let arg_t = self.check_expr(arg, None);
             match arg_t {
                 Type::Size(p) if i < sig.tv_names.len() => {

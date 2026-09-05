@@ -110,6 +110,8 @@ pub enum Keyword {
     In,
     Yield,
     Mut,
+    All,
+    Ex,
 }
 
 impl fmt::Debug for Keyword {
@@ -132,6 +134,8 @@ impl fmt::Debug for Keyword {
             Keyword::In => write!(f, "\\in"),
             Keyword::Yield => write!(f, "yield"),
             Keyword::Mut => write!(f, "mut"),
+            Keyword::All => write!(f, "all"),
+            Keyword::Ex => write!(f, "ex"),
         }
     }
 }
@@ -239,6 +243,8 @@ fn parse_keyword(s: &str) -> Option<Tok> {
         "\\in" => Some(Tok::Keyword(Keyword::In)),
         "yield" => Some(Tok::Keyword(Keyword::Yield)),
         "mut" => Some(Tok::Keyword(Keyword::Mut)),
+        "all" => Some(Tok::Keyword(Keyword::All)),
+        "ex" => Some(Tok::Keyword(Keyword::Ex)),
         _ => None,
     }
 }

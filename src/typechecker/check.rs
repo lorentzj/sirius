@@ -21,6 +21,15 @@ pub fn check_file(parse: &[Function], solver: &mut Solver) -> Errors {
     check_program(parse, solver).1
 }
 
+pub fn reserved_name(name: &str) -> bool {
+    matches!(name,
+        "null" 
+        | "_"
+        | "len"
+        | "shape"
+    )
+}
+
 /// Check a whole file, keeping what was learned about every function.
 pub fn check_program(parse: &[Function], solver: &mut Solver) -> (TypedAst, Errors) {
     let (sigs, mut errors) = signatures(parse);
@@ -252,11 +261,12 @@ impl<'a> FnChecker<'a> {
                 ann,
                 value,
             } => {
-                if name.data == "null" {
+                if reserved_name(&name.data) {
                     self.errors.push(error_at!(
                         NameResolution,
                         &name,
-                        "\"null\" is a reserved name",
+                        "\"{}\" is a reserved name",
+                        name.data
                     ));
 
                     return;
@@ -403,11 +413,12 @@ impl<'a> FnChecker<'a> {
         let var = self.fresh_var(&iter.data);
         self.scope.push(BlockKind::For);
 
-        if iter.data == "null" {
+        if reserved_name(&iter.data) {
             self.errors.push(error_at!(
                 NameResolution,
                 &iter,
-                "\"null\" is a reserved name",
+                "\"{}\" is a reserved name",
+                iter.data
             ));
         } else {
             self.scope
