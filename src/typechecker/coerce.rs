@@ -4,7 +4,7 @@
 use crate::error::error_at;
 use crate::parser::Pos;
 use crate::solver::poly::Poly;
-use crate::solver::z3::{Cmp, Constraint};
+use crate::solver::{Cmp, Constraint};
 
 use super::check::FnChecker;
 use super::ty::Type;

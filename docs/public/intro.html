@@ -26,7 +26,7 @@
 
         <p>It turns out we can avoid runtime shape errors and bounds checks -- without the ergonomic strain of full-blown refinement types like <a href="https://ucsd-progsys.github.io/liquidhaskell/">Liquid Haskell</a> -- provided we surrender shape dynamism. In exchange, we reject more bad programs and expose more complete function contracts. The <code>Sirius</code> type system will also unlock a bit of witchcraft in the backend.</p>
 
-        <p>I embedded a prototype compiler frontend in this page (sorry, Z3 Wasm builds don't seem to play nice on mobile). Here's a <code>hello world</code>: dot product and matrix multiplication.</p>
+        <p>I embedded a prototype compiler frontend in this page. Here's a <code>hello world</code>: dot product and matrix multiplication.</p>
         
         <pre class="editor"># typevars, representing natural numbers, come in curly brackets after function name
 # "a.len == b.len" is proven at call sites
@@ -148,9 +148,9 @@ fn test():
 
         <p>Dynamic values and shapes cannot mix without blowing up the type system. However, some navigation along their boundary is necessary to write useful programs. My design started with purely constant array shapes and I am adding features slowly in order to increase the space of useful <code>Sirius</code> programs.</p>
 
-        <p>There are various means to navigate the shape-data boundary. <code>typevar</code>s are available at runtime. Some operators can lift a normal value into a <code>typevar</code> by fixing it to known bounds. Iterators behave a bit like <code>typevar</code>s -- more on this later. <code>typevar</code>s compose algebraically</p>
+        <p>There are various means to navigate the shape-data boundary. <code>typevar</code>s are available at runtime. Some operators can lift a normal value into a <code>typevar</code> by fixing it to known bounds. Iterators are fresh typevars with <code>FROM &lt;= N &lt; TO</code> constraints.</p>
 
-        <p>Control flow is dictated by <code>for</code>-loops and <code>if</code>-statements. With flow typing, facts in <code>if</code> conditions are available to the constraint solver inside their scopes. Every <code>yield</code> must be <span id="backlink_3" class="backlink">counted symbolically.</span><sup><a href="#footnote_3">[3]</a></sup> </p>
+        <p>Control flow is dictated by <code>for</code>-loops and <code>if</code>-statements. Facts in <code>if</code> conditions are available to the constraint solver inside their scopes. Every <code>yield</code> is <span id="backlink_3" class="backlink">counted symbolically.</span><sup><a href="#footnote_3">[3]</a></sup> </p>
 
         <pre class="editor"># a challenge for the yield counter
 # counting engine knows that inner for-body is invoked N(N-1)/2 times
@@ -162,7 +162,7 @@ fn triangle{N}() -> f32[N^2 - N + 1]:
     yield 2.0
 </pre>
 
-        <p>Constraints that appear in function arguments must be proven at call sites and are available in the function body; vice-versa for constraints in the return type. <code>Sirius</code> supports <span id="backlink_4" class="backlink"><a href="https://arxiv.org/abs/2104.05372">Dex</a>-style finite index sets over <code>Poly</code>s with <code>Ind</code></span>.<sup><a href="#footnote_4">[4]</a></sup> <code>Ind</code>s are created by iteration and also plug into the <code>Poly</code> algebra via <code>Ind(N) + M = Ind(N + M)</code>.</p>
+        <p>Constraints that appear in function arguments must be proven at call sites and are available in the function body; vice-versa for constraints in the return type. <code>Sirius</code> supports <span id="backlink_4" class="backlink"><a href="https://arxiv.org/abs/2104.05372">Dex</a>-style finite index sets over <code>Poly</code>s with <code>Ind</code></span>.<sup><a href="#footnote_4">[4]</a></sup> <code>Ind</code>s are created by iteration and skolemize into the <code>Poly</code> algebra via <code>0 &lt;= Ind(N) &lt; N</code>.</p>
 
         <pre class="editor">
 fn find{N}(needle: f32, haystack: f32[N]) -> Ind(N)?:
@@ -192,7 +192,7 @@ fn test():
 
         <p>I envision a high-level language that leverages types to drastically streamline heterogenous hardware optimization. With <code>Poly</code> bounds on all memory and compute, the compiler can build tiling, rolling, and fusion strategies -- monomorphizing on shape.</p>
         
-        <p><code>Sirius</code>, or at least its affine fragment, is <a href="https://dl.acm.org/doi/full/10.1145/3674735">polyhedral</a> by construction, using the same familiar <code>Poly</code> abstraction, making it uniquely suited to an <a href="https://mlir.llvm.org/docs/Dialects/Affine/">MLIR</a> toolchain. The compiler can surface everything from memory layout to runtime complexity, providing detailed performance diagnostics at compile time.</p>
+        <p><code>Sirius</code>, or at least its affine fragment, is <a href="https://dl.acm.org/doi/full/10.1145/3674735">polyhedral</a> by construction, using the same familiar <code>Poly</code> abstraction, making it uniquely suited to an <a href="https://mlir.llvm.org/docs/Dialects/Affine/">MLIR</a> toolchain. The compiler can surface everything from memory layout (<span id="backlink_5" class="backlink">perhaps using <a href="https://arxiv.org/abs/2603.02298">CuTe</a>-style hierarchical layout algebra</span><sup><a href="#footnote_5">[5]</a></sup>) to runtime complexity, providing detailed performance diagnostics at compile time.</p>
 
         <p>There are several tools that already accomplish many of <code>Sirius</code>'s goals. <a href="https://triton-lang.org">Triton</a> is an ergonomic Python DSL for GPU kernels with a streamlined backend. <a href="https://futhark-lang.org">Futhark</a> is a functional GPGPU language with shape types (index functions) and an algebra including addition. <code>Sirius</code> will continue to draw inspiration from these projects and academic literature as I hammer out the <code>1.0</code> roadmap. Ideas and PRs are very welcome at the <a href="https://github.com/lorentzj/sirius">repo</a>.</p>
 
@@ -201,8 +201,9 @@ fn test():
         <hr>
         
         <p id="footnote_1" class="footnote">[1] Low-ish. Annotation may be lessened in some cases, à la <a href="https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-elision">lifetime elision</a> in the Rust borrow checker. I will refrain from any kind of global inference because I mostly agree with  <a href="https://borretti.me/article/type-inference-was-a-mistake">Fernando Borretti on the topic</a>. Inference and solving strictly go per-function. <a href="#backlink_1">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
-        <p id="footnote_2" class="footnote">[2] Solving arbitrary <code>Poly</code> constraints is impossible, courtesy of <a href="https://en.wikipedia.org/wiki/Hilbert%27s_tenth_problem">Matiyasevich et al</a>. For now, I'm sticking with <a href="https://microsoft.github.io/z3guide/docs/theories/Arithmetic">linear integer arithmetic</a> for stability's sake. Although Z3 could safely run more sophisticated constraints, the checker will inevitably return some false negatives. Happily, most constraints are trivial and obtain representationally without invoking Z3 at all. <a href="#backlink_2">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
+        <p id="footnote_2" class="footnote">[2] Solving arbitrary <code>Poly</code> constraints is impossible, courtesy of <a href="https://en.wikipedia.org/wiki/Hilbert%27s_tenth_problem">Matiyasevich et al</a>. For now, I'm sticking with <a href="https://microsoft.github.io/z3guide/docs/theories/Arithmetic">linear integer arithmetic</a> with a final pass to search for bounded-degree <a href="/api/doc/sirius/solver/t2/index.html">Handelman</a> representations. Although Z3 could safely check more sophisticated constraints, the checker will inevitably return some false negatives. Happily, most constraints are trivial and obtain representationally without invoking Z3 at all. <a href="#backlink_2">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
         <p id="footnote_3" class="footnote">[3] Details of the summation algorithm are available in the <a href="/api/doc/sirius/solver/count/struct.Count.html">solver docs</a>. <a href="#backlink_3">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
         <p id="footnote_4" class="footnote">[4] The Dex paper (p. 11) remarks, “This captures one of the most common uses for the reshape operation... [while] not requiring the type system to solve systems of Diophantine equations to check which reshapes are valid.” Yeah, but what if we do? <a href="#backlink_4">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
+        <p id="footnote_5" class="footnote">[5] Cris Cecka exhibited the <em>Tao</em> of Sirius when, asked about compilation time, <a href="https://youtu.be/vzUhbDO_0qk?t=2981">he said</a> “I make absolutely sure that I never lose track of any static information, ever, because that's the Death of runtime.” <a href="#backlink_5">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
     </body>
 </html>

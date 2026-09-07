@@ -4,8 +4,6 @@ mod coerce;
 mod expr;
 mod scope;
 mod sig;
-mod t0;
-mod t1;
 mod ty;
 mod typed;
 
@@ -14,7 +12,7 @@ mod tests;
 
 use crate::error::Errors;
 use crate::parser::ParserOutput;
-use crate::solver::z3::Solver;
+use crate::solver::Solver;
 pub use ty::Type;
 
 pub fn check(parse: &ParserOutput, solver: &mut Solver) -> Errors {

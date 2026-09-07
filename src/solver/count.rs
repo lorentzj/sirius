@@ -48,7 +48,6 @@ use super::poly::{
 /// let sum = i2.sum_below('i', &poly!(N));
 /// assert_eq!(sum, Count::ratio(poly!(2*N^3 - 3*N^2 + N), 6));
 /// ```
-
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Count {
     num: Poly,

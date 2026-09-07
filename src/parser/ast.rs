@@ -290,7 +290,7 @@ pub struct Function {
     pub type_args: Vec<Pos<String>>,
     pub ex_type_args: Vec<Pos<String>>,
     pub type_constraints: Vec<(Pos<String>, ArithCmpOp, Expr)>,
-    pub ex_type_constraints: Vec<(Pos<String>, ArithCmpOp, Expr)>,    
+    pub ex_type_constraints: Vec<(Pos<String>, ArithCmpOp, Expr)>,
     pub args: Vec<(Pos<String>, Expr)>,
     pub ret: Option<Expr>,
     pub body: Block,

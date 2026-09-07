@@ -1,105 +1,96 @@
-//! A pipe to [Z3](https://github.com/z3prover/z3) for passing QF_LIA constraints.
+//! Linearized systems of constraints and a pipe to [Z3](https://github.com/z3prover/z3) for QF_LIA solving.
 
-use crate::bindings::log;
-use crate::parser::lexer::ArithCmpOp;
 use js_sys::Function;
 use std::collections::HashMap;
-use std::fmt;
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use wasm_bindgen::prelude::*;
 
-use super::poly::{Poly, coef::Coef, mono::Var};
+use super::Constraint;
+use super::Verdict;
+use super::poly::{
+    Poly,
+    coef::Coef,
+    mono::{Mono, Var},
+};
 
-/// Obligation vocabulary.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum Cmp {
-    Eq,
-    Ne,
-    Le,
-    Lt,
-    Ge,
-    Gt,
+/// A linearized representation of a system of constraints.
+/// Non-linear atoms get fresh [`Var`]s and names like `X*Y` or `Z^2`.
+pub struct Linearized {
+    pub facts: Vec<Constraint>,
+    pub goal: Constraint,
+    pub nonneg: Vec<Var>,
+    pub pure_linear: bool,
+    pub names: Vec<String>,
 }
 
-impl Cmp {
-    pub fn negated(self) -> Cmp {
-        match self {
-            Cmp::Eq => Cmp::Ne,
-            Cmp::Ne => Cmp::Eq,
-            Cmp::Le => Cmp::Gt,
-            Cmp::Lt => Cmp::Ge,
-            Cmp::Ge => Cmp::Lt,
-            Cmp::Gt => Cmp::Le,
+impl Linearized {
+    pub fn new(
+        facts: &[Constraint],
+        goal: &Constraint,
+        vars: &[String],
+        nonneg: &dyn Fn(Var) -> bool,
+    ) -> Self {
+        let base = vars.len() as u32;
+        let mut atoms: Vec<Mono> = Vec::new();
+        let mut linearize_poly = |p: &Poly| -> Poly {
+            let terms = p.terms().into_iter().map(|(c, m)| {
+                if m.total_degree() <= 1 {
+                    (c, m.clone())
+                } else {
+                    let idx = match atoms.iter().position(|a| *a == m) {
+                        Some(i) => i,
+                        None => {
+                            atoms.push(m.clone());
+                            atoms.len() - 1
+                        }
+                    };
+                    (c, Mono::new([(base + idx as u32, 1)]))
+                }
+            });
+            Poly::from_terms(terms)
+        };
+
+        let mut linearize_constraint = |c: &Constraint| Constraint {
+            lhs: linearize_poly(&c.lhs),
+            cmp: c.cmp,
+            rhs: linearize_poly(&c.rhs),
+        };
+
+        let facts: Vec<Constraint> = facts.iter().map(&mut linearize_constraint).collect();
+        let goal = linearize_constraint(goal);
+
+        let mut nonneg_vars: Vec<Var> = (0..base).filter(|&v| nonneg(v)).collect();
+        let mut names: Vec<String> = vars.to_vec();
+        for (i, m) in atoms.iter().enumerate() {
+            // An atom over nonneg variables is nonneg
+            if m.exps().iter().all(|&(v, _)| nonneg(v)) {
+                nonneg_vars.push(base + i as u32);
+            }
+            let rendered: Vec<String> = m
+                .exps()
+                .iter()
+                .map(|&(v, e)| {
+                    let name = &vars[v as usize];
+                    if e > 1 {
+                        format!("{name}^{e}")
+                    } else {
+                        name.to_string()
+                    }
+                })
+                .collect();
+            names.push(rendered.join("*"));
+        }
+
+        Self {
+            pure_linear: atoms.is_empty(),
+            facts,
+            goal,
+            nonneg: nonneg_vars,
+            names,
         }
     }
-
-    fn smt(self) -> &'static str {
-        match self {
-            Cmp::Eq => "=",
-            Cmp::Ne => "distinct",
-            Cmp::Le => "<=",
-            Cmp::Lt => "<",
-            Cmp::Ge => ">=",
-            Cmp::Gt => ">",
-        }
-    }
-
-    pub fn from_lex(op: &ArithCmpOp) -> Self {
-        match op {
-            ArithCmpOp::Greater => Cmp::Gt,
-            ArithCmpOp::GreaterOrEq => Cmp::Ge,
-            ArithCmpOp::Less => Cmp::Lt,
-            ArithCmpOp::LessOrEq => Cmp::Le,
-            ArithCmpOp::Eq => Cmp::Eq,
-            ArithCmpOp::NotEq => Cmp::Ne,
-        }
-    }
-}
-
-impl fmt::Display for Cmp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Cmp::Eq => "==",
-            Cmp::Ne => "!=",
-            Cmp::Le => "<=",
-            Cmp::Lt => "<",
-            Cmp::Ge => ">=",
-            Cmp::Gt => ">",
-        })
-    }
-}
-
-/// Format for facts and goals, e.g. `X > 2*Y`.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Constraint {
-    pub lhs: Poly,
-    pub cmp: Cmp,
-    pub rhs: Poly,
-}
-
-impl Constraint {
-    pub fn new(lhs: Poly, cmp: Cmp, rhs: Poly) -> Self {
-        Self { lhs, cmp, rhs }
-    }
-
-    pub fn display_with(&self, names: &[&str]) -> String {
-        format!(
-            "{} {} {}",
-            self.lhs.display_with(Some(names)),
-            self.cmp,
-            self.rhs.display_with(Some(names))
-        )
-    }
-}
-
-/// Z3 response. Refutations provide counterexamples.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub enum Verdict {
-    Proved,
-    Refuted(Vec<(Var, i128)>),
-    Unknown,
 }
 
 enum Z3Kind {
@@ -107,18 +98,22 @@ enum Z3Kind {
     Cli,
 }
 
-pub struct Solver {
-    cache: HashMap<u64, Verdict>,
-    /// Obligations submitted, and of those, the ones that actually reached z3.
+/// A cached Z3 pipe, using either the command line or a JavaScript callback.
+pub struct Z3 {
+    /// Obligations submitted.
     pub queries: usize,
+    /// Obligations passed to z3.
     pub z3_calls: usize,
+    cache: HashMap<u64, Verdict>,
     kind: Z3Kind,
     // optional filesystem cache
     cache_dir: Option<PathBuf>,
 }
 
-impl Solver {
-    pub fn new_cli(cache_dir: Option<PathBuf>) -> Option<Solver> {
+impl Z3 {
+    /// Expect the `z3` command to be available in the environment.
+    /// Optionally provide a filesystem cache for model output.
+    pub fn new_cli(cache_dir: Option<PathBuf>) -> Option<Self> {
         let z3_available = Command::new("z3")
             .arg("-version")
             .stdout(Stdio::null())
@@ -126,7 +121,7 @@ impl Solver {
             .status()
             .is_ok_and(|s| s.success());
 
-        z3_available.then_some(Solver {
+        z3_available.then_some(Self {
             cache: HashMap::new(),
             queries: 0,
             z3_calls: 0,
@@ -135,21 +130,19 @@ impl Solver {
         })
     }
 
-    pub fn new_wasm(callback: Function) -> Solver {
+    /// Pass a javascript callback string->string for smt2 input.
+    pub fn new_wasm(callback: Function) -> Self {
         let wrapped_callback = move |s: &str| {
             let res = callback
                 .call1(&JsValue::NULL, &JsValue::from_str(s))
                 .and_then(|val| val.as_string().ok_or("callback returned non-string".into()));
             match res {
                 Ok(model) => model,
-                Err(err) => {
-                    log(&format!("z3 failed: {err:?}"));
-                    "".into()
-                }
+                Err(_) => "".into(),
             }
         };
 
-        Solver {
+        Self {
             cache: HashMap::new(),
             queries: 0,
             z3_calls: 0,
@@ -237,7 +230,7 @@ impl Solver {
             Some("unsat") => Verdict::Proved,
             Some("sat") => {
                 let rest: String = stdout_lines.collect::<Vec<_>>().join(" ");
-                Verdict::Refuted(parse_model(&rest, vars))
+                Verdict::RefutedAt(parse_model(&rest, vars))
             }
             _ => Verdict::Unknown,
         }
@@ -247,7 +240,8 @@ impl Solver {
 fn verdict_tag(v: &Verdict) -> &'static str {
     match v {
         Verdict::Proved => "proved (unsat)",
-        Verdict::Refuted(_) => "refuted (sat)",
+        Verdict::RefutedBy(_) => "refuted (sat)",
+        Verdict::RefutedAt { .. } => "refuted (sat)",
         Verdict::Unknown => "unknown",
     }
 }
@@ -376,7 +370,9 @@ fn fnv1a_hash(bytes: &[u8]) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::super::poly::poly;
+    use crate::solver::poly::{Poly, poly};
+    use crate::solver::{Cmp, Constraint};
+
     use super::*;
 
     #[test]
@@ -397,7 +393,7 @@ mod tests {
 
     #[test]
     fn entailment_with_context() {
-        let mut s = Solver::new_cli(None).unwrap();
+        let mut s = Z3::new_cli(None).unwrap();
         // N >= 1 => 0 < N
         let facts = [Constraint::new(poly!(n), Cmp::Ge, poly!(1))];
         let goal = Constraint::new(poly!(0), Cmp::Lt, poly!(n));
@@ -405,14 +401,14 @@ mod tests {
         // N >= 1 =/> 1 < N
         let goal = Constraint::new(poly!(1), Cmp::Lt, poly!(n));
         match s.entails_lia(&facts, &goal, &['n' as Var], &["N"]) {
-            Verdict::Refuted(model) => assert_eq!(model, vec![('n' as Var, 1)]),
+            Verdict::RefutedAt(point) => assert_eq!(point, vec![('n' as Var, 1)]),
             v => panic!("expected refutation, got {v:?}"),
         }
     }
 
     #[test]
     fn integer_reasoning_not_real() {
-        let mut s = Solver::new_cli(None).unwrap();
+        let mut s = Z3::new_cli(None).unwrap();
         // 2N >= 1 => N >= 1
         let facts = [Constraint::new(poly!(2 * n), Cmp::Ge, poly!(1))];
         let goal = Constraint::new(poly!(n), Cmp::Ge, poly!(1));
@@ -421,7 +417,7 @@ mod tests {
 
     #[test]
     fn commute() {
-        let mut s = Solver::new_cli(None).unwrap();
+        let mut s = Z3::new_cli(None).unwrap();
         // N == M => M == N
         let facts = [Constraint::new(poly!(n), Cmp::Eq, poly!(m))];
         let goal = Constraint::new(poly!(m), Cmp::Eq, poly!(n));
@@ -434,5 +430,30 @@ mod tests {
             s.entails_lia(&facts, &goal, &[], &["N", "M"]),
             Verdict::Proved
         );
+    }
+
+    #[test]
+    fn linearized() {
+        let vars = ["N".into(), "M".into()];
+        let nm = Poly::var(0u32, 1).mul(&Poly::var(1u32, 1));
+
+        let fact = Constraint {
+            lhs: nm.clone(),
+            cmp: Cmp::Ge,
+            rhs: poly!(4),
+        };
+        let goal = Constraint {
+            lhs: poly!(4),
+            cmp: Cmp::Le,
+            rhs: nm,
+        };
+
+        let lin = Linearized::new(&[fact], &goal, &vars, &|_| true);
+        assert!(!lin.pure_linear);
+        assert_eq!(lin.facts[0].lhs, lin.goal.rhs);
+        assert_eq!(lin.facts[0].lhs, Poly::var(2u32, 1));
+
+        assert!(lin.nonneg.contains(&2));
+        assert_eq!(lin.names[2], "N*M");
     }
 }

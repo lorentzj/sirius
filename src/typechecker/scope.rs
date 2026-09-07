@@ -1,8 +1,8 @@
 //! Block-level scope stack. Walks alongside the AST, recording bindings and facts
 //! into the [`TypedBlock`]s that outlive the traversal.
 
+use crate::solver::Constraint;
 use crate::solver::count::Count;
-use crate::solver::z3::Constraint;
 
 use super::ty::Type;
 use super::typed::{Binding, BindingId, BlockId, BlockKind, Fact, TypedBlock};

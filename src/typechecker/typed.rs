@@ -4,8 +4,8 @@
 
 use std::collections::HashMap;
 
+use crate::solver::Constraint;
 use crate::solver::count::Count;
-use crate::solver::z3::Constraint;
 
 use super::sig::FnSig;
 use super::ty::Type;
@@ -57,7 +57,7 @@ impl TypedBlock {
 pub struct TypedFn {
     pub name: String,
     pub sig: FnSig,
-    /// [`Var`](crate::solver::poly::Var) index to display name: typevars, then loop iterators.
+    /// [`Var`](crate::solver::Var) index to display name: typevars, then loop iterators.
     pub vars: Vec<String>,
     pub blocks: Vec<TypedBlock>,
     /// Total `yield`s over the whole body.

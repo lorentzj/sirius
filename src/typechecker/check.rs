@@ -8,26 +8,21 @@ use crate::parser::lexer::{ArithCmpOp, ArithOp, AssnOp, BoolOp, Op};
 use crate::parser::{Pos, Span, UnaryOp};
 use crate::solver::count::Count;
 use crate::solver::poly::{Poly, Var};
-use crate::solver::z3::{Cmp, Constraint, Solver};
+use crate::solver::{Cmp, Constraint};
+use crate::solver::{Solver, Verdict, t0};
 
 use super::annotation::annotation;
 use super::scope::{Frame, Scope};
 use super::sig::{FnSig, check_recursion, signatures};
 use super::ty::Type;
 use super::typed::{Binding, BlockKind, Fact, TypedAst, TypedFn};
-use super::{t0, t1};
 
 pub fn check_file(parse: &[Function], solver: &mut Solver) -> Errors {
     check_program(parse, solver).1
 }
 
 pub fn reserved_name(name: &str) -> bool {
-    matches!(name,
-        "null" 
-        | "_"
-        | "len"
-        | "shape"
-    )
+    matches!(name, "null" | "_" | "len" | "shape")
 }
 
 /// Check a whole file, keeping what was learned about every function.
@@ -58,8 +53,7 @@ pub struct FnChecker<'a> {
     pub solver: &'a mut Solver,
     pub sig: FnSig,
     pub scope: Scope,
-    /// Display names for every [`Var`]: the signature's typevars, then loop iterators.
-    pub vars: Vec<String>,
+    pub var_names: Vec<String>,
     pub nonneg: Vec<Var>,
     pub errors: Errors,
     pub exprs: HashMap<(usize, usize), Type>,
@@ -82,7 +76,7 @@ impl<'a> FnChecker<'a> {
             solver,
             scope: Scope::new(),
             nonneg: (0..vars.len() as Var).collect(),
-            vars,
+            var_names: vars,
             errors: vec![],
             exprs: HashMap::new(),
             yield_pos: None,
@@ -98,6 +92,7 @@ impl<'a> FnChecker<'a> {
                 .insert(tv, Type::Size(Poly::var(i as Var, 1)), false);
         }
         for (name, ty) in checker.sig.params.clone() {
+            let ty = checker.skolemize(&ty, &name);
             checker.scope.insert(&name, ty, false);
         }
         for constraint in checker.sig.constraints.clone() {
@@ -110,7 +105,7 @@ impl<'a> FnChecker<'a> {
 
         let FnChecker {
             scope,
-            vars,
+            var_names: vars,
             errors,
             exprs,
             sig,
@@ -282,6 +277,12 @@ impl<'a> FnChecker<'a> {
                     // a mutable binding cannot keep a static value, since assignment would change it
                     None if *mutable => widen(&found),
                     None => found,
+                };
+                // a mutable binding cannot carry a skolem either -- it would go stale on assignment
+                let bound = if *mutable {
+                    bound
+                } else {
+                    self.skolemize(&bound, &name.data)
                 };
                 self.scope.insert(&name.data, bound, *mutable);
             }
@@ -489,7 +490,7 @@ impl<'a> FnChecker<'a> {
                         ArithCmpOp::Eq => Cmp::Eq,
                         ArithCmpOp::NotEq => Cmp::Ne,
                     };
-                    let cmp = if positive { cmp } else { cmp.negated() };
+                    let cmp = if positive { cmp } else { cmp.negate() };
                     out.push(Fact::Constraint(Constraint::new(l, cmp, r)));
                 } else {
                     // x == null, x != null
@@ -557,12 +558,42 @@ impl<'a> FnChecker<'a> {
     }
 
     pub fn names(&self) -> Vec<&str> {
-        self.vars.iter().map(String::as_str).collect()
+        self.var_names.iter().map(String::as_str).collect()
     }
 
     pub fn fresh_var(&mut self, name: &str) -> Var {
-        self.vars.push(name.to_string());
-        (self.vars.len() - 1) as Var
+        self.var_names.push(name.to_string());
+        (self.var_names.len() - 1) as Var
+    }
+
+    /// Give an `Ind` value a name in the constraint system: a fresh [`Var`] `v` with
+    /// `0 <= v < bound` on the enclosing block, exactly like a loop variable. Flow facts can then
+    /// mention it (`if k > 0`), and arithmetic on it stays a `Size` instead of decaying to `i64`.
+    ///
+    /// `Option` and `Tuple` are descended into, since each position is one value. Array elements
+    /// are left packed -- one element type stands for many values, which no single var can name.
+    pub fn skolemize(&mut self, t: &Type, name: &str) -> Type {
+        match t {
+            Type::Ind(bound) => {
+                let v = self.fresh_var(name);
+                let value = Poly::var(v, 1);
+                self.nonneg.push(v);
+                self.scope
+                    .add_constraint(Constraint::new(value.clone(), Cmp::Ge, Poly::zero()));
+                self.scope
+                    .add_constraint(Constraint::new(value.clone(), Cmp::Lt, bound.clone()));
+                Type::Size(value)
+            }
+            Type::Option(inner) => Type::Option(Box::new(self.skolemize(inner, name))),
+            Type::Tuple(items) => Type::Tuple(
+                items
+                    .iter()
+                    .enumerate()
+                    .map(|(i, t)| self.skolemize(t, &format!("{name}.{i}")))
+                    .collect(),
+            ),
+            other => other.clone(),
+        }
     }
 
     /// Prove without touching the solver; for choices that must not fail, like joins.
@@ -572,7 +603,70 @@ impl<'a> FnChecker<'a> {
 
     pub fn prove_quiet(&mut self, goal: &Constraint) -> Option<String> {
         let constraints = self.scope.constraints();
-        t1::prove(self.solver, &constraints, goal, &self.vars, &self.nonneg)
+        let verdict = self
+            .solver
+            .prove(&constraints, goal, &self.var_names, &self.nonneg);
+        let var_names: Vec<&str> = self.var_names.iter().map(|x| x.as_ref()).collect();
+
+        match verdict {
+            Verdict::Proved => None,
+            Verdict::RefutedBy(refutation) => {
+                let mut msg = format!(
+                    "disproved \"{}\"; {}",
+                    goal.display_with(&var_names),
+                    refutation.display_with(&var_names)
+                );
+                let mut goal_vars = goal.lhs.vars();
+                goal_vars.extend(goal.rhs.vars());
+
+                let mut relevant_nonneg: Vec<String> = vec![];
+                let refutation_lhs_vars = refutation.lhs.vars();
+                let refutation_rhs_vars = refutation.rhs.vars();
+
+                for var in &self.nonneg {
+                    if refutation_lhs_vars.contains(var) || refutation_rhs_vars.contains(var) {
+                        relevant_nonneg.push(format!("{} >= 0", var_names[*var as usize]));
+                    }
+                }
+
+                if !relevant_nonneg.is_empty() {
+                    msg.push_str(&format!(" given {}", relevant_nonneg.join(", ")));
+                }
+
+                Some(msg)
+            }
+            Verdict::RefutedAt(point) => {
+                let mut msg = format!("disproved \"{}\"", goal.display_with(&var_names));
+                let mut goal_vars = goal.lhs.vars();
+                goal_vars.extend(goal.rhs.vars());
+
+                let mut s_point: Vec<String> = vec![];
+
+                for (var, val) in point {
+                    if goal_vars.contains(&var) {
+                        match var_names.get(var as usize) {
+                            Some(var) => {
+                                s_point.push(format!("{var} = {val}"));
+                            }
+                            None => {
+                                // nonlinear atom, should be impossible
+                                unreachable!();
+                            }
+                        }
+                    }
+                }
+
+                if !s_point.is_empty() {
+                    msg.push_str(&format!("; counterexample: {}", s_point.join(", ")));
+                }
+
+                Some(msg)
+            }
+            Verdict::Unknown => Some(format!(
+                "cannot prove \"{}\"",
+                goal.display_with(&var_names)
+            )),
+        }
     }
 
     pub fn prove<T>(&mut self, goal: Constraint, pos: &Pos<T>, ctx: &str) -> bool {

@@ -1,7 +1,9 @@
-use crate::solver::poly::{Poly, Var, poly};
-use crate::solver::z3::Cmp;
+//! Try to prove a goal given only a non-negative variable list.
 
-// false means not representationally provable -- escalate system to T1
+use crate::solver::Cmp;
+use crate::solver::poly::{Poly, Var, poly};
+
+/// Try to prove a goal given only a non-negative variable list.
 pub fn prove(cmp: Cmp, lhs: &Poly, rhs: &Poly, nonneg: &dyn Fn(Var) -> bool) -> bool {
     match cmp {
         Cmp::Eq => lhs == rhs,

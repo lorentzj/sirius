@@ -2,12 +2,12 @@
 
 use std::collections::HashMap;
 
-use crate::error::error_at;
+use crate::error::{Errors, error_at};
 use crate::parser::ast::{AD, E, Expr};
 use crate::parser::lexer::{ArithCmpOp, ArithOp, BoolOp, Op};
 use crate::parser::{Pos, UnaryOp};
 use crate::solver::poly::{Poly, Var};
-use crate::solver::z3::{Cmp, Constraint};
+use crate::solver::{Cmp, Constraint};
 
 use super::check::FnChecker;
 use super::sig::{FnSig, match_ty};
@@ -183,6 +183,14 @@ impl FnChecker<'_> {
         for e in exprs {
             self.check_expr(e, None);
         }
+    }
+
+    /// Check `expr`, handing back its errors instead of reporting them, so the caller can discard
+    /// them and try again under a better expectation.
+    fn check_buffered(&mut self, expr: &Expr, expected: Option<&Type>) -> (Type, Errors) {
+        let mark = self.errors.len();
+        let t = self.check_expr(expr, expected);
+        (t, self.errors.split_off(mark))
     }
 
     // -- literals ------------------------------------------------------------
@@ -628,12 +636,12 @@ impl FnChecker<'_> {
         }
 
         for (i, arg) in type_args.iter().enumerate() {
-            if let E::Ident(s) = &arg.data {
-                if s == "_" {
-                    continue;
-                }
+            if let E::Ident(s) = &arg.data
+                && s == "_"
+            {
+                continue;
             }
-            
+
             let arg_t = self.check_expr(arg, None);
             match arg_t {
                 Type::Size(p) if i < sig.tv_names.len() => {
@@ -667,14 +675,19 @@ impl FnChecker<'_> {
             return Type::Error;
         }
 
-        // left to right
-        // an early argument can pin down a later one's typevars
+        // left to right, so an early argument can pin down a later one's typevars. Errors are
+        // held back rather than reported, since a later argument may supply the hint that fixes
+        // them -- see the retry below.
         let mut arg_types = vec![];
+        let mut arg_errors: Vec<Errors> = vec![];
+        let mut hints: Vec<Option<Type>> = vec![];
         for (arg, (_, param)) in args.iter().zip(&sig.params) {
             let hint = param.instantiate(&subst).ok();
-            let arg_t = self.check_expr(arg, hint.as_ref());
+            let (arg_t, errs) = self.check_buffered(arg, hint.as_ref());
             match_ty(param, &arg_t, &mut subst);
             arg_types.push(arg_t);
+            arg_errors.push(errs);
+            hints.push(hint);
         }
 
         // a second pass picks up typevars that only became solvable now
@@ -683,6 +696,29 @@ impl FnChecker<'_> {
         }
         if let Some(expected) = expected {
             match_ty(&sig.ret, expected, &mut subst);
+        }
+
+        // retry any argument that failed under a hint that has since improved, so argument order
+        // does not decide whether inference succeeds: dot(fill(2), x) checks like dot(x, fill(2))
+        for (i, (arg, (_, param))) in args.iter().zip(&sig.params).enumerate() {
+            if arg_errors[i].is_empty() {
+                continue;
+            }
+            let hint = param.instantiate(&subst).ok();
+            if hint == hints[i] {
+                continue;
+            }
+            let (arg_t, errs) = self.check_buffered(arg, hint.as_ref());
+            if errs.len() < arg_errors[i].len() {
+                match_ty(param, &arg_t, &mut subst);
+                arg_types[i] = arg_t;
+                arg_errors[i] = errs;
+            }
+        }
+
+        for errs in arg_errors {
+            failed |= !errs.is_empty();
+            self.errors.extend(errs);
         }
 
         if failed {

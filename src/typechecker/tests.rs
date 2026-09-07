@@ -1,6 +1,6 @@
 use crate::error::Errors;
 use crate::parser::ParserOutput;
-use crate::solver::z3::Solver;
+use crate::solver::Solver;
 
 use super::check::check_program;
 use super::typed::TypedAst;
@@ -54,10 +54,7 @@ fn dot_product() {
 fn out_of_bounds_access() {
     let src = DOT.replace("a[i]", "a[i + 1]");
     let msg = expect_error(&src);
-    assert!(
-        msg.starts_with("index: cannot prove \"i + 1 < N\""),
-        "{msg}"
-    );
+    assert!(msg.starts_with("index: disproved \"i + 1 < N\""), "{msg}");
     assert!(msg.contains("counterexample"), "{msg}");
 }
 
@@ -184,10 +181,7 @@ fn shift{N}(a: f32[N]) -> f32:
     expect_ok(guarded);
 
     let msg = expect_error(&guarded.replace("if i < N - 1:", "if i < N:"));
-    assert!(
-        msg.starts_with("index: cannot prove \"i + 1 < N\""),
-        "{msg}"
-    );
+    assert!(msg.starts_with("index: disproved \"i + 1 < N\""), "{msg}");
 }
 
 #[test]
@@ -239,10 +233,7 @@ fn test{M}(a: f32[M + 1], b: f32[M]) -> f32:
     return b[first(a)]
 ",
     );
-    assert!(
-        msg.starts_with("index: cannot prove \"M + 1 <= M\""),
-        "{msg}"
-    );
+    assert!(msg.starts_with("index: disproved \"M + 1 <= M\""), "{msg}");
 }
 
 #[test]
@@ -259,7 +250,7 @@ fn test():
 
     let msg = expect_error(&src.replace("get{3, 2}(a)", "get{3, 3}(a)"));
     assert!(
-        msg.starts_with("constraint of \"get\": cannot prove \"3 < 3\""),
+        msg.starts_with("constraint of \"get\": disproved \"3 < 3\""),
         "{msg}"
     );
 }
@@ -449,8 +440,7 @@ fn test():
 /// Pins where linearization gives up. A product of two typevars is abstracted to an opaque
 /// atom, so `i < A` no longer implies `i*B < A*B`. See the notes on Handelman certificates.
 #[test]
-fn nonlinear_strides() {
-    // constant strides stay linear and check
+fn constant_strides() {
     expect_ok(
         "
 fn even{A}(arr: f32[2*A]) -> f32[A]:
@@ -467,11 +457,34 @@ fn tile{A}(arr: f32[A*4]) -> f32[A*4]:
             yield arr[i*4 + j]
 ",
     );
+}
 
-    // a symbolic stride does not
-    let msg = expect_error(
+/// Symbolic strides survive the atom abstraction only via a [`t2`](super::t2) certificate.
+#[test]
+fn symbolic_strides() {
+    expect_ok(
         "
 fn every_n{A, B st B > 0}(arr: f32[A*B]) -> f32[A]:
+    for i from 0 to A:
+        yield arr[i*B]
+
+fn blocks{A, B st B > 0}(arr: f32[A*B]) -> f32[A*B]:
+    for i from 0 to A:
+        for j from 0 to B:
+            yield arr[i*B + j]
+
+fn nest3{A, B, C}(arr: f32[A*B*C]) -> f32[A*B*C]:
+    for i from 0 to A:
+        for j from 0 to B:
+            for k from 0 to C:
+                yield arr[i*B*C + j*C + k]
+",
+    );
+
+    // B = 0 makes the array empty, so the access is genuinely unsafe without the constraint
+    let msg = expect_error(
+        "
+fn every_n{A, B}(arr: f32[A*B]) -> f32[A]:
     for i from 0 to A:
         yield arr[i*B]
 ",
@@ -498,4 +511,200 @@ fn get(a: f32?) -> f32:
     );
 
     assert!(msg.starts_with("assigned value: expected \"f32\""));
+}
+
+#[test]
+fn argument_order_does_not_matter() {
+    let prelude = format!("{DOT}{FILL}");
+
+    // `x` fixes dot's N, which fixes fill's N through the expected type -- either way round
+    for call in ["dot(x, fill(2))", "dot(fill(2), x)"] {
+        let ast = expect_ok(&format!(
+            "{prelude}
+fn test() -> f32:
+    let x = [1.0, 2.0, 3.0]
+    return {call}
+"
+        ));
+        let test = ast.get("test").unwrap();
+        assert_eq!(test.render_var(0, "x").unwrap(), "f32[3]");
+    }
+
+    // a later argument can also inform an earlier one across a gap
+    expect_ok(&format!(
+        "{FILL}
+fn f{{N, M}}(a: f32[N], b: f32[M], c: f32[N]) -> f32:
+    return 0.0
+
+fn test() -> f32:
+    return f(fill(0.0), fill{{2}}(0.0), [1.0, 2.0, 3.0])
+"
+    ));
+
+    // with nothing to pin it down, the error still surfaces exactly once per unsolved call
+    let (_, errors) = check(&format!(
+        "{prelude}
+fn test() -> f32:
+    return dot(fill(1.0), fill(2.0))
+"
+    ));
+    assert_eq!(errors.len(), 2, "{errors:?}");
+    assert!(
+        errors.iter().all(|e| e
+            .data
+            .message
+            .starts_with("cannot infer typevar \"N\" of \"fill\"")),
+        "{errors:?}"
+    );
+}
+
+/// A retry must not swallow an error that was never about the missing hint.
+#[test]
+fn argument_retry_keeps_real_errors() {
+    let msg = expect_error(&format!(
+        "{DOT}
+fn test() -> f32:
+    let x = [1.0, 2.0, 3.0]
+    return dot(nonexistent, x)
+"
+    ));
+    assert!(
+        msg.starts_with("cannot find name \"nonexistent\" in scope"),
+        "{msg}"
+    );
+}
+
+/// t2 may only ever turn an error into a pass, so anything it wrongly proves is unsound.
+#[test]
+fn certificates_reject_unsafe_strides() {
+    let cases = [
+        // one past the end of the row
+        (
+            "index",
+            "
+fn f{A, B st B > 0}(arr: f32[A*B]) -> f32:
+    for i from 0 to A:
+        print arr[i*B + B]
+    return 0.0
+",
+        ),
+        // below the start
+        (
+            "index",
+            "
+fn f{A, B st B > 0}(arr: f32[A*B]) -> f32:
+    for i from 0 to A:
+        print arr[i*B - 1]
+    return 0.0
+",
+        ),
+        // one row too many
+        (
+            "index",
+            "
+fn f{A, B st B > 0}(arr: f32[A*B]) -> f32:
+    for i from 0 to A + 1:
+        print arr[i*B]
+    return 0.0
+",
+        ),
+        // quadratic stride outruns a linear array
+        (
+            "index",
+            "
+fn f{A, B st B > 1}(arr: f32[A*B]) -> f32:
+    for i from 0 to A:
+        print arr[i*B*B]
+    return 0.0
+",
+        ),
+        // the count is off by one, and no certificate exists for an equality that is false
+        (
+            "yield count",
+            "
+fn f{A, B st B > 0}(a: f32[A*B]) -> f32[A*B + 1]:
+    for i from 0 to A:
+        for j from 0 to B:
+            yield a[i*B + j]
+",
+        ),
+    ];
+
+    for (kind, src) in cases {
+        let msg = expect_error(src);
+        assert!(msg.starts_with(kind), "expected a {kind} error, got: {msg}");
+    }
+}
+
+/// `B >= 1` need not be declared when an inner loop already implies it.
+#[test]
+fn inner_loop_supplies_the_stride_bound() {
+    expect_ok(
+        "
+fn blocks{A, B}(arr: f32[A*B]) -> f32[A*B]:
+    for i from 0 to A:
+        for j from 0 to B:
+            yield arr[i*B + j]
+",
+    );
+}
+
+/// A bound `Ind` gets a name in the constraint system, so conditions can talk about it and
+/// arithmetic on it stays a `Size` instead of decaying to `i64`.
+#[test]
+fn bound_indices_are_named() {
+    let find = "
+fn find{N}(needle: f32, haystack: f32[N]) -> Ind(N)?:
+    for i from 0 to N:
+        if needle == haystack[i]:
+            return i
+    return null
+";
+    let guarded = format!(
+        "{find}
+fn test():
+    let mut arr = [1.0, 2.0, 3.0]
+    let k = find(2.0, arr)
+    if k != null:
+        if k > 0:
+            arr[k - 1] += 1.0
+"
+    );
+    let ast = expect_ok(&guarded);
+    // the binding carries the skolem, not the packed `Ind`
+    assert_eq!(ast.render_var("test", 0, "k").unwrap(), "Option(k)");
+
+    // without the guard `k - 1` can underflow, and the counterexample names the skolem
+    let msg = expect_error(&format!(
+        "{find}
+fn test():
+    let mut arr = [1.0, 2.0, 3.0]
+    let k = find(2.0, arr)
+    if k != null:
+        arr[k - 1] += 1.0
+"
+    ));
+    assert!(
+        msg.starts_with("index: disproved \"k - 1 >= 0\"; counterexample: k = 0"),
+        "{msg}"
+    );
+
+    // parameters work the same way
+    expect_ok(
+        "
+fn f{N}(a: f32[N], k: Ind(N)) -> f32:
+    if k < N - 1:
+        return a[k + 1]
+    return 0.0
+",
+    );
+
+    // but array elements stay packed -- one element type stands for many values
+    let ast = expect_ok(
+        "
+fn f{N}(a: f32[N], ks: Ind(N)[3]) -> f32:
+    return a[ks[0]]
+",
+    );
+    assert_eq!(ast.render_var("f", 0, "ks").unwrap(), "Ind(N)[3]");
 }

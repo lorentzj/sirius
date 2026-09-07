@@ -8,11 +8,11 @@ use crate::parser::ast::{AD, Block, E, Expr, Function, S};
 use crate::parser::{Pos, Span};
 use crate::solver::poly::coef::Coef;
 use crate::solver::poly::{Poly, Var};
-use crate::solver::z3::{Cmp, Constraint};
+use crate::solver::{Cmp, Constraint};
 
 use super::annotation::annotation;
-use super::ty::Type;
 use super::check::reserved_name;
+use super::ty::Type;
 
 /// [`Poly`]s here are expressed in function's typevar space,
 /// where [`Var`] `i` is `tv_names[i]`; call sites map it into their own with [`Type::instantiate`].
@@ -66,7 +66,6 @@ fn build(f: &Function, errors: &mut Errors) -> FnSig {
     }
 
     for tv in &f.type_args {
-
         if reserved_name(&tv.data) {
             errors.push(error_at!(
                 NameResolution,

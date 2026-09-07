@@ -5,7 +5,7 @@ use wasm_bindgen::prelude::*;
 
 extern crate console_error_panic_hook;
 
-use crate::solver::z3::Solver;
+use crate::solver::Solver;
 
 use super::error::Error;
 use super::parser::{
