@@ -2,6 +2,9 @@ pub mod bindings;
 pub mod solver;
 
 #[macro_use]
-mod error;
-mod parser;
-mod typechecker;
+#[doc(hidden)]
+pub mod error;
+#[doc(hidden)]
+pub mod parser;
+#[doc(hidden)]
+pub mod typechecker;

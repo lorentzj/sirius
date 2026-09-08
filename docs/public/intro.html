@@ -26,7 +26,7 @@
 
         <p>It turns out we can avoid runtime shape errors and bounds checks -- without the ergonomic strain of full-blown refinement types like <a href="https://ucsd-progsys.github.io/liquidhaskell/">Liquid Haskell</a> -- provided we surrender shape dynamism. In exchange, we reject more bad programs and expose more complete function contracts. The <code>Sirius</code> type system will also unlock a bit of witchcraft in the backend.</p>
 
-        <p>I embedded a prototype compiler frontend in this page. Here's a <code>hello world</code>: dot product and matrix multiplication.</p>
+        <p>I embedded a live editor with a prototype compiler frontend in this page. Here's a <code>hello world</code>: dot product and matrix multiplication.</p>
         
         <pre class="editor"># typevars, representing natural numbers, come in curly brackets after function name
 # "a.len == b.len" is proven at call sites
@@ -68,11 +68,11 @@ fn fill{N}(val: f32) -> f32[N]:
 fn test():
     let x = [1.0, 2.0, 3.0]
     
-    # fill(2) must be fill{7}(2)
-    let y = concat{3, 7}(x, fill(2))
+    # fill(2.0) must be fill{7}(2.0)
+    print concat{3, 7}(x, fill(2.0))
 
-    # concat(...) must be concat{3, 19}(...) and z must be f32[22]
-    let z = concat(x, fill{19}(2))
+    # concat(...) must be concat{3, 19}(...)
+    print concat(x, fill{19}(2))
 
     # let annotation
     let zeros: f32[5] = fill(0.0)
@@ -86,7 +86,7 @@ fn test():
         
         <p>Why make an imperative array language? In my opinion, the humble C-style <code>for</code> loop has gotten a bad rap. Some problems are easier to solve in an imperative, looping style, with mutable state and transparent locality. <code>Sirius</code> static analysis keeps most of its power and ameliorates the downsides.</p>
         
-        <p>That said, I plan to build functional and array-oriented facilities over the imperative core, like map and filter, broadcasting, fancy indexing, and a checked <a href="https://openreview.net/pdf?id=oapKSVM2bcj">einops</a> primitive integrated like regexes in Perl.</p>
+        <p>That said, I plan to build functional and array-oriented facilities over the imperative core, like map and filter, broadcasting, fancy indexing, and a checked <a href="https://iclr.cc/virtual/2022/oral/6603">einops</a> primitive integrated like regexes in Perl.</p>
         
         <p>What do polynomials have to do with arrays? For one thing, multidimensional array access desugars to a polynomial.</p>
         <div><table>
@@ -205,7 +205,7 @@ fn test():
     let found = find_all(3.0, a)
     for i from 0 to found.len:
         # proven safe since found[i] has type Ind(5)
-        let x = a[found[i]]
+        print a[found[i]]
 </pre>
 
         <div><h2 id="backend"><a href="#backend">#</a> Backend</h2></div>
@@ -229,6 +229,6 @@ fn test():
         <p id="footnote_1" class="footnote">[1] Low-ish. Annotation may be lessened in some cases, à la <a href="https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-elision">lifetime elision</a> in the Rust borrow checker. I will refrain from any kind of global inference because I mostly agree with  <a href="https://borretti.me/article/type-inference-was-a-mistake">Fernando Borretti on the topic</a>. Inference and solving strictly go per-function. <a href="#backlink_1">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
         <p id="footnote_2" class="footnote">[2] Solving arbitrary <code>Poly</code> constraints is impossible, courtesy of <a href="https://en.wikipedia.org/wiki/Hilbert%27s_tenth_problem">Matiyasevich et al</a>. For now, I'm sticking with <a href="https://github.com/Z3Prover/z3">Z3</a>'s <a href="https://microsoft.github.io/z3guide/docs/theories/Arithmetic">linear integer arithmetic</a> and a final pass to search for bounded-degree <a href="/api/doc/sirius/solver/t2/index.html">Handelman</a> representations. Although Z3 could safely check more sophisticated constraints, the checker will inevitably return some false negatives. Happily, most constraints are trivial and obtain representationally without invoking Z3 at all. <a href="#backlink_2">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
         <p id="footnote_3" class="footnote">[3] The Dex paper (p. 11) remarks, “This captures one of the most common uses for the reshape operation... [while] not requiring the type system to solve systems of Diophantine equations to check which reshapes are valid.” Yeah, but what if we do? <a href="#backlink_3">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
-        <p id="footnote_4" class="footnote">[4] Cris Cecka exhibited the <em>Tao</em> of Sirius when, asked about compilation time, <a href="https://youtu.be/vzUhbDO_0qk?t=2981">he said</a> “I make absolutely sure that I never lose track of any static information, ever, because that's the Death of runtime.” <a href="#backlink_4">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
+        <p id="footnote_4" class="footnote">[4] Cris Cecka exhibited the <em>Tao</em> of Sirius when, asked about compilation times, <a href="https://youtu.be/vzUhbDO_0qk?t=2981">he said</a> “I make absolutely sure that I never lose track of any static information, ever, because that's the Death of runtime.” <a href="#backlink_4">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
     </body>
 </html>

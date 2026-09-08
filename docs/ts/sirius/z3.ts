@@ -5,6 +5,7 @@ const IDLE = 0, CLAIMED = 1, REQUEST = 2, OK = 3, ERR = 4, OVERFLOW = 5;
 
 let z3: null | Z3LowLevel["Z3"] = null;
 let busy = false;
+let unloadListener: null | (() => void) = null;
 
 export type Channel = {
     state: Int32Array;
@@ -71,7 +72,9 @@ export async function serve(channel: Channel) {
 
     try {
         if (z3 === null) {
-            z3 = (await init()).Z3;
+            z3 = (await init({
+                locateFile: (file) => `/js/z3/${file}`
+            })).Z3;
         }
 
         const size = Atomics.load(channel.state, SIZE);
@@ -79,12 +82,24 @@ export async function serve(channel: Channel) {
 
         const cfg = z3.mk_config();
         const ctx = z3.mk_context(cfg);
+
+        unloadListener = () => {
+            try {
+                z3?.interrupt(ctx);
+                z3?.del_context(ctx);
+            } catch (e) {}
+        };
+
+        window.addEventListener("beforeunload", unloadListener);
+
         z3.del_config(cfg);
+
         try {
             const response = await z3.eval_smtlib2_string(ctx, smt2);
             out = (new TextEncoder()).encode(response);
             status = OK;
         } finally {
+            window.removeEventListener("beforeunload", unloadListener);
             z3.del_context(ctx);
         }
     } catch (e) {
@@ -103,4 +118,10 @@ export async function serve(channel: Channel) {
     Atomics.store(channel.state, STATUS, status);
     Atomics.notify(channel.state, STATUS);
     busy = false;
+}
+
+export function clean_z3_mem() {
+    if(z3 !== null) {
+        z3.reset_memory();
+    }
 }

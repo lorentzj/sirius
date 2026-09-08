@@ -408,50 +408,6 @@ fn f{N}(a: f32[N]) -> f32:
     );
 }
 
-#[test]
-fn intro_page_programs() {
-    let start = std::time::Instant::now();
-    let ast = expect_ok(
-        "
-fn dot{N}(a: f32[N], b: f32[N]) -> f32:
-    let mut sum = 0.0
-    for i from 0 to N:
-        sum += a[i] * b[i]
-    return sum
-
-fn matmul{I, J, K}(a: f32[I, J], b: f32[J, K]) -> f32[I, K]:
-    for i from 0 to I:
-        for k from 0 to K:
-            yield dot(a[i], b'[k])
-
-fn concat{A, B}(a: f32[A], b: f32[B]) -> f32[A + B]:
-    yield from a
-    yield from b
-
-fn push{N}(arr: f32[N], item: f32) -> f32[N + 1]:
-    yield from arr
-    yield item
-
-fn fill{N}(val: f32) -> f32[N]:
-    for i from 0 to N:
-        yield val
-
-fn triangle{N}() -> f32[N^2 - N + 1]:
-    for i from 0 to N:
-        for j from 0 to i:
-            yield 0.0
-            yield 1.0
-    yield 2.0
-
-fn test():
-    let x = [1.0, 2.0, 3.0]
-    let y = dot(x, fill(2))
-",
-    );
-    println!("checked in {:?}", start.elapsed());
-    assert_eq!(ast.fns.len(), 7);
-}
-
 /// Pins where linearization gives up. A product of two typevars is abstracted to an opaque
 /// atom, so `i < A` no longer implies `i*B < A*B`. See the notes on Handelman certificates.
 #[test]
@@ -939,4 +895,219 @@ fn f{all A st A <= 3}{ex B st A > 1}(arr: f32[A]) -> f32[B]:
         ),
         "{msg}"
     );
+}
+
+/// A declared size like `[2*B]` claims the length is even. The checker may only accept it if it
+/// can actually witness `B`, which needs the count to be a multiple of 2.
+#[test]
+fn existential_sizes_must_be_witnessable() {
+    // one yield per match: the count can be odd, so `2*B` is not reachable
+    let msg = expect_error(
+        "
+fn f{all N}{ex B}(val: f32, arr: f32[N]) -> f32[2*B]:
+    for i from 0 to N:
+        if arr[i] > val:
+            yield arr[i]
+",
+    );
+    assert!(
+        msg.starts_with("\"f\" yields up to N times, which \"f32[2*B]\" cannot represent"),
+        "{msg}"
+    );
+
+    // two yields per match: every count is even, so `B` is the half of it
+    expect_ok(
+        "
+fn f{all N}{ex B}(val: f32, arr: f32[N]) -> f32[2*B]:
+    for i from 0 to N:
+        if arr[i] > val:
+            yield arr[i]
+            yield arr[i]
+",
+    );
+
+    // shapes with no witness at all
+    for shape in ["B + 1", "N*B", "0 - B"] {
+        let msg = expect_error(&format!(
+            "
+fn f{{all N}}{{ex B}}(arr: f32[N]) -> f32[{shape}]:
+    yield from arr
+"
+        ));
+        assert!(msg.starts_with("cannot witness "), "{shape}: {msg}");
+    }
+}
+
+/// The unsound program this rule exists to reject: an odd-length array claiming an even size,
+/// laundered through a function that halves it.
+#[test]
+fn odd_length_cannot_masquerade_as_even() {
+    let msg = expect_error(
+        "
+fn filter_greater_ex2{all N}{ex B}(val: f32, arr: f32[N]) -> f32[2*B]:
+    for i from 0 to N:
+        if arr[i] > val:
+            yield arr[i]
+
+fn every_second{N}(arr: f32[2*N]) -> f32[N]:
+    for i from 0 to N:
+        yield arr[2*i]
+
+fn test():
+    let a = [1.0, 2.0, 3.0, 3.0, 4.0]
+    let filtered = filter_greater_ex2(2.0, a)
+    let x = every_second(filtered)
+    for i from 0 to x.len:
+        print x[i]
+",
+    );
+    assert!(msg.contains("cannot represent"), "{msg}");
+}
+
+/// A `return` witnesses an existential the same way a `yield` count does.
+#[test]
+fn existentials_witnessed_by_return() {
+    let ast = expect_ok(
+        "
+fn uhoh{all}{ex N}() -> N:
+    return 1
+
+fn mk{all}{ex B st B > 0}() -> f32[B]:
+    return [1.0, 2.0]
+
+fn pair{all}{ex B}() -> (f32[B], i64):
+    return ([1.0, 2.0], 3)
+
+fn test() -> f32:
+    let x = mk()
+    return x[0]
+",
+    );
+    // the caller sees the opaque size, and `B > 0` is what makes `x[0]` safe
+    let test = ast.get("test").unwrap();
+    assert_eq!(test.render_var(0, "x").unwrap(), "f32[mk.B]");
+
+    // without the constraint the length could be 0
+    let msg = expect_error(
+        "
+fn mk{all}{ex B}() -> f32[B]:
+    return [1.0, 2.0]
+
+fn test() -> f32:
+    let x = mk()
+    return x[0]
+",
+    );
+    assert!(msg.starts_with("index: disproved \"0 < mk.B\""), "{msg}");
+
+    // the body still owes the `ex` block
+    let msg = expect_error(
+        "
+fn f{all}{ex B st B > 5}() -> f32[B]:
+    return [1.0]
+",
+    );
+    assert!(
+        msg.starts_with("existential constraint of \"f\": disproved \"B > 5\""),
+        "{msg}"
+    );
+
+    // one signature promises one size, so every return has to agree
+    expect_ok(
+        "
+fn f{all}{ex B}(c: bool) -> f32[B]:
+    if c:
+        return [1.0, 2.0]
+    return [3.0, 4.0]
+",
+    );
+    let msg = expect_error(
+        "
+fn f{all}{ex B}(c: bool) -> f32[B]:
+    if c:
+        return [1.0]
+    return [1.0, 2.0]
+",
+    );
+    assert!(
+        msg.starts_with("\"B\" is already witnessed as \"1\" by an earlier return"),
+        "{msg}"
+    );
+}
+
+/// An existential absent from the return type is never witnessed, so its constraint would reach
+/// callers unproven -- and an unsatisfiable one would make their fact set contradictory.
+#[test]
+fn unwitnessable_existentials_are_rejected() {
+    let msg = expect_error(
+        "
+fn sneaky{all N}{ex B st B < 0}(arr: f32[N]) -> f32[N]:
+    yield from arr
+",
+    );
+    assert!(
+        msg.starts_with("existential typevar \"B\" does not appear in the return type"),
+        "{msg}"
+    );
+}
+
+/// Existential sizes compose: one function's opaque length can bound another's.
+#[test]
+fn existentials_compose() {
+    expect_ok(
+        "
+fn filt{all A}{ex B st B <= A}(arr: f32[A]) -> f32[B]:
+    for i from 0 to A:
+        if arr[i] > 0.0:
+            yield arr[i]
+
+fn twice{all A}{ex C st C <= A}(arr: f32[A]) -> f32[C]:
+    yield from filt(arr)
+
+fn grow{all A}{ex C}(arr: f32[A]) -> f32[C]:
+    yield from filt(arr)
+    yield 0.0
+
+fn test():
+    let x = [1.0, 2.0]
+    let mut y = filt(x)
+    for i from 0 to y.len:
+        y[i] = 0.0
+",
+    );
+}
+
+/// Every program on the intro page has to check. It is the first thing anyone runs, and the
+/// samples drift out of sync with the checker very easily.
+#[test]
+fn intro_page_programs() {
+    let page = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/docs/public/intro.html"
+    ))
+    .expect("intro.html");
+
+    let blocks: Vec<&str> = page
+        .split("<pre class=\"editor\">")
+        .skip(1)
+        .filter_map(|rest| rest.split_once("</pre>").map(|(block, _)| block))
+        .collect();
+    assert!(blocks.len() >= 5, "found only {} samples", blocks.len());
+
+    for (i, block) in blocks.iter().enumerate() {
+        let src = block
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&amp;", "&");
+        let parse = ParserOutput::parse(&src);
+        assert!(
+            parse.errors.is_empty(),
+            "intro sample {i} does not parse: {:?}",
+            parse.errors
+        );
+        let mut solver = Solver::new_cli(None).expect("z3 must be on PATH");
+        let (_, errors) = check_program(parse.tree.as_ref().unwrap(), &mut solver);
+        assert!(errors.is_empty(), "intro sample {i}: {errors:?}");
+    }
 }

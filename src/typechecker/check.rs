@@ -7,13 +7,14 @@ use crate::parser::ast::{Block, E, Expr, Function, S};
 use crate::parser::lexer::{ArithCmpOp, ArithOp, AssnOp, BoolOp, Op};
 use crate::parser::{Pos, Span, UnaryOp};
 use crate::solver::count::Count;
+use crate::solver::poly::coef::Coef;
 use crate::solver::poly::{Poly, Var};
 use crate::solver::{Cmp, Constraint};
 use crate::solver::{Solver, Verdict, t0};
 
 use super::annotation::annotation;
 use super::scope::Scope;
-use super::sig::{self, FnSig, check_recursion, signatures};
+use super::sig::{self, FnSig, check_recursion, match_ty, signatures};
 use super::ty::Type;
 use super::typed::{Binding, BlockKind, Fact, TypedAst, TypedFn};
 use super::yields::Yields;
@@ -60,6 +61,9 @@ pub struct FnChecker<'a> {
     pub exprs: HashMap<(usize, usize), Type>,
     pub yield_pos: Option<Span>,
     pub return_pos: Option<Span>,
+    /// Witnesses for existentials read off `return` statements, and whether reading one failed.
+    pub ex_witness: HashMap<Var, Poly>,
+    pub ex_witness_failed: bool,
 }
 
 impl<'a> FnChecker<'a> {
@@ -80,6 +84,8 @@ impl<'a> FnChecker<'a> {
             exprs: HashMap::new(),
             yield_pos: None,
             return_pos: None,
+            ex_witness: HashMap::new(),
+            ex_witness_failed: false,
             sig,
         };
 
@@ -174,30 +180,35 @@ impl<'a> FnChecker<'a> {
                     ret.render(&names)
                 ));
             }
-            _ => {}
+            (_, None) => self.witness_returned_existentials(&ret_pos),
         }
     }
 
     /// Reconcile the `yield` count with the declared return size.
     ///
     /// Without existentials the size is fixed, so the count must match it exactly. With one, the
-    /// size is whatever the body produced: the count becomes a *fact* about the existential var,
-    /// and what has to be proven is the `ex` block's constraints under it. That is what lets a
-    /// conditional `yield` -- which only has an upper bound -- satisfy a signature.
+    /// size is whatever the body produced, so the job is to *witness* the existential rather than
+    /// check it: the count becomes a fact about it, and the `ex` block becomes the obligation.
+    ///
+    /// The witness only exists if the declared size can actually take the count's value. `[B]`
+    /// always can. `[2*B]` can only when the body yields an even number of times, which is what
+    /// [`Yields::stride`] records. Sizes that are not a constant multiple of a single existential
+    /// are rejected outright, since nothing here can produce a witness for them.
     fn check_yield_count(&mut self, size: &Poly, yields: &Yields, pos: &Span) {
-        let has_ex = sig::type_vars(&self.sig.ret)
+        let ex: Vec<Var> = sig::type_vars(&self.sig.ret)
             .into_iter()
-            .any(|v| self.sig.is_existential(v));
+            .filter(|v| self.sig.is_existential(*v))
+            .collect();
 
         let Some(count) = yields.bound() else {
             // an earlier error already explains why nothing could be counted
             return;
         };
         let (num, den) = (count.num().clone(), count.den());
+        let names = self.names();
 
-        if !has_ex {
+        if ex.is_empty() {
             if !yields.is_exact() {
-                let names = self.names();
                 self.errors.push(error_at!(
                     Flow,
                     pos,
@@ -215,17 +226,142 @@ impl<'a> FnChecker<'a> {
             return;
         }
 
-        // `size * den <= num`, with equality when the count is exact
-        let scaled = size.mul_scalar(den);
-        let cmp = if yields.is_exact() { Cmp::Eq } else { Cmp::Le };
-        self.scope.add_constraint(Constraint::new(scaled, cmp, num));
-        self.scope
-            .add_constraint(Constraint::new(size.clone(), Cmp::Ge, Poly::zero()));
+        // the size has to be `k * B` for one existential `B` and a non-zero integer `k`
+        let Some((k, var)) = as_scaled_var(size, &ex) else {
+            self.errors.push(error_at!(
+                Type,
+                pos,
+                "cannot witness \"{}\" from the yield count; an existential size must be a \
+                 typevar times a constant, like \"[{}]\" or \"[2*{}]\"",
+                self.sig.ret.render(&names),
+                names[ex[0] as usize],
+                names[ex[0] as usize]
+            ));
+            return;
+        };
 
+        // `k*B == count` needs the count to be a multiple of k -- exactly, or (when only bounded)
+        // for every count the body can reach
+        let divisor = k * den;
+        let divides = if yields.is_exact() {
+            num.divide_coefs(divisor).is_some()
+        } else {
+            !divisor.is_zero() && yields.stride().divrem(divisor).1.is_zero()
+        };
+        if !divides {
+            self.errors.push(error_at!(
+                Type,
+                pos,
+                "\"{}\" yields {} {} times, which \"{}\" cannot represent",
+                self.sig.name,
+                if yields.is_exact() {
+                    "exactly"
+                } else {
+                    "up to"
+                },
+                num.display_with(Some(&names)),
+                self.sig.ret.render(&names)
+            ));
+            return;
+        }
+
+        let value = Poly::var(var, 1).mul_scalar(divisor);
+        let cmp = if yields.is_exact() { Cmp::Eq } else { Cmp::Le };
+        self.scope.add_constraint(Constraint::new(value, cmp, num));
+        self.scope
+            .add_constraint(Constraint::new(Poly::var(var, 1), Cmp::Ge, Poly::zero()));
+
+        self.prove_ex_constraints(pos);
+    }
+
+    /// The `ex` block is the body's obligation, discharged once the existentials have witnesses.
+    fn prove_ex_constraints(&mut self, pos: &Span) {
         for constraint in self.sig.ex_constraints.clone() {
             let ctx = format!("existential constraint of \"{}\"", self.sig.name);
             self.prove(constraint, pos, &ctx);
         }
+    }
+
+    fn existentials_in(&self, t: &Type) -> Vec<Var> {
+        sig::type_vars(t)
+            .into_iter()
+            .filter(|v| self.sig.is_existential(*v))
+            .collect()
+    }
+
+    /// A `return` in a function with existentials in its return type *witnesses* them: the
+    /// declared type is matched against what is actually returned rather than checked against it.
+    fn check_return_witness(&mut self, e: &Expr, declared: &Type, ex: &[Var]) {
+        // no hint -- the declared type still mentions vars this return is about to decide
+        let found = self.check_expr(e, None);
+        if found.is_error() {
+            self.ex_witness_failed = true;
+            return;
+        }
+
+        // seed the universals as themselves so `match_ty` only solves the existentials
+        let mut subst: HashMap<Var, Poly> = (0..self.sig.n_universal as Var)
+            .map(|v| (v, Poly::var(v, 1)))
+            .collect();
+        match_ty(declared, &found, &mut subst);
+
+        let Ok(want) = declared.instantiate(&subst) else {
+            let names = self.names();
+            let unsolved: Vec<&str> = ex
+                .iter()
+                .filter(|v| !subst.contains_key(v))
+                .map(|v| names[*v as usize])
+                .collect();
+            self.errors.push(error_at!(
+                Type,
+                e,
+                "cannot tell what \"{}\" is from this return value, which has type \"{}\"",
+                unsolved.join("\", \""),
+                found.render(&names)
+            ));
+            self.ex_witness_failed = true;
+            return;
+        };
+        self.coerce(&found, &want, e, "return value");
+
+        for &v in ex {
+            let witness = subst[&v].clone();
+            match self.ex_witness.get(&v) {
+                // every return has to agree, since one signature promises one size
+                Some(prior) if *prior != witness => {
+                    let names = self.names();
+                    self.errors.push(error_at!(
+                        Type,
+                        e,
+                        "\"{}\" is already witnessed as \"{}\" by an earlier return, but this one \
+                         gives \"{}\"",
+                        names[v as usize],
+                        prior.display_with(Some(&names)),
+                        witness.display_with(Some(&names))
+                    ));
+                    self.ex_witness_failed = true;
+                }
+                _ => {
+                    self.ex_witness.insert(v, witness);
+                }
+            }
+        }
+    }
+
+    /// The mirror of [`check_yield_count`](Self::check_yield_count) for functions that `return`.
+    fn witness_returned_existentials(&mut self, pos: &Span) {
+        let ex = self.existentials_in(&self.sig.ret.clone());
+        if ex.is_empty() || self.ex_witness_failed {
+            return;
+        }
+        for v in ex {
+            let Some(witness) = self.ex_witness.get(&v).cloned() else {
+                return;
+            };
+            self.scope
+                .add_constraint(Constraint::new(Poly::var(v, 1), Cmp::Eq, witness));
+        }
+        self.prove_ex_constraints(pos);
     }
 
     fn check_block(&mut self, block: &Block) {
@@ -251,9 +387,14 @@ impl<'a> FnChecker<'a> {
             S::Return(e) => {
                 self.return_pos
                     .get_or_insert(Pos::span(stmt.start, stmt.end));
-                let ret = self.sig.ret.clone();
-                let found = self.check_expr(e, Some(&ret));
-                self.coerce(&found, &ret, e, "return value");
+                let declared = self.sig.ret.clone();
+                let ex = self.existentials_in(&declared);
+                if ex.is_empty() {
+                    let found = self.check_expr(e, Some(&declared));
+                    self.coerce(&found, &declared, e, "return value");
+                } else {
+                    self.check_return_witness(e, &declared, &ex);
+                }
                 self.scope.set_always_returns();
             }
 
@@ -749,4 +890,16 @@ fn place_root(place: &Expr) -> Option<Pos<String>> {
         E::Access(inner, _) => place_root(inner),
         _ => None,
     }
+}
+
+/// Read `p` as `k * v` for a single `v` drawn from `candidates` and a non-zero integer `k`.
+fn as_scaled_var(p: &Poly, candidates: &[Var]) -> Option<(Coef, Var)> {
+    let terms = p.terms();
+    let [(coef, mono)] = terms.as_slice() else {
+        return None;
+    };
+    let [(v, 1)] = mono.exps() else {
+        return None;
+    };
+    (candidates.contains(v) && coef.is_positive()).then_some((*coef, *v))
 }

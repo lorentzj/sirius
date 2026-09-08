@@ -156,6 +156,25 @@ fn build(f: &Function, errors: &mut Errors) -> FnSig {
         None => Type::Unit,
     };
 
+    // An existential is witnessed by what the body produces, which is only observable through the
+    // return type. One that never appears there is never witnessed, yet its `ex` constraint would
+    // still reach every caller as an unproven fact -- and an unsatisfiable one (`B < 0`) would
+    // make the caller's whole fact set contradictory.
+    if !ret.is_error() {
+        let in_ret = type_vars(&ret);
+        for (j, tv) in f.ex_type_args.iter().enumerate() {
+            if !in_ret.contains(&((n_universal + j) as Var)) {
+                errors.push(error_at!(
+                    Type,
+                    tv,
+                    "existential typevar \"{}\" does not appear in the return type, so nothing \
+                     can witness it",
+                    tv.data
+                ));
+            }
+        }
+    }
+
     let parse_constraint = |(tv, op, ann): &(Pos<String>, ArithCmpOp, Expr),
                             want_ex: bool,
                             errors: &mut Errors|

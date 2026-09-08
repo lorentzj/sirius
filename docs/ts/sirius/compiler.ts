@@ -33,6 +33,12 @@ async function getWorker(status: StatusLine): Promise<Worker> {
         worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     }
 
+    worker.addEventListener("message", (event: MessageEvent) => {
+        if(event.data.message === "calling Z3") {
+            z3.serve(z3Channel);
+        }
+    });
+
     const p = new Promise<Worker>((resolve) => {        
         function handleReady(event: MessageEvent) {
             if (event.data.message === "ready" && worker !== null) {
@@ -45,11 +51,6 @@ async function getWorker(status: StatusLine): Promise<Worker> {
         };
         if(worker !== null) {
             worker.addEventListener("message", handleReady);
-            worker.addEventListener("message", (event: MessageEvent) => {
-                if(event.data.message === "callZ3") {
-                    z3.serve(z3Channel);
-                }
-            })
         }
     });
 
@@ -86,6 +87,7 @@ export const siriusLinter = (editorId: number) => {
                         editorId,
                         event.data.diagnostics.filter((e) => e.severity === "info"
                     ));
+                    z3.clean_z3_mem();
                     compilerStatus.finished(event.data.compiler_error);
                     resolve(event.data.diagnostics);
                 }

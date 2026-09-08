@@ -37,7 +37,7 @@ onmessage = async (e: MessageEvent<EditRequest | InitRequest>) => {
                 throw new Error("Z3 channel not initialized");
             }
 
-            return z3.runSync(channel, smt2, () => postMessage({message: "callZ3"}));
+            return z3.runSync(channel, smt2, () => postMessage({message: "calling Z3"}));
         }
 
         const output = compile(e.data.code, get_z3);
