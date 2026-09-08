@@ -14,7 +14,7 @@ use super::parser::{
 };
 use super::typechecker::check;
 
-pub fn serialize_token(t: &Token) -> Option<JsValue> {
+fn serialize_token(t: &Token) -> Option<JsValue> {
     let d = match &t.data {
         Tok::Identifier(_) => 0,
         Tok::Op(_) => 1,
@@ -37,7 +37,7 @@ pub fn serialize_token(t: &Token) -> Option<JsValue> {
     Some(obj.into())
 }
 
-pub fn serialize_error(e: &Error, tokens: &[Token]) -> Option<JsValue> {
+fn serialize_error(e: &Error, tokens: &[Token]) -> Option<JsValue> {
     let obj = js_sys::Object::new();
     js_sys::Reflect::set(
         &obj,
@@ -78,7 +78,7 @@ pub fn serialize_error(e: &Error, tokens: &[Token]) -> Option<JsValue> {
     Some(obj.into())
 }
 
-pub fn serialize_type_tokens(c: &ParserOutput) -> Option<JsValue> {
+fn serialize_type_tokens(c: &ParserOutput) -> Option<JsValue> {
     let mut type_token_pos = vec![];
     for i in 0..c.tokens.len() {
         let t = &c.tokens[i];

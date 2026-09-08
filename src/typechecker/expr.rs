@@ -623,15 +623,27 @@ impl FnChecker<'_> {
         let mut subst: HashMap<Var, Poly> = HashMap::new();
         let mut failed = false;
 
-        if type_args.len() > sig.tv_names.len() {
-            self.errors.push(error_at!(
-                Type,
-                expr,
-                "\"{}\" takes {} typevars, found {}",
-                sig.name,
-                sig.tv_names.len(),
-                type_args.len()
-            ));
+        // the callee picks its existentials, so only the `{all ..}` block is positional here
+        if type_args.len() > sig.n_universal {
+            let extra = &type_args[sig.n_universal.min(type_args.len())];
+            if let Some(name) = sig.existentials().first() {
+                self.errors.push(error_at!(
+                    Type,
+                    extra,
+                    "\"{}\" of \"{}\" is existential and is chosen by the function, not the caller",
+                    name,
+                    sig.name
+                ));
+            } else {
+                self.errors.push(error_at!(
+                    Type,
+                    expr,
+                    "\"{}\" takes {} typevars, found {}",
+                    sig.name,
+                    sig.n_universal,
+                    type_args.len()
+                ));
+            }
             failed = true;
         }
 
@@ -644,11 +656,11 @@ impl FnChecker<'_> {
 
             let arg_t = self.check_expr(arg, None);
             match arg_t {
-                Type::Size(p) if i < sig.tv_names.len() => {
+                Type::Size(p) if i < sig.n_universal => {
                     subst.insert(i as Var, p);
                 }
                 Type::Error => failed = true,
-                other if i < sig.tv_names.len() => {
+                other if i < sig.n_universal => {
                     let names = self.names();
                     self.errors.push(error_at!(
                         Type,
@@ -660,6 +672,22 @@ impl FnChecker<'_> {
                 }
                 _ => {}
             }
+        }
+
+        // Each existential becomes a fresh var in the caller's space, bound before any matching so
+        // `match_ty` treats it as solved and never lets an expected type dictate it -- the callee
+        // chose it. Its `ex` constraints arrive below as facts.
+        let ex_vars: Vec<Var> = sig
+            .existentials()
+            .iter()
+            .map(|name| {
+                let v = self.fresh_var(&format!("{}.{}", sig.name, name));
+                self.nonneg.push(v);
+                v
+            })
+            .collect();
+        for (i, &v) in ex_vars.iter().enumerate() {
+            subst.insert((sig.n_universal + i) as Var, Poly::var(v, 1));
         }
 
         if args.len() != sig.params.len() {
@@ -725,7 +753,7 @@ impl FnChecker<'_> {
             return Type::Error;
         }
 
-        let missing: Vec<&str> = (0..sig.tv_names.len())
+        let missing: Vec<&str> = (0..sig.n_universal)
             .filter(|v| !subst.contains_key(&(*v as Var)))
             .map(|v| sig.tv_names[v].as_str())
             .collect();
@@ -741,8 +769,9 @@ impl FnChecker<'_> {
             return Type::Error;
         }
 
-        // the body assumes its typevars are sizes, so the call site owes nonnegativity
-        for (v, name) in sig.tv_names.iter().enumerate() {
+        // the body assumes its typevars are sizes, so the call site owes nonnegativity.
+        // existentials are skipped -- they are fresh vars this call site just declared non-negative
+        for (v, name) in sig.universals().iter().enumerate() {
             let value = subst[&(v as Var)].clone();
             let ctx = format!("typevar \"{}\" of \"{}\"", name, sig.name);
             self.prove(Constraint::new(value, Cmp::Ge, Poly::zero()), expr, &ctx);
@@ -762,6 +791,16 @@ impl FnChecker<'_> {
             );
             let ctx = format!("constraint of \"{}\"", sig.name);
             self.prove(goal, expr, &ctx);
+        }
+
+        // the mirror of the `all` block above: what the body proved about its existentials is
+        // what the caller gets to assume about them
+        for constraint in &sig.ex_constraints {
+            self.scope.add_constraint(Constraint::new(
+                constraint.lhs.map_vars(|v| subst[&v].clone()),
+                constraint.cmp,
+                constraint.rhs.map_vars(|v| subst[&v].clone()),
+            ));
         }
 
         sig.ret.instantiate(&subst).unwrap_or(Type::Error)

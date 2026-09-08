@@ -1,20 +1,33 @@
 import compilerInit, { compile } from "./wasm/sirius";
-import type { EditRequest, CheckReady, Diagnostic, LintResponse } from "./compiler";
+import type { EditRequest, InitRequest, Diagnostic, LintResponse } from "./compiler";
 import * as z3 from "./z3";
 
 let initWasm = false;
 let channel: z3.Channel | null = null;
 
-onmessage = async (e: MessageEvent<EditRequest | CheckReady>) => {
-    if(!initWasm) {
+onmessage = async (e: MessageEvent<EditRequest | InitRequest>) => {
+    if("message" in e.data) {
+        if(e.data.message == "poke") {
+            const readyUp = () => {
+                if("channel" in e.data) {
+                    channel = e.data.channel;
+                }
+                postMessage({message: "ready"});
+            }
+
+            if(initWasm) {
+                readyUp();
+            } else {
+                compilerInit().then(() => {
+                    initWasm = true;
+                    readyUp();
+                })
+            }
+        }
         return;
     }
 
-    if("message" in e.data) {
-        if(e.data.message == "poke") {
-            channel = e.data.channel;
-            postMessage({message: "ready"});
-        }        
+    if(!initWasm) {
         return;
     }
 
@@ -69,8 +82,3 @@ onmessage = async (e: MessageEvent<EditRequest | CheckReady>) => {
         return;
     }
 };
-
-compilerInit().then(() => {
-    initWasm = true;
-    postMessage({message: "ready"});
-});

@@ -136,7 +136,7 @@ impl Solver {
         })
     }
 
-    /// Pass a javascript callback string->string for smt2 input.
+    /// Pass a javascript callback `string->string` for smt2 input.
     pub fn new_wasm(callback: Function) -> Self {
         Self {
             z3: Z3::new_wasm(callback),

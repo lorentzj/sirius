@@ -130,7 +130,7 @@ impl Z3 {
         })
     }
 
-    /// Pass a javascript callback string->string for smt2 input.
+    /// Pass a javascript callback `string->string` for smt2 input.
     pub fn new_wasm(callback: Function) -> Self {
         let wrapped_callback = move |s: &str| {
             let res = callback
@@ -151,6 +151,7 @@ impl Z3 {
         }
     }
 
+    /// Try to prove a `goal` given `facts` by linearizing the whole system.
     pub fn entails_lia(
         &mut self,
         facts: &[Constraint],

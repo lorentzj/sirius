@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use crate::error::{Errors, error_at};
 use crate::parser::ast::{AD, Block, E, Expr, Function, S};
+use crate::parser::lexer::ArithCmpOp;
 use crate::parser::{Pos, Span};
 use crate::solver::poly::coef::Coef;
 use crate::solver::poly::{Poly, Var};
@@ -16,19 +17,40 @@ use super::ty::Type;
 
 /// [`Poly`]s here are expressed in function's typevar space,
 /// where [`Var`] `i` is `tv_names[i]`; call sites map it into their own with [`Type::instantiate`].
+///
+/// `tv_names[..n_universal]` come from the `{all ..}` block and are chosen by the caller;
+/// the rest come from `{ex ..}` and are chosen by the callee. The two halves run the obligations
+/// in opposite directions -- see [`constraints`](Self::constraints) and
+/// [`ex_constraints`](Self::ex_constraints).
 #[derive(Clone, Debug)]
 pub struct FnSig {
     pub name: String,
     pub tv_names: Vec<String>,
+    pub n_universal: usize,
     pub params: Vec<(String, Type)>,
     pub ret: Type,
-    /// Assumed in the body, proven at call sites.
+    /// Proven at call sites, assumed in the body.
     pub constraints: Vec<Constraint>,
+    /// Proven in the body, assumed at call sites.
+    pub ex_constraints: Vec<Constraint>,
 }
 
 impl FnSig {
     pub fn names(&self) -> Vec<&str> {
         self.tv_names.iter().map(String::as_str).collect()
+    }
+
+    /// The typevars a caller may pass, in order.
+    pub fn universals(&self) -> &[String] {
+        &self.tv_names[..self.n_universal]
+    }
+
+    pub fn existentials(&self) -> &[String] {
+        &self.tv_names[self.n_universal..]
+    }
+
+    pub fn is_existential(&self, v: Var) -> bool {
+        (v as usize) >= self.n_universal && (v as usize) < self.tv_names.len()
     }
 }
 
@@ -65,7 +87,9 @@ fn build(f: &Function, errors: &mut Errors) -> FnSig {
         ));
     }
 
-    for tv in &f.type_args {
+    // universals first, so a call site's positional typevars line up with `{all ..}` and anything
+    // past that length is an attempt to fix an existential
+    for tv in f.type_args.iter().chain(&f.ex_type_args) {
         if reserved_name(&tv.data) {
             errors.push(error_at!(
                 NameResolution,
@@ -85,7 +109,9 @@ fn build(f: &Function, errors: &mut Errors) -> FnSig {
         }
         tv_names.push(tv.data.clone());
     }
+    let n_universal = f.type_args.len();
     let names: Vec<&str> = tv_names.iter().map(String::as_str).collect();
+    let is_ex = |v: Var| (v as usize) >= n_universal;
 
     let parse = |ann: &Expr, errors: &mut Errors| match annotation(ann, &names) {
         Ok(t) => t,
@@ -106,50 +132,143 @@ fn build(f: &Function, errors: &mut Errors) -> FnSig {
         }
     }
 
-    let params = f
+    let mut params: Vec<(String, Type)> = f
         .args
         .iter()
         .map(|(name, ann)| (name.data.clone(), parse(ann, errors)))
         .collect();
+
+    // the callee picks its existentials from what the body does, so they cannot describe an input
+    for ((_, param), (_, ann)) in params.iter_mut().zip(&f.args) {
+        if let Some(v) = type_vars(param).into_iter().find(|v| is_ex(*v)) {
+            errors.push(error_at!(
+                Type,
+                ann,
+                "\"{}\" is an existential typevar and cannot appear in an argument type",
+                names[v as usize]
+            ));
+            *param = Type::Error;
+        }
+    }
 
     let ret = match &f.ret {
         Some(ann) => parse(ann, errors),
         None => Type::Unit,
     };
 
-    let mut constraints = vec![];
-    for (tv, op, ann) in &f.type_constraints {
-        let Some(v) = names.iter().position(|n| *n == tv.data) else {
+    let parse_constraint = |(tv, op, ann): &(Pos<String>, ArithCmpOp, Expr),
+                            want_ex: bool,
+                            errors: &mut Errors|
+     -> Option<Constraint> {
+        let v = match names.iter().position(|n| *n == tv.data) {
+            Some(v) => v as Var,
+            None => {
+                errors.push(error_at!(
+                    NameResolution,
+                    tv,
+                    "cannot find typevar \"{}\" in signature",
+                    tv.data
+                ));
+                return None;
+            }
+        };
+        if is_ex(v) != want_ex {
+            let (found, block) = if want_ex {
+                ("universal", "all")
+            } else {
+                ("existential", "ex")
+            };
             errors.push(error_at!(
-                NameResolution,
+                Type,
                 tv,
-                "cannot find typevar \"{}\" in signature",
+                "\"{}\" is a {found} typevar, so its constraint belongs in the \"{block}\" block",
                 tv.data
             ));
-            continue;
-        };
-        match annotation(ann, &names) {
-            Ok(Type::Size(bound)) => constraints.push(Constraint::new(
-                Poly::var(v as Var, 1),
-                Cmp::from_lex(op),
-                bound.clone(),
-            )),
-            Ok(t) => errors.push(error_at!(
-                NotImplmented,
-                ann,
-                "typevar constraint must be a poly; found \"{}\"",
-                t.render(&names)
-            )),
-            Err(e) => errors.push(e),
+            return None;
         }
-    }
+        match annotation(ann, &names) {
+            Ok(Type::Size(bound)) => {
+                // a caller must be able to discharge an `all` constraint, so it cannot mention
+                // a var only the callee knows
+                if !want_ex && let Some(ex) = bound.vars().into_iter().find(|v| is_ex(*v)) {
+                    errors.push(error_at!(
+                        Type,
+                        ann,
+                        "\"{}\" is an existential typevar and cannot bound a universal one",
+                        names[ex as usize]
+                    ));
+                    return None;
+                }
+                Some(Constraint::new(Poly::var(v, 1), Cmp::from_lex(op), bound))
+            }
+            Ok(t) => {
+                errors.push(error_at!(
+                    NotImplmented,
+                    ann,
+                    "typevar constraint must be a poly; found \"{}\"",
+                    t.render(&names)
+                ));
+                None
+            }
+            Err(e) => {
+                errors.push(e);
+                None
+            }
+        }
+    };
+
+    let constraints = f
+        .type_constraints
+        .iter()
+        .filter_map(|c| parse_constraint(c, false, errors))
+        .collect();
+    let ex_constraints = f
+        .ex_type_constraints
+        .iter()
+        .filter_map(|c| parse_constraint(c, true, errors))
+        .collect();
 
     FnSig {
         name: f.name.data.clone(),
         tv_names,
+        n_universal,
         params,
         ret,
         constraints,
+        ex_constraints,
+    }
+}
+
+/// Every [`Var`] mentioned anywhere in a type.
+pub fn type_vars(t: &Type) -> Vec<Var> {
+    let mut out = vec![];
+    collect_type_vars(t, &mut out);
+    out
+}
+
+fn collect_type_vars(t: &Type, out: &mut Vec<Var>) {
+    let push = |p: &Poly, out: &mut Vec<Var>| {
+        for v in p.vars() {
+            if !out.contains(&v) {
+                out.push(v);
+            }
+        }
+    };
+    match t {
+        Type::Array { elem, shape } => {
+            for d in shape {
+                push(d, out);
+            }
+            collect_type_vars(elem, out);
+        }
+        Type::Ind(p) | Type::Size(p) => push(p, out),
+        Type::Option(inner) => collect_type_vars(inner, out),
+        Type::Tuple(items) => {
+            for t in items {
+                collect_type_vars(t, out);
+            }
+        }
+        _ => {}
     }
 }
 

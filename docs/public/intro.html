@@ -68,18 +68,14 @@ fn fill{N}(val: f32) -> f32[N]:
 fn test():
     let x = [1.0, 2.0, 3.0]
     
-    # compiler knows fill(2) must be fill{7}(2)
+    # fill(2) must be fill{7}(2)
     let y = concat{3, 7}(x, fill(2))
 
-    # compiler knows concat must be concat{3, 7}
-    let y: f32[10] = concat(x, fill{7}(2))
-    let z = concat(x, fill{7}(2))
-    
-    #! can't match x.len with concat{2, *}
-    # let z = concat{2, 3}(x, fill(2)) 
+    # concat(...) must be concat{3, 19}(...) and z must be f32[22]
+    let z = concat(x, fill{19}(2))
 
-    # ! can't match fill{4} with concat{*, 3}
-    # let w = concat{3, 3}(x, fill{4}(2))
+    # let annotation
+    let zeros: f32[5] = fill(0.0)
 </pre>
 
         <p>Signatures provide shape bounds, accesses are statically checked, and <code>yield</code>s are statically counted. In short, we're using value-dependent types with built-in polynomial (<code><a href="/api/doc/sirius/solver/poly/struct.Poly.html">Poly</a></code>) refinement. Since the type system is constrained, <span id="backlink_1" class="backlink">the annotation burden stays low.</span><sup><a href="#footnote_1">[1]</a></sup></p>
@@ -88,7 +84,7 @@ fn test():
 
         <img width=200px src="/imgs/curious_tenrec.png" alt="cartoon of a curious lowland streaked tenrec" title="curious lowland streaked tenrec">
         
-        <p>Why make an imperative array language? In my opinion, the humble C-style <code>for</code> loop has gotten a bad rap. Some problems are easier to solve in an imperative, looping style, with mutable state and manual <a href="https://en.wikipedia.org/wiki/Locality_of_reference">locality</a>. <code>Sirius</code> static analysis keeps most of its power and ameliorates the downsides.</p>
+        <p>Why make an imperative array language? In my opinion, the humble C-style <code>for</code> loop has gotten a bad rap. Some problems are easier to solve in an imperative, looping style, with mutable state and transparent locality. <code>Sirius</code> static analysis keeps most of its power and ameliorates the downsides.</p>
         
         <p>That said, I plan to build functional and array-oriented facilities over the imperative core, like map and filter, broadcasting, fancy indexing, and a checked <a href="https://openreview.net/pdf?id=oapKSVM2bcj">einops</a> primitive integrated like regexes in Perl.</p>
         
@@ -140,29 +136,32 @@ fn test():
             </dbody>
         </table></div>
 
-        <p>The <code>Sirius</code> type system permits the programmer to freely express array dimensions and accesses in terms of <code>Poly</code>s -- <span id="backlink_2" class="backlink">as long as the resulting constraints can be solved by the <a href="https://github.com/Z3Prover/z3">Z3 prover</a>.</span><sup><a href="#footnote_2">[2]</a></sup> The backend will represent array access, strides, and offsets the same way.</p>
+        <p>The <code>Sirius</code> type system permits the programmer to freely express array dimensions and accesses in terms of <code>Poly</code>s, <span id="backlink_2" class="backlink">as long as the resulting system satisfies the <a href="/api/doc/sirius/solver/index.html">constraint solver</a>.</span><sup><a href="#footnote_2">[2]</a></sup></p>
 
         <p>Now you might object: why can't the programmer write a function that <code>yield</code>s an array of super-polynomial size? This is simple in most languages using a <code>while</code> loop or recursion; both are inexpressible in <code>Sirius</code>. Only <code>for</code>-iteration between <code>Poly</code> bounds is permitted.</p>
         
-        <p>Memory, compute, and optimization are all therefore subject to the same organs of static analysis. At this point, I hope I've convinced you that the <code>Poly</code> abstraction earns its keep.</p>
+        <p>Dynamic values and shapes cannot mix without blowing up the type system. However, some navigation along their boundary is necessary to write useful programs.</p>
 
-        <p>Dynamic values and shapes cannot mix without blowing up the type system. However, some navigation along their boundary is necessary to write useful programs. My design started with purely constant array shapes and I am adding features slowly in order to increase the space of useful <code>Sirius</code> programs.</p>
+        <p>Control flow is dictated by <code>for</code>-loops and <code>if</code>-statements. Loop iterators are fresh typevars with <code>FROM &lt;= N &lt; TO</code> constraints. Facts in <code>if</code> conditions are available to the constraint solver inside their scopes. Every <code>yield</code> is <a href="/api/doc/sirius/solver/count/struct.Count.html">counted symbolically</a>.</p>
 
-        <p>There are various means to navigate the shape-data boundary. <code>typevar</code>s are available at runtime. Some operators can lift a normal value into a <code>typevar</code> by fixing it to known bounds. Iterators are fresh typevars with <code>FROM &lt;= N &lt; TO</code> constraints.</p>
-
-        <p>Control flow is dictated by <code>for</code>-loops and <code>if</code>-statements. Facts in <code>if</code> conditions are available to the constraint solver inside their scopes. Every <code>yield</code> is <span id="backlink_3" class="backlink">counted symbolically.</span><sup><a href="#footnote_3">[3]</a></sup> </p>
-
-        <pre class="editor"># a challenge for the yield counter
-# counting engine knows that inner for-body is invoked N(N-1)/2 times
+        <pre class="editor"># a challenge for the yield counting engine
+# inner for-body is invoked N(N-1)/2 times
 fn triangle{N}() -> f32[N^2 - N + 1]:
     for i from 0 to N:
         for j from 0 to i:
             yield 0.0
             yield 1.0
     yield 2.0
+
+# some non-linear systems can also be solved
+fn nest3d{A, B, C}(arr: f32[A*B*C]) -> f32[A, B, C]:
+    for i from 0 to A:
+        for j from 0 to B:
+            for k from 0 to C:
+                yield arr[i*B*C + j*C + k]
 </pre>
 
-        <p>Constraints that appear in function arguments must be proven at call sites and are available in the function body; vice-versa for constraints in the return type. <code>Sirius</code> supports <span id="backlink_4" class="backlink"><a href="https://arxiv.org/abs/2104.05372">Dex</a>-style finite index sets over <code>Poly</code>s with <code>Ind</code></span>.<sup><a href="#footnote_4">[4]</a></sup> <code>Ind</code>s are created by iteration and skolemize into the <code>Poly</code> algebra via <code>0 &lt;= Ind(N) &lt; N</code>.</p>
+        <p><code>Sirius</code> supports <span id="backlink_3" class="backlink"><a href="https://arxiv.org/abs/2104.05372">Dex</a>-style finite index sets over <code>Poly</code>s with <code>Ind</code></span>.<sup><a href="#footnote_3">[3]</a></sup> <code>Ind</code>s may pass through function boundaries and skolemize into the <code>Poly</code> algebra via <code>0 &lt;= Ind(N) &lt; N</code>.</p>
 
         <pre class="editor">
 fn find{N}(needle: f32, haystack: f32[N]) -> Ind(N)?:
@@ -180,19 +179,46 @@ fn test():
         # find() constraint is available at call sites
         # so this access is proven safe
         arr[k] += 1.0
+        if k > 0:
+            # k has a fresh name
+            # so this is also proven safe 
+            arr[k - 1] = 0.0
+</pre>
+
+        <p>The return type of functions like <code>filter</code> cannot be expressed using sizes available at the call site, so <code>Sirius</code> also supports existential sizes. The <code>all</code>-clause constraints are proven at call sites and given in the function body; the <code>ex</code>-clause constraints are proven in the function body and given at call sites.</p>
+
+<pre class="editor">
+# read "for all N, there exists a B such that B <= N"
+fn filter_greater{all N}{ex B st B <= N}(val: f32, arr: f32[N]) -> f32[B]:
+    # the yield counter finds the bounds [0, N) for this loop
+    for i from 0 to N:
+        if arr[i] > val:
+            yield arr[i]
+
+fn find_all{all N}{ex B st B <= N}(needle: f32, haystack: f32[N]) -> Ind(N)[B]:
+    for i from 0 to N:
+        if needle == haystack[i]:
+            yield i
+
+fn test():
+    let a = [1.0, 2.0, 3.0, 3.0, 4.0]
+    let found = find_all(3.0, a)
+    for i from 0 to found.len:
+        # proven safe since found[i] has type Ind(5)
+        let x = a[found[i]]
 </pre>
 
         <div><h2 id="backend"><a href="#backend">#</a> Backend</h2></div>
 
-        <p>What I've described so far is a toy language. It wouldn't be suitable for use in anger, even if it had a fast backend. However, I believe a type system like that of <code>Sirius</code> will transform GPGPU in the coming years.</p>
+        <p>What I've described so far is a toy language. It wouldn't be suitable for use in anger, even if it had a fast backend. However, I believe a type system like that of <code>Sirius</code> will transform parallel programming in the coming years.</p>
 
         <p>As I mentioned earlier, this project was borne of my frustration with PyTorch. Zooming out, the GPU is a young technology and it shows in the immaturity of its software ecosystem. The 2026 stack is heavy, fragmented, over-abstracted, and sometimes <a href="https://developer.nvidia.com/cuda-llvm-compiler">not even free</a>.</p>
 
         <p>ROCm is closing the gap with CUDA. AI accelerators are shipping novel architectures. CPU core counts are increasing. As single-core performance progress slows, parallelism increases. Programmers need better software to harness this new hardware. We are entering the golden age of array languages. Meanwhile, advanced static analysis will become increasingly fashionable as LLM-assisted programming techniques mature.</p>
 
-        <p>I envision a high-level language that leverages types to drastically streamline heterogenous hardware optimization. With <code>Poly</code> bounds on all memory and compute, the compiler can build tiling, rolling, and fusion strategies -- monomorphizing on shape.</p>
+        <p>I envision a high-level language that leverages types to drastically streamline optimization on highly parallel hardware. With <code>Poly</code> bounds on all memory and compute, the compiler can build tiling, rolling, and fusion strategies -- monomorphizing on shape. Optimizing compilers <a href="https://godbolt.org/z/6xEz3Pan5">already</a> try to do this, but they must be conservative in the absence of statically guaranteed constraints.</p>
         
-        <p><code>Sirius</code>, or at least its affine fragment, is <a href="https://dl.acm.org/doi/full/10.1145/3674735">polyhedral</a> by construction, using the same familiar <code>Poly</code> abstraction, making it uniquely suited to an <a href="https://mlir.llvm.org/docs/Dialects/Affine/">MLIR</a> toolchain. The compiler can surface everything from memory layout (<span id="backlink_5" class="backlink">perhaps using <a href="https://arxiv.org/abs/2603.02298">CuTe</a>-style hierarchical layout algebra</span><sup><a href="#footnote_5">[5]</a></sup>) to runtime complexity, providing detailed performance diagnostics at compile time.</p>
+        <p><code>Sirius</code>, or at least its affine fragment, is <a href="https://dl.acm.org/doi/full/10.1145/3674735">polyhedral</a> by construction, using the same familiar <code>Poly</code> abstraction, making it uniquely suited to an <a href="https://mlir.llvm.org/docs/Dialects/Affine/">MLIR</a> toolchain. The compiler can surface everything from memory layout (<span id="backlink_4" class="backlink">perhaps using <a href="https://arxiv.org/abs/2603.02298">CuTe</a>-style hierarchical layout algebra</span><sup><a href="#footnote_4">[4]</a></sup>) to runtime complexity, providing detailed performance diagnostics at compile time.</p>
 
         <p>There are several tools that already accomplish many of <code>Sirius</code>'s goals. <a href="https://triton-lang.org">Triton</a> is an ergonomic Python DSL for GPU kernels with a streamlined backend. <a href="https://futhark-lang.org">Futhark</a> is a functional GPGPU language with shape types (index functions) and an algebra including addition. <code>Sirius</code> will continue to draw inspiration from these projects and academic literature as I hammer out the <code>1.0</code> roadmap. Ideas and PRs are very welcome at the <a href="https://github.com/lorentzj/sirius">repo</a>.</p>
 
@@ -201,9 +227,8 @@ fn test():
         <hr>
         
         <p id="footnote_1" class="footnote">[1] Low-ish. Annotation may be lessened in some cases, à la <a href="https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-elision">lifetime elision</a> in the Rust borrow checker. I will refrain from any kind of global inference because I mostly agree with  <a href="https://borretti.me/article/type-inference-was-a-mistake">Fernando Borretti on the topic</a>. Inference and solving strictly go per-function. <a href="#backlink_1">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
-        <p id="footnote_2" class="footnote">[2] Solving arbitrary <code>Poly</code> constraints is impossible, courtesy of <a href="https://en.wikipedia.org/wiki/Hilbert%27s_tenth_problem">Matiyasevich et al</a>. For now, I'm sticking with <a href="https://microsoft.github.io/z3guide/docs/theories/Arithmetic">linear integer arithmetic</a> with a final pass to search for bounded-degree <a href="/api/doc/sirius/solver/t2/index.html">Handelman</a> representations. Although Z3 could safely check more sophisticated constraints, the checker will inevitably return some false negatives. Happily, most constraints are trivial and obtain representationally without invoking Z3 at all. <a href="#backlink_2">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
-        <p id="footnote_3" class="footnote">[3] Details of the summation algorithm are available in the <a href="/api/doc/sirius/solver/count/struct.Count.html">solver docs</a>. <a href="#backlink_3">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
-        <p id="footnote_4" class="footnote">[4] The Dex paper (p. 11) remarks, “This captures one of the most common uses for the reshape operation... [while] not requiring the type system to solve systems of Diophantine equations to check which reshapes are valid.” Yeah, but what if we do? <a href="#backlink_4">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
-        <p id="footnote_5" class="footnote">[5] Cris Cecka exhibited the <em>Tao</em> of Sirius when, asked about compilation time, <a href="https://youtu.be/vzUhbDO_0qk?t=2981">he said</a> “I make absolutely sure that I never lose track of any static information, ever, because that's the Death of runtime.” <a href="#backlink_5">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
+        <p id="footnote_2" class="footnote">[2] Solving arbitrary <code>Poly</code> constraints is impossible, courtesy of <a href="https://en.wikipedia.org/wiki/Hilbert%27s_tenth_problem">Matiyasevich et al</a>. For now, I'm sticking with <a href="https://github.com/Z3Prover/z3">Z3</a>'s <a href="https://microsoft.github.io/z3guide/docs/theories/Arithmetic">linear integer arithmetic</a> and a final pass to search for bounded-degree <a href="/api/doc/sirius/solver/t2/index.html">Handelman</a> representations. Although Z3 could safely check more sophisticated constraints, the checker will inevitably return some false negatives. Happily, most constraints are trivial and obtain representationally without invoking Z3 at all. <a href="#backlink_2">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
+        <p id="footnote_3" class="footnote">[3] The Dex paper (p. 11) remarks, “This captures one of the most common uses for the reshape operation... [while] not requiring the type system to solve systems of Diophantine equations to check which reshapes are valid.” Yeah, but what if we do? <a href="#backlink_3">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
+        <p id="footnote_4" class="footnote">[4] Cris Cecka exhibited the <em>Tao</em> of Sirius when, asked about compilation time, <a href="https://youtu.be/vzUhbDO_0qk?t=2981">he said</a> “I make absolutely sure that I never lose track of any static information, ever, because that's the Death of runtime.” <a href="#backlink_4">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
     </body>
 </html>

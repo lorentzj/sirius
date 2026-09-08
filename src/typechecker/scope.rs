@@ -1,15 +1,15 @@
 //! Block-level scope stack. Walks alongside the AST, recording bindings and facts
 //! into the [`TypedBlock`]s that outlive the traversal.
 
+use super::yields::Yields;
 use crate::solver::Constraint;
-use crate::solver::count::Count;
 
 use super::ty::Type;
 use super::typed::{Binding, BindingId, BlockId, BlockKind, Fact, TypedBlock};
 
 pub struct Frame {
     pub block: BlockId,
-    pub yields: Count,
+    pub yields: Yields,
     pub can_return: bool,
     pub always_returns: bool,
 }
@@ -39,11 +39,15 @@ impl Scope {
         });
         self.stack.push(Frame {
             block,
-            yields: Count::zero(),
+            yields: Yields::zero(),
             can_return: false,
             always_returns: false,
         });
         block
+    }
+
+    pub fn frame(&self) -> &Frame {
+        self.stack.last().expect("no open block")
     }
 
     pub fn pop(&mut self) -> Frame {
@@ -117,9 +121,9 @@ impl Scope {
             .collect()
     }
 
-    pub fn add_yields(&mut self, count: &Count) {
+    pub fn add_yields(&mut self, count: &Yields) {
         if let Some(frame) = self.stack.last_mut() {
-            frame.yields = frame.yields.add(count);
+            frame.yields = frame.yields.then(count);
         }
     }
 

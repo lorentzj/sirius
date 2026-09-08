@@ -10,7 +10,7 @@ export type EditRequest = {
     code: string
 }
 
-export type CheckReady = {
+export type InitRequest = {
     message: "poke",
     channel: z3.Channel
 }
@@ -53,7 +53,7 @@ async function getWorker(status: StatusLine): Promise<Worker> {
         }
     });
 
-    worker.postMessage({message: "poke", channel: z3Channel} as CheckReady);
+    worker.postMessage({message: "poke", channel: z3Channel} as InitRequest);
 
     return p;
 }

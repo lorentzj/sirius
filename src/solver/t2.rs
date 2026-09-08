@@ -41,7 +41,7 @@
 //! |  $M$  | $c_1$ | $c_2$ | $c_3$ | $c_4$ | $c_5$ | $c_6$ | $=s \cdot$ |
 //! | ----- | ----- | ----- | ----- | ----- | ----- | ----- | ---------- |
 //! | $AB$  |       |       |       |  $1$  |       |  $1$  |        $1$ |
-//! | $Bi$  |       |       |       | $-1$  |       | $-1$  |       $-1$ |
+//! | $iB$  |       |       |       | $-1$  |       | $-1$  |       $-1$ |
 //! | $j$   |       |       | $-1$  |       |       |  $1$  |       $-1$ |
 //! | $1$   |  $1$  | $-1$  | $-1$  |       |       |  $1$  |       $-1$ |
 //! | $A$   |       |  $1$  |       |       |       | $-1$  |            |
@@ -52,7 +52,7 @@
 //! | $jA$  |       |       |       |       |       | $-1$  |            |
 //! | $ij$  |       |       |       |       |       |  $1$  |            |
 //!
-//! This system can be solved in [`t1`](super::t1), giving $c_3=1, c_4=1$, $s=1$, $\text{rest}=0$. $p_3 + p_4 = \text{goal}$.
+//! This system can be solved in [`t1`](super::t1), giving $c_3=1, c_4=1$, $s=1$, $\text{rest}=0$. The final sum is $p_3 + p_4 = \text{goal}$.
 //!
 //! ```
 //! use sirius::solver::{Constraint, Cmp, poly::{poly, Var}, t1::Z3, t2::prove};
@@ -88,6 +88,8 @@ pub fn prove(z3: &mut Z3, facts: &[Constraint], goal: &Constraint, nonneg: &[Var
         return false;
     };
 
+    // a loop's `i >= 0` lowers to the same hypothesis as `i` being non-negative, so dedup before
+    // the MAX_FACTS cut or half the budget goes on repeats
     let mut hypotheses: Vec<Poly> = vec![];
     for &v in nonneg {
         hypotheses.push(Poly::var(v, 1));
@@ -95,6 +97,14 @@ pub fn prove(z3: &mut Z3, facts: &[Constraint], goal: &Constraint, nonneg: &[Var
     for f in facts {
         hypotheses.extend(fact_diffs(f));
     }
+    let mut seen: Vec<Poly> = vec![];
+    hypotheses.retain(|h| {
+        let fresh = !seen.contains(h);
+        if fresh {
+            seen.push(h.clone());
+        }
+        fresh
+    });
 
     goals
         .iter()

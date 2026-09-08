@@ -71,10 +71,16 @@ fn matmul{{I, J, K}}(a: f32[I, J], b: f32[J, K]) -> f32[I, K]:
     let ast = expect_ok(&src);
     let matmul = ast.get("matmul").unwrap();
     assert_eq!(
-        matmul.yields.num().display_with(Some(&matmul.names())),
+        matmul
+            .yields
+            .bound()
+            .unwrap()
+            .num()
+            .display_with(Some(&matmul.names())),
         "I*K"
     );
-    assert_eq!(matmul.yields.den(), 1.into());
+    assert_eq!(matmul.yields.bound().unwrap().den(), 1.into());
+    assert!(matmul.yields.is_exact());
 
     // one yield too many
     let extra = src.replace(
@@ -112,7 +118,12 @@ fn triangle{N}() -> f32[N^2 - N + 1]:
     let triangle = ast.get("triangle").unwrap();
     let names = triangle.names();
     assert_eq!(
-        triangle.yields.num().display_with(Some(&names)),
+        triangle
+            .yields
+            .bound()
+            .unwrap()
+            .num()
+            .display_with(Some(&names)),
         "N^2 - N + 1"
     );
 }
@@ -281,7 +292,7 @@ fn test():
 }
 
 #[test]
-fn conditional_yields_need_existentials() {
+fn variable_yield_count_needs_an_existential() {
     let msg = expect_error(
         "
 fn evens{N}(a: f32[N]) -> f32[N]:
@@ -290,7 +301,11 @@ fn evens{N}(a: f32[N]) -> f32[N]:
             yield a[i]
 ",
     );
-    assert!(msg.contains("existential sizes"), "{msg}");
+    assert!(
+        msg.starts_with("\"evens\" yields a variable number of times"),
+        "{msg}"
+    );
+    assert!(msg.contains("{ex M st M <= N}"), "{msg}");
 }
 
 #[test]
@@ -707,4 +722,221 @@ fn f{N}(a: f32[N], ks: Ind(N)[3]) -> f32:
 ",
     );
     assert_eq!(ast.render_var("f", 0, "ks").unwrap(), "Ind(N)[3]");
+}
+
+const FILTER: &str = "
+fn filter_lt{all A}{ex B st B <= A}(arr: f32[A], val: f32) -> f32[B]:
+    for i from 0 to A:
+        if arr[i] < val:
+            yield arr[i]
+";
+
+/// The whole point: a conditional `yield` produces a size only the callee knows, and the caller
+/// gets the `ex` constraints as facts about it.
+#[test]
+fn existential_sizes() {
+    let ast = expect_ok(&format!(
+        "{FILTER}
+fn test():
+    let x = [1.0, 2.0, 3.0]
+    let y = filter_lt(x, 3.0)
+    # the length is unknown, but known to be at most 3
+    for i from 0 to y.len:
+        print y[i]
+"
+    ));
+
+    let filter = ast.get("filter_lt").unwrap();
+    assert_eq!(filter.sig.universals(), ["A"]);
+    assert_eq!(filter.sig.existentials(), ["B"]);
+    // at most A, not exactly A
+    assert!(!filter.yields.is_exact());
+    assert_eq!(
+        filter
+            .yields
+            .bound()
+            .unwrap()
+            .num()
+            .display_with(Some(&filter.names())),
+        "A"
+    );
+
+    // the caller sees a fresh var, named for the call that produced it
+    let test = ast.get("test").unwrap();
+    assert_eq!(test.render_var(0, "y").unwrap(), "f32[filter_lt.B]");
+
+    // `B <= A` really is available to the caller: indexing the *source* array by a filtered
+    // index needs it, and nothing else supplies it
+    expect_ok(&format!(
+        "{FILTER}
+fn test():
+    let x = [1.0, 2.0, 3.0]
+    let y = filter_lt(x, 3.0)
+    for i from 0 to y.len:
+        print x[i]
+"
+    ));
+
+    // the example from the intro: indices returned by a search are safe in the searched array
+    expect_ok(
+        "
+fn find_all{all N}{ex M st M <= N}(arr: f32[N], val: f32) -> Ind(N)[M]:
+    for i from 0 to N:
+        if arr[i] == val:
+            yield i
+
+fn test():
+    let arr = [1.0, 2.0, 3.0, 2.0]
+    let found = find_all(arr, 2.0)
+    for i from 0 to found.len:
+        print arr[found[i]]
+",
+    );
+}
+
+/// Only the `{all ..}` block is positional at a call site.
+#[test]
+fn existentials_are_not_caller_chosen() {
+    expect_ok(&format!(
+        "{FILTER}
+fn test():
+    let x = [1.0, 2.0, 3.0]
+    let z = filter_lt{{3}}(x, 3.0)
+"
+    ));
+
+    let msg = expect_error(&format!(
+        "{FILTER}
+fn test():
+    let x = [1.0, 2.0, 3.0]
+    let w = filter_lt{{3, 2}}(x, 3.0)
+"
+    ));
+    assert!(
+        msg.starts_with("\"B\" of \"filter_lt\" is existential and is chosen by the function"),
+        "{msg}"
+    );
+}
+
+/// An unknown size must not be usable as a known one, and two calls must not be conflated.
+#[test]
+fn existential_sizes_stay_opaque() {
+    let cases = [
+        format!(
+            "{FILTER}
+fn test():
+    let x = [1.0, 2.0, 3.0]
+    let y: f32[3] = filter_lt(x, 3.0)
+"
+        ),
+        format!(
+            "{FILTER}
+fn takes3(a: f32[3]) -> f32:
+    return a[0]
+
+fn test() -> f32:
+    let x = [1.0, 2.0, 3.0]
+    return takes3(filter_lt(x, 3.0))
+"
+        ),
+        // the length could be 0, so even index 0 is unsafe
+        format!(
+            "{FILTER}
+fn test() -> f32:
+    let x = [1.0, 2.0, 3.0]
+    let y = filter_lt(x, 3.0)
+    return y[0]
+"
+        ),
+    ];
+    for src in &cases {
+        let msg = expect_error(src);
+        assert!(msg.contains("filter_lt.B"), "{msg}");
+    }
+
+    // two calls give independent lengths, disambiguated in the diagnostic
+    let msg = expect_error(&format!(
+        "{FILTER}
+fn dot2{{N}}(a: f32[N], b: f32[N]) -> f32:
+    return 0.0
+
+fn test() -> f32:
+    let x = [1.0, 2.0, 3.0]
+    return dot2(filter_lt(x, 3.0), filter_lt(x, 2.0))
+"
+    ));
+    assert!(msg.contains("filter_lt.B_2"), "{msg}");
+}
+
+/// The `ex` block is an obligation on the body, not a promise to it.
+#[test]
+fn existential_constraints_are_proven_by_the_body() {
+    expect_ok(
+        "
+fn f{all A}{ex B st B <= 2*A}(arr: f32[A], val: f32) -> f32[B]:
+    for i from 0 to A:
+        if arr[i] < val:
+            yield arr[i]
+
+fn exact{all N}{ex M st M == N}() -> f32[M]:
+    for i from 0 to N:
+        yield 0.0
+",
+    );
+
+    // yielding twice per iteration overruns `B <= A`
+    let msg = expect_error(
+        "
+fn f{all A}{ex B st B <= A}(arr: f32[A]) -> f32[B]:
+    for i from 0 to A:
+        yield arr[i]
+        yield arr[i]
+",
+    );
+    assert!(
+        msg.starts_with("existential constraint of \"f\": disproved \"B <= A\""),
+        "{msg}"
+    );
+
+    // a bound the body cannot meet, since every element might match
+    let msg = expect_error(
+        "
+fn f{all A}{ex B st B < A}(arr: f32[A], val: f32) -> f32[B]:
+    for i from 0 to A:
+        if arr[i] < val:
+            yield arr[i]
+",
+    );
+    assert!(
+        msg.starts_with("existential constraint of \"f\": disproved \"B < A\""),
+        "{msg}"
+    );
+}
+
+/// Existentials belong to the return type; they cannot describe an input or bound a universal.
+#[test]
+fn existentials_are_rejected_where_they_cannot_be_chosen() {
+    let msg = expect_error(
+        "
+fn f{all A}{ex B st B <= A}(arr: f32[B]) -> f32[B]:
+    yield from arr
+",
+    );
+    assert!(
+        msg.starts_with("\"B\" is an existential typevar and cannot appear in an argument type"),
+        "{msg}"
+    );
+
+    let msg = expect_error(
+        "
+fn f{all A st A <= 3}{ex B st A > 1}(arr: f32[A]) -> f32[B]:
+    yield from arr
+",
+    );
+    assert!(
+        msg.starts_with(
+            "\"A\" is a universal typevar, so its constraint belongs in the \"all\" block"
+        ),
+        "{msg}"
+    );
 }

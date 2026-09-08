@@ -12,10 +12,11 @@ use crate::solver::{Cmp, Constraint};
 use crate::solver::{Solver, Verdict, t0};
 
 use super::annotation::annotation;
-use super::scope::{Frame, Scope};
-use super::sig::{FnSig, check_recursion, signatures};
+use super::scope::Scope;
+use super::sig::{self, FnSig, check_recursion, signatures};
 use super::ty::Type;
 use super::typed::{Binding, BlockKind, Fact, TypedAst, TypedFn};
+use super::yields::Yields;
 
 pub fn check_file(parse: &[Function], solver: &mut Solver) -> Errors {
     check_program(parse, solver).1
@@ -59,8 +60,6 @@ pub struct FnChecker<'a> {
     pub exprs: HashMap<(usize, usize), Type>,
     pub yield_pos: Option<Span>,
     pub return_pos: Option<Span>,
-    /// Set when a yield could not be counted, so the total is not worth reporting on.
-    pub yields_unknown: bool,
 }
 
 impl<'a> FnChecker<'a> {
@@ -81,12 +80,11 @@ impl<'a> FnChecker<'a> {
             exprs: HashMap::new(),
             yield_pos: None,
             return_pos: None,
-            yields_unknown: false,
             sig,
         };
 
         checker.scope.push(BlockKind::Body);
-        for (i, tv) in checker.sig.tv_names.clone().iter().enumerate() {
+        for (i, tv) in checker.sig.universals().to_vec().iter().enumerate() {
             checker
                 .scope
                 .insert(tv, Type::Size(Poly::var(i as Var, 1)), false);
@@ -100,8 +98,12 @@ impl<'a> FnChecker<'a> {
         }
 
         checker.check_block(&f.body);
+        let (yields, always_returns) = {
+            let frame = checker.scope.frame();
+            (frame.yields.clone(), frame.always_returns)
+        };
+        checker.check_sig_satisfied(f, &yields, always_returns);
         let body = checker.scope.pop();
-        checker.check_sig_satisfied(f, &body);
 
         let FnChecker {
             scope,
@@ -126,7 +128,7 @@ impl<'a> FnChecker<'a> {
     }
 
     /// The function produces its return type: either enough `yield`s, or a `return` on every path.
-    fn check_sig_satisfied(&mut self, f: &Function, body: &Frame) {
+    fn check_sig_satisfied(&mut self, f: &Function, yields: &Yields, always_returns: bool) {
         if let (Some(y), Some(r)) = (self.yield_pos.clone(), self.return_pos.clone()) {
             let (pos, first) = if y.start < r.start {
                 (r, "yield")
@@ -149,17 +151,8 @@ impl<'a> FnChecker<'a> {
         match (&self.sig.ret, self.yield_pos.clone()) {
             (Type::Error, _) => {}
             (Type::Array { shape, .. }, Some(_)) => {
-                if self.yields_unknown {
-                    return;
-                }
                 let size = shape.iter().fold(Poly::constant(1), |acc, d| acc.mul(d));
-                let goal = Constraint::new(
-                    body.yields.num().clone(),
-                    Cmp::Eq,
-                    size.mul_scalar(body.yields.den()),
-                );
-                let ctx = format!("yield count of \"{}\"", self.sig.name);
-                self.prove(goal, &ret_pos, &ctx);
+                self.check_yield_count(&size, yields, &ret_pos);
             }
             (ret, Some(y)) => {
                 let names = self.names();
@@ -171,7 +164,7 @@ impl<'a> FnChecker<'a> {
                 ));
             }
             (Type::Unit, None) => {}
-            (ret, None) if !body.always_returns => {
+            (ret, None) if !always_returns => {
                 let names = self.names();
                 self.errors.push(error_at!(
                     Flow,
@@ -182,6 +175,56 @@ impl<'a> FnChecker<'a> {
                 ));
             }
             _ => {}
+        }
+    }
+
+    /// Reconcile the `yield` count with the declared return size.
+    ///
+    /// Without existentials the size is fixed, so the count must match it exactly. With one, the
+    /// size is whatever the body produced: the count becomes a *fact* about the existential var,
+    /// and what has to be proven is the `ex` block's constraints under it. That is what lets a
+    /// conditional `yield` -- which only has an upper bound -- satisfy a signature.
+    fn check_yield_count(&mut self, size: &Poly, yields: &Yields, pos: &Span) {
+        let has_ex = sig::type_vars(&self.sig.ret)
+            .into_iter()
+            .any(|v| self.sig.is_existential(v));
+
+        let Some(count) = yields.bound() else {
+            // an earlier error already explains why nothing could be counted
+            return;
+        };
+        let (num, den) = (count.num().clone(), count.den());
+
+        if !has_ex {
+            if !yields.is_exact() {
+                let names = self.names();
+                self.errors.push(error_at!(
+                    Flow,
+                    pos,
+                    "\"{}\" yields a variable number of times, so its size cannot be \"{}\"; \
+                     declare it existentially, e.g. \"{{ex M st M <= {}}}\" and return \"[M]\"",
+                    self.sig.name,
+                    self.sig.ret.render(&names),
+                    num.display_with(Some(&names))
+                ));
+                return;
+            }
+            let goal = Constraint::new(num, Cmp::Eq, size.mul_scalar(den));
+            let ctx = format!("yield count of \"{}\"", self.sig.name);
+            self.prove(goal, pos, &ctx);
+            return;
+        }
+
+        // `size * den <= num`, with equality when the count is exact
+        let scaled = size.mul_scalar(den);
+        let cmp = if yields.is_exact() { Cmp::Eq } else { Cmp::Le };
+        self.scope.add_constraint(Constraint::new(scaled, cmp, num));
+        self.scope
+            .add_constraint(Constraint::new(size.clone(), Cmp::Ge, Poly::zero()));
+
+        for constraint in self.sig.ex_constraints.clone() {
+            let ctx = format!("existential constraint of \"{}\"", self.sig.name);
+            self.prove(constraint, pos, &ctx);
         }
     }
 
@@ -222,7 +265,7 @@ impl<'a> FnChecker<'a> {
                 if let Some(elem) = elem {
                     self.coerce(&found, &elem, e, "yielded value");
                 }
-                self.scope.add_yields(&Count::constant(1));
+                self.scope.add_yields(&Yields::once());
             }
 
             S::YieldFrom(e) => {
@@ -235,9 +278,9 @@ impl<'a> FnChecker<'a> {
                             self.coerce(&elem, &want, e, "yielded value");
                         }
                         let size = shape.iter().fold(Poly::constant(1), |acc, d| acc.mul(d));
-                        self.scope.add_yields(&Count::ratio(size, 1));
+                        self.scope.add_yields(&Yields::Exact(Count::ratio(size, 1)));
                     }
-                    Type::Error => self.yields_unknown = true,
+                    Type::Error => self.scope.add_yields(&Yields::Unknown),
                     other => {
                         let names = self.names();
                         self.errors.push(error_at!(
@@ -345,7 +388,7 @@ impl<'a> FnChecker<'a> {
 
     fn check_if(
         &mut self,
-        stmt: &Pos<S>,
+        _stmt: &Pos<S>,
         cond: &Expr,
         true_body: &Block,
         false_body: Option<&Block>,
@@ -379,18 +422,16 @@ impl<'a> FnChecker<'a> {
 
         let false_yields = match &false_frame {
             Some(f) => f.yields.clone(),
-            None => Count::zero(),
+            None => Yields::zero(),
         };
-        if true_frame.yields == false_yields {
-            self.scope.add_yields(&true_frame.yields);
-        } else {
-            self.yields_unknown = true;
-            self.errors.push(error_at!(
-                NotImplmented,
-                stmt,
-                "branches yield different counts; existential sizes are not implemented yet"
-            ));
-        }
+        // a branch that yields less than its sibling makes the total an upper bound, which only
+        // an existential size can absorb; `check_sig_satisfied` reports it if there is none
+        let joined = true_frame.yields.branch(&false_yields, |a, b| {
+            b.sub(a)
+                .as_poly()
+                .is_some_and(|p| self.t0(Cmp::Ge, p, &Poly::zero()))
+        });
+        self.scope.add_yields(&joined);
 
         if true_frame.can_return || false_frame.as_ref().is_some_and(|f| f.can_return) {
             self.scope.set_can_return();
@@ -441,11 +482,12 @@ impl<'a> FnChecker<'a> {
 
         match &bounds {
             Some((lo, hi)) => {
-                let total = frame.yields.sum_range(var, lo, hi);
+                let total = frame.yields.repeated(var, lo, hi);
                 self.scope.add_yields(&total);
             }
             // without bounds there is nothing to sum over
-            None => self.yields_unknown |= !frame.yields.is_zero(),
+            None if !frame.yields.is_zero() => self.scope.add_yields(&Yields::Unknown),
+            None => {}
         }
         if frame.can_return {
             self.scope.set_can_return();
@@ -561,8 +603,17 @@ impl<'a> FnChecker<'a> {
         self.var_names.iter().map(String::as_str).collect()
     }
 
+    /// A new [`Var`] displayed as `name`, suffixed if that name is already taken -- two sibling
+    /// `for i` loops, or two calls to the same existential-returning function, are different
+    /// variables and a counterexample naming both has to say so.
     pub fn fresh_var(&mut self, name: &str) -> Var {
-        self.var_names.push(name.to_string());
+        let mut display = name.to_string();
+        let mut n = 1;
+        while self.var_names.contains(&display) {
+            n += 1;
+            display = format!("{name}_{n}");
+        }
+        self.var_names.push(display);
         (self.var_names.len() - 1) as Var
     }
 

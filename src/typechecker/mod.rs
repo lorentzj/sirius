@@ -6,6 +6,7 @@ mod scope;
 mod sig;
 mod ty;
 mod typed;
+mod yields;
 
 #[cfg(test)]
 mod tests;

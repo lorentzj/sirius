@@ -4,8 +4,8 @@
 
 use std::collections::HashMap;
 
+use super::yields::Yields;
 use crate::solver::Constraint;
-use crate::solver::count::Count;
 
 use super::sig::FnSig;
 use super::ty::Type;
@@ -61,7 +61,7 @@ pub struct TypedFn {
     pub vars: Vec<String>,
     pub blocks: Vec<TypedBlock>,
     /// Total `yield`s over the whole body.
-    pub yields: Count,
+    pub yields: Yields,
     /// Token span to type, for every expression the checker visited.
     pub exprs: HashMap<(usize, usize), Type>,
 }
