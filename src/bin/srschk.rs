@@ -1,4 +1,5 @@
 use std::fs;
+use std::io;
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -18,7 +19,7 @@ struct Args {
     cache_dir: Option<PathBuf>,
 }
 
-fn main() -> Result<(), std::io::Error> {
+fn main() -> Result<(), io::Error> {
     let args = Args::parse();
     let code = fs::read_to_string(&args.file)?;
     let mut solver = Solver::new_cli(args.cache_dir).expect("z3 not found");
@@ -29,11 +30,12 @@ fn main() -> Result<(), std::io::Error> {
     output.errors.extend(type_errors);
 
     if output.errors.is_empty() {
-        println!("Ok")
+        println!("Ok");
+        Ok(())
     } else {
         for error in output.errors {
             let line = {
-                if error.start > output.tokens.len() {
+                if error.start >= output.tokens.len() {
                     match output.tokens.last() {
                         Some(t) => t.line + 1,
                         None => 1,
@@ -48,7 +50,6 @@ fn main() -> Result<(), std::io::Error> {
                 line, error.data.error_type, error.data.message
             )
         }
+        Err(io::Error::new(io::ErrorKind::Other, "compilation failed"))
     }
-
-    Ok(())
 }

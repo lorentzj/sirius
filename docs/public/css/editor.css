@@ -1,6 +1,7 @@
 /* Buttons */
 
 button, input {
+    color: inherit;
     font-size: large;
     overflow-x: hidden;
     white-space: nowrap;

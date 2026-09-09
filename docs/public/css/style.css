@@ -42,9 +42,25 @@ h2::before, h2::after {
     padding: 10px;
 }
 
-p, div:has(h1), div:has(h2), svg, hr, img {
+p, div:has(h1), div:has(h2), svg, hr, figure {
     max-width: min(1000px, 100%);
     margin: auto;
+}
+
+figure {
+    display: table;
+}
+
+img, figcaption {
+    margin: auto;
+    caption-side: bottom;
+}
+
+figcaption {
+    color: rgb(37, 37, 37);
+    font-style: italic;
+    font-size: small;
+    display: table-caption;
 }
 
 p {
@@ -55,6 +71,8 @@ p {
 code {
     white-space: nowrap;
     font-size: larger;
+    background-color: rgb(255, 255, 255);
+    padding: 2px;
 }
 
 em code {

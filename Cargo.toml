@@ -21,7 +21,7 @@ clap = { version = "4.6", features = ["derive"] }
 lalrpop = { version = "0.20", default-features = false }
 
 [dev-dependencies]
-rand = { version = "0.8", features = ["small_rng"] }
+rand = { version = "0.8.6", features = ["small_rng"] }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--html-in-header", "docs/katex-header.html"]

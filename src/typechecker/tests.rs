@@ -1077,37 +1077,36 @@ fn test():
     );
 }
 
-/// Every program on the intro page has to check. It is the first thing anyone runs, and the
+/// Every program on the docs pages has to check. They are the first thing anyone runs, and
 /// samples drift out of sync with the checker very easily.
 #[test]
-fn intro_page_programs() {
-    let page = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/docs/public/intro.html"
-    ))
-    .expect("intro.html");
+fn documentation_programs() {
+    for page in ["intro.html", "editor.html"] {
+        let path = format!("{}/docs/public/{page}", env!("CARGO_MANIFEST_DIR"));
+        let html = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
 
-    let blocks: Vec<&str> = page
-        .split("<pre class=\"editor\">")
-        .skip(1)
-        .filter_map(|rest| rest.split_once("</pre>").map(|(block, _)| block))
-        .collect();
-    assert!(blocks.len() >= 5, "found only {} samples", blocks.len());
+        let blocks: Vec<&str> = html
+            .split("<pre class=\"editor\">")
+            .skip(1)
+            .filter_map(|rest| rest.split_once("</pre>").map(|(block, _)| block))
+            .collect();
+        assert!(!blocks.is_empty(), "{page}: no samples found");
 
-    for (i, block) in blocks.iter().enumerate() {
-        let src = block
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&amp;", "&");
-        let parse = ParserOutput::parse(&src);
-        assert!(
-            parse.errors.is_empty(),
-            "intro sample {i} does not parse: {:?}",
-            parse.errors
-        );
-        let mut solver = Solver::new_cli(None).expect("z3 must be on PATH");
-        let (_, errors) = check_program(parse.tree.as_ref().unwrap(), &mut solver);
-        assert!(errors.is_empty(), "intro sample {i}: {errors:?}");
+        for (i, block) in blocks.iter().enumerate() {
+            let src = block
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&amp;", "&");
+            let parse = ParserOutput::parse(&src);
+            assert!(
+                parse.errors.is_empty(),
+                "{page} sample {i} does not parse: {:?}",
+                parse.errors
+            );
+            let mut solver = Solver::new_cli(None).expect("z3 must be on PATH");
+            let (_, errors) = check_program(parse.tree.as_ref().unwrap(), &mut solver);
+            assert!(errors.is_empty(), "{page} sample {i}: {errors:?}");
+        }
     }
 }

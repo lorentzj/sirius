@@ -1,6 +1,6 @@
 # Sirius
 
-The WIP prototype compiler for `Sirius`: a small, imperative, total, polynomially bounded language for pointful array programming. Learn more in the [language intro](https://www.sirius-lang.org/intro) and the [constraint solver api](https://www.sirius-lang.org/api/doc/sirius/solver/index.html), or try it out in the [web editor](https://www.sirius-lang.org/editor).
+The WIP prototype compiler for `Sirius`: a small, imperative, total, polynomially bounded language for pointful array programming. Learn more in the [language intro](https://www.sirius-lang.org/intro) and the [constraint solver api docs](https://www.sirius-lang.org/api/doc/sirius/solver/index.html), or try it out in the [web editor](https://www.sirius-lang.org/editor).
 
 ## Quick Start
 
@@ -12,8 +12,7 @@ $ git clone https://github.com/lorentzj/sirius.git
 $ cd sirius
 $ cargo build
 $ cargo test
-$ echo "
-fn dot{N}(a: f32[N], b: f32[N]) -> f32:
+$ echo "fn dot{N}(a: f32[N], b: f32[N]) -> f32:
     let mut sum = 0.0
     for i from 0 to N:
         sum += a[i] * b[i]
