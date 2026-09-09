@@ -30,7 +30,7 @@
         
         <p>Having been stung too many times <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Conv3d.html">massaging PyTorch tensors</a>, I set off to create a type system that handles tensor shape bookkeeping. In the process, I explored a new part of PL design space and stumbled on an interesting feature set.</p>
 
-        <p>It turns out we can avoid runtime shape errors and bounds checks -- without the ergonomic strain of full-blown refinement types like <a href="https://ucsd-progsys.github.io/liquidhaskell/">Liquid Haskell</a> -- provided we surrender shape dynamism. In exchange, we reject more bad programs and expose more complete function contracts. The Sirius type system will also unlock a bit of witchcraft in the backend.</p>
+        <p>It turns out we can avoid runtime shape errors and bounds checks -- without the ergonomic strain of full-blown refinement types like <a href="https://ucsd-progsys.github.io/liquidhaskell/">Liquid Haskell</a> -- provided we sharply restrict shape dynamism. In exchange, we reject more bad programs and expose more complete function contracts. The Sirius type system will also unlock a bit of witchcraft in the backend.</p>
 
         <p>I embedded a live editor with a prototype compiler frontend in this page. Here's a <code>hello world</code>: dot product and matrix multiplication.</p>
         
@@ -48,7 +48,7 @@ fn matmul{I, J, K}(a: f32[I, J], b: f32[J, K]) -> f32[I, K]:
         for k from 0 to K:
             # i is proven valid index into a
             # k valid into b' (b transpose)
-            # dot_product requires a[i].len == b'[k].len
+            # dot requires a[i].len == b'[k].len
             # total yield count is proven I*K
             # yield populates the return array in row-major order
             yield dot(a[i], b'[k])
@@ -250,7 +250,7 @@ fn test():
 
         <p>ROCm is closing the performance gap with CUDA as both platforms evolve. AI accelerators are shipping with novel architectures. CPU core counts are rising. As single-core performance progress slows, parallelism increases. Programmers need new tools to harness this new hardware. We are entering the golden age of array languages. Meanwhile, advanced static analysis will become increasingly fashionable as LLM-assisted programming techniques mature.</p>
 
-        <p>I envision a high-level language that leverages types to drastically streamline optimization on highly parallel hardware. With <code>Poly</code> bounds on all memory and compute, the compiler can build tiling, rolling, and fusion strategies -- monomorphizing on shape. Optimizing compilers <a href="https://godbolt.org/z/6xEz3Pan5">already</a> try to do this, but they must be conservative in the absence of statically guaranteed constraints. I'll try not to overclaim here as I am not yet initiated in <a href="https://arxiv.org/abs/1505.07716">the dark arts of automatic scheduling</a>.</p>
+        <p>I envision a high-level language that leverages types to drastically streamline optimization on highly parallel hardware. With <code>Poly</code> bounds on all memory and compute, the compiler can build tiling, rolling, and fusion strategies -- monomorphizing on shapes and eliding guards. Optimizing compilers <a href="https://godbolt.org/z/6xEz3Pan5">already</a> try to do this, but they must be conservative in the absence of statically guaranteed constraints. I'll try not to overclaim here as I am not yet initiated in <a href="https://arxiv.org/abs/1505.07716">the dark arts of automatic scheduling</a>.</p>
         
         <p>Sirius, or at least its affine fragment, is <a href="https://dl.acm.org/doi/full/10.1145/3674735">polyhedral</a> by construction, making it uniquely suited to an <a href="https://mlir.llvm.org/docs/Dialects/Affine/">MLIR</a> toolchain. The compiler can surface everything from memory layout (<span id="backlink_4" class="backlink">perhaps using <a href="https://arxiv.org/abs/2603.02298">CuTe</a>-style hierarchical layout algebra</span><sup><a href="#footnote_4">[4]</a></sup>) to runtime complexity, providing detailed performance diagnostics at compile time.</p>
 
