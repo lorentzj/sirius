@@ -69,7 +69,7 @@ fn test():
     # annotation is checked
     let res: f32[2, 2] = matmul(arr1, arr2)</pre>
 
-        <p>That program doesn't seem very interesting until you try to change it. The compiler rejects accessing <code>a[i+1]</code> in <code>dot</code>, adding an extra <code>yield</code> in <code>matmul</code>, changing the annotation of <code>res</code>, or modifying any of the typevar constraints in the function signatures. Here are some more examples:</p>
+        <p>That program doesn't seem very interesting until you try to change it. The compiler rejects accessing <code>a[i+1]</code> in <code>dot</code>, adding an extra <code>yield</code> in <code>matmul</code>, changing the annotation of <code>res</code>, or modifying any of the typevar constraints in the function signatures. The typechecker is engineered to break comprehensibly when possible, with diagnostics that provide trivial disproofs or counterexamples. Here are some more examples:</p>
 
         <pre class="editor"># polynomial expressions in typevars are valid types
 # "return.len == A + B" is proven in function body
