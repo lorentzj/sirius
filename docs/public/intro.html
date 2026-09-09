@@ -93,7 +93,7 @@ fn test():
     print concat{3, 7}(x, fill(2.0))
 
     # concat(...) must be concat{3, 19}(...)
-    print concat(x, fill{19}(2))
+    print concat(x, fill{19}(2.0))
 
     # let annotation
     let zeros: f32[5] = fill(0.0)
@@ -246,17 +246,15 @@ fn test():
 
         <div><h2 id="backend"><a href="#backend">#</a> Where's the Backend?</h2></div>
 
-        <p>What I've described so far is a toy language. It wouldn't be suitable for use in anger, even if it had a fast backend. However, I believe a type system like that of Sirius will transform parallel programming in the coming years.</p>
+        <p>What I've described so far is a toy language, an ergonomics experiment more than anything else. It wouldn't be suitable for use in anger even if it had a fast backend. As I mentioned earlier, this project was borne of my frustration with PyTorch. Zooming out, the GPU is a young technology and it shows in the immaturity of its software ecosystem. The 2026 stack is heavy, fragmented, over-abstracted, and sometimes <a href="https://developer.nvidia.com/cuda-llvm-compiler">not even free</a>.</p>
 
-        <p>As I mentioned earlier, this project was borne of my frustration with PyTorch. Zooming out, the GPU is a young technology and it shows in the immaturity of its software ecosystem. The 2026 stack is heavy, fragmented, over-abstracted, and sometimes <a href="https://developer.nvidia.com/cuda-llvm-compiler">not even free</a>.</p>
+        <p>ROCm is closing the performance gap with CUDA as both platforms evolve. AI accelerators are shipping with novel architectures. CPU core counts are rising. As single-core performance progress slows, parallelism increases. Programmers need new tools to harness this new hardware. We are entering the golden age of array languages. Meanwhile, advanced static analysis will become increasingly fashionable as LLM-assisted programming techniques mature.</p>
 
-        <p>ROCm is closing the gap with CUDA. AI accelerators are shipping with novel architectures. CPU core counts are increasing. As single-core performance progress slows, parallelism increases. Programmers need better software to harness this new hardware. We are entering the golden age of array languages. Meanwhile, advanced static analysis will become increasingly fashionable as LLM-assisted programming techniques mature.</p>
-
-        <p>I envision a high-level language that leverages types to drastically streamline optimization on highly parallel hardware. With <code>Poly</code> bounds on all memory and compute, the compiler can build tiling, rolling, and fusion strategies -- monomorphizing on shape. Optimizing compilers <a href="https://godbolt.org/z/6xEz3Pan5">already</a> try to do this, but they must be conservative in the absence of statically guaranteed constraints.</p>
+        <p>I envision a high-level language that leverages types to drastically streamline optimization on highly parallel hardware. With <code>Poly</code> bounds on all memory and compute, the compiler can build tiling, rolling, and fusion strategies -- monomorphizing on shape. Optimizing compilers <a href="https://godbolt.org/z/6xEz3Pan5">already</a> try to do this, but they must be conservative in the absence of statically guaranteed constraints. I'll try not to overclaim here as I am not yet initiated in <a href="https://arxiv.org/abs/1505.07716">the dark arts of automatic scheduling</a>.</p>
         
         <p>Sirius, or at least its affine fragment, is <a href="https://dl.acm.org/doi/full/10.1145/3674735">polyhedral</a> by construction, making it uniquely suited to an <a href="https://mlir.llvm.org/docs/Dialects/Affine/">MLIR</a> toolchain. The compiler can surface everything from memory layout (<span id="backlink_4" class="backlink">perhaps using <a href="https://arxiv.org/abs/2603.02298">CuTe</a>-style hierarchical layout algebra</span><sup><a href="#footnote_4">[4]</a></sup>) to runtime complexity, providing detailed performance diagnostics at compile time.</p>
 
-        <p>There are several tools that already accomplish many of Sirius's goals. <a href="https://triton-lang.org">Triton</a> is an ergonomic Python DSL for GPU kernels with a streamlined backend. <a href="https://futhark-lang.org">Futhark</a> is a functional GPGPU language with shape types (index functions) and an algebra including addition. Sirius will continue to draw inspiration from these projects and academic literature as I hammer out the <code>1.0</code> roadmap. Ideas, bugs, and PRs are welcome at the <a href="https://github.com/lorentzj/sirius">repo</a>.</p>
+        <p>There are several tools that already accomplish many of Sirius's goals. <a href="https://triton-lang.org">Triton</a> is an ergonomic Python DSL for GPU kernels with a streamlined backend (a Python DSL may be Sirius's ultimate fate as well). <a href="https://futhark-lang.org">Futhark</a> is a functional GPGPU language with index functions and an algebra including addition. Sirius will continue to draw inspiration from these projects and academic literature as I hammer out the <code>1.0</code> roadmap. Ideas, bugs, and PRs are welcome at the <a href="https://github.com/lorentzj/sirius">repo</a>.</p>
 
         <figure>
             <img width=200px src="/imgs/sleepy_tenrec.png" alt="cartoon of a sleepy lowland streaked tenrec" title="sleepy lowland streaked tenrec">
