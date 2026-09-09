@@ -4,7 +4,7 @@
   "description": "Docs for the Sirius programming language",
   "license": "MIT",
   "scripts": {
-    "build": "rm -f public/js/worker.*.js.map public/js/worker.*.js && FORCE_COLOR=1 parcel build ts/index.ts --dist-dir public/js",
+    "build": "rm -f public/js/worker.*.js.map public/js/worker.*.js && FORCE_COLOR=1 npx parcel build ts/index.ts --dist-dir public/js && FORCE_COLOR=1 npx parcel build ts/editor.ts --dist-dir public/js",
     "watch": "watch --color npm run build",
     "serve": "cd public && miniserve --tls-cert ~/mkcert/lan.pem --tls-key ~/mkcert/lan-key.pem --header \"Cross-Origin-Embedder-Policy: require-corp\" --header \"Cross-Origin-Opener-Policy: same-origin\" ."
   },

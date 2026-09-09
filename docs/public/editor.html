@@ -1,0 +1,26 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <meta charset = "UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" type="image/x-icon" href="./favicon.ico">
+        <link rel = "stylesheet" href = "/css/style.css">
+        <link rel = "stylesheet" href = "/css/editor.css">
+        <script src = "./js/z3/z3-built.js"></script>
+        <script src = "./js/editor.js" type = "module"></script>
+        <title>Sirius Editor</title>
+    </head>
+    <body>
+        <p><button id="generate_link">Generate Code Link</button> <span id="link_copied">Copied</span></p>
+        <pre class="editor">fn dot{N}(a: f32[N], b: f32[N]) -> f32:
+    let mut sum = 0.0
+    for i from 0 to N:
+        sum += a[i] * b[i]
+    return sum
+
+fn matmul{I, J, K}(a: f32[I, J], b: f32[J, K]) -> f32[I, K]:
+    for i from 0 to I:
+        for k from 0 to K:
+            yield dot(a[i], b'[k])</pre>
+    </body>
+</html>

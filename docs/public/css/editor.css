@@ -1,0 +1,59 @@
+/* Buttons */
+
+button, input {
+    font-size: large;
+    overflow-x: hidden;
+    white-space: nowrap;
+}
+
+button:not(:disabled):hover,
+input[type=file]:not(:disabled):hover,
+input[type=file]:not(:disabled)::file-selector-button:hover,
+label {
+    cursor: pointer;
+}
+
+button, input[type=file]::file-selector-button {
+    background-color: rgb(254, 246, 237);
+    vertical-align: middle;
+    height: 1.5em;
+    border-radius: 5px;
+    border-top: 1px solid black;
+    border-left: 1px solid black;
+    border-bottom: 3px solid black;
+    border-right: 3px solid black;
+    user-select: none;
+}
+
+button:not(:disabled):is(:hover, :focus),
+input[type=file]:not(:disabled):is(:hover, :focus)::file-selector-button {
+    background-color: rgb(255, 226, 187);
+    outline: none;
+}
+
+button:not(:disabled):active,
+input[type=file]:not(:disabled):active::file-selector-button {
+    background-color: rgb(255, 213, 105);
+    border-top: 2px solid black;
+    border-left: 2px solid black;
+    border-bottom: 2px dotted black;
+    border-right: 2px dotted black;
+}
+
+#link_copied {
+    color: transparent;
+}
+
+#link_copied.copied {
+    animation: flash_copied 1s linear;
+}
+
+@keyframes flash_copied {
+    0%   { color: transparent; }
+    10%   { color: black; }
+    100% { background-color: transparent }
+}
+
+.editor .cm-editor {
+    height: 80vh;
+}

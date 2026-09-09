@@ -1,6 +1,6 @@
 # Sirius
 
-The WIP prototype compiler for `Sirius`: a small, imperative, total, polynomially bounded language for pointful array programming. Learn more in the [intro](https://www.sirius-lang.org/intro).
+The WIP prototype compiler for `Sirius`: a small, imperative, total, polynomially bounded language for pointful array programming. Learn more in the [language intro](https://www.sirius-lang.org/intro) and the [constraint solver api](https://www.sirius-lang.org/api/doc/sirius/solver/index.html), or try it out in the [web editor](https://www.sirius-lang.org/editor).
 
 ## Quick Start
 
@@ -28,6 +28,6 @@ $ target/debug/srschk test.srs
 
 ## Build the Docs
 
-After `npm install`ing the dependencies in `docs/`, the `just docs` recipe will build the docs in `docs/public`. The recipe uses [wasm-pack](https://wasm-bindgen.github.io/wasm-pack/installer/). 
+After `npm install`ing the dependencies in `docs/`, the `just docs` recipe will build the docs in `docs/public`. The recipe uses [wasm-pack](https://wasm-bindgen.github.io/wasm-pack/installer/) and [parcel](https://parceljs.org/). 
 
 The live editor requires [cross-origin isolated](https://web.dev/articles/coop-coep) headers (since it uses `SharedMemoryArray`), which are a hassle to set up locally. `npm run serve` uses [miniserve](https://github.com/svenstaro/miniserve) and expects a TLS certificate at `~/mkcert`.
