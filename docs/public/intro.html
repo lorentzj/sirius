@@ -222,7 +222,7 @@ fn test():
 
         <div><h2 id="limitations"><a href="#limitations">#</a> Limitations & Directions</h2></div>
 
-        <p>I have argued for imperative array programming, but I plan to build functional and array-oriented facilities over the imperative core, like map and filter, broadcasting, fancy indexing, and a checked <a href="https://iclr.cc/virtual/2022/oral/6603">einops</a> primitive integrated like regexes in Perl. The current privimitive types are <code>f32</code>, <code>f64</code>, <code>i64</code>, and <code>bool</code>; abstracting over numerical types is another fundamental motivation for basic parametric polymorphism.</p>
+        <p>I have argued for imperative array programming, but I plan to build functional and array-oriented facilities over the imperative core, like map and filter, broadcasting, fancy indexing, and a checked <a href="https://iclr.cc/virtual/2022/oral/6603">einops</a> primitive integrated like regexes in Perl. The current scalar types are <code>f32</code>, <code>f64</code>, <code>i64</code>, and <code>bool</code>; abstracting over numerical types is another fundamental motivation for basic parametric polymorphism.</p>
 
         <p>The <code>matmul</code> example glossed over the question of array memory layout, but the type system will ultimately track that information, perhaps allowing <code>@dense</code> and other layout obligations in signatures. The short-circuit <code>?</code> operator, loop <code>break</code>s, and array slices are near-term design problems.</p>
 

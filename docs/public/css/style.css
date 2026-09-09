@@ -118,7 +118,7 @@ a:active, a:active svg {
 }
 
 .backlink:target, .footnote:target {
-    animation: flash_link 1s linear infinite;
+    animation: flash_link 1s linear;
 }
 
 /* Editor */
