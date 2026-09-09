@@ -44,9 +44,23 @@ fn matmul{I, J, K}(a: f32[I, J], b: f32[J, K]) -> f32[I, K]:
             # k valid into b' (b transpose)
             # dot_product requires a[i].len == b'[k].len
             # total yield count is proven I*K
-            # yield populates the return array in column-major order
+            # yield populates the return array in row-major order
             yield dot(a[i], b'[k])
-</pre>
+
+fn test():
+    let arr1 = [
+      [1.0, 2.0, 3.0],
+      [4.0, 5.0, 6.0]
+    ]
+
+    let arr2 = [
+        [7.0, 8.0],
+        [9.0, 1.0],
+        [2.0, 3.0]
+    ]
+
+    # annotation and arg shapes are checked
+    let res: f32[2, 2] = matmul(arr1, arr2)</pre>
 
         <p>That program doesn't seem very interesting until you try to change it. The compiler rejects accessing <code>a[i+1]</code> in <code>dot</code>, adding an extra <code>yield</code> in <code>matmul</code>, or modifying any of the <code>typevar</code> constraints in the function signatures. Here are some more examples:</p>
 
@@ -85,9 +99,7 @@ fn test():
         <img width=200px src="/imgs/curious_tenrec.png" alt="cartoon of a curious lowland streaked tenrec" title="curious lowland streaked tenrec">
         
         <p>Why make an imperative array language? In my opinion, the humble C-style <code>for</code> loop has gotten a bad rap. Some problems are easier to solve in an imperative, looping style, with mutable state and transparent locality. <code>Sirius</code> static analysis keeps most of its power and ameliorates the downsides.</p>
-        
-        <p>That said, I plan to build functional and array-oriented facilities over the imperative core, like map and filter, broadcasting, fancy indexing, and a checked <a href="https://iclr.cc/virtual/2022/oral/6603">einops</a> primitive integrated like regexes in Perl.</p>
-        
+              
         <p>What do polynomials have to do with arrays? For one thing, multidimensional array access desugars to a polynomial.</p>
         <div><table>
             <thead><tr><th>Array</th><th>Access</th><th>Desugar</th></tr></thead>
@@ -207,6 +219,16 @@ fn test():
         # proven safe since found[i] has type Ind(5)
         print a[found[i]]
 </pre>
+
+        <div><h2 id="limitations"><a href="#limitations">#</a> Limitations & Directions</h2></div>
+
+        <p>I have argued for imperative array programming, but I plan to build functional and array-oriented facilities over the imperative core, like map and filter, broadcasting, fancy indexing, and a checked <a href="https://iclr.cc/virtual/2022/oral/6603">einops</a> primitive integrated like regexes in Perl. The current privimitive types are <code>f32</code>, <code>f64</code>, <code>i64</code>, and <code>bool</code>; abstracting over numerical types is another fundamental motivation for basic parametric polymorphism.</p>
+
+        <p>The <code>matmul</code> example glossed over the question of array memory layout, but the type system will ultimately track that information, perhaps allowing <code>@dense</code> and other layout obligations in signatures. The short-circuit <code>?</code> operator, loop <code>break</code>s, and array slices are near-term design problems.</p>
+
+        <p>Structs are a simple extension of the existing tuple type. <a href="https://nlp.seas.harvard.edu/NamedTensor">Named tensors</a> then slot in nicely, where <code>arr.shape</code> becomes a struct rather than a tuple. The <code>Poly</code> algebra may be extended with integer division and modulo using <a href="https://en.wikipedia.org/wiki/Quasi-polynomial">quasi-polynomials</a>, but only at a steep complexity and runtime cost. Values should be liftable into <code>Poly</code>-space using, for instance, <code>val % N</code>, allowing implementation of data structures like hashmaps. Since the counting engine can't express sublinear bounds, <code>Sirius</code> implementations should expose primitives like binary search and $O(n \log n)$ sort.</p>
+
+        <p>Some true <code>Poly</code> systems will always elude the constraint solver (one example today is the perfect square <code>A^2 - 2*A*B + B^2 >= 0</code>), so solver development must be guided by systems from practical code. Machine learning is a core application, so autodiff is also on the menu.</p>
 
         <div><h2 id="backend"><a href="#backend">#</a> Backend</h2></div>
 

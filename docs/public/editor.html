@@ -18,9 +18,23 @@
         sum += a[i] * b[i]
     return sum
 
-fn matmul{I, J, K}(a: f32[I, J], b: f32[J, K]) -> f32[I, K]:
+fn matmul{I, J, L}(a: f32[I, J], b: f32[J, L]) -> f32[I, L]:
     for i from 0 to I:
-        for k from 0 to K:
-            yield dot(a[i], b'[k])</pre>
+        for k from 0 to L:
+            yield dot(a[i], b'[k])
+
+fn test():
+    let arr1 = [
+      [1.0, 2.0, 3.0],
+      [4.0, 5.0, 6.0]
+    ]
+
+    let arr2 = [
+        [7.0, 8.0],
+        [9.0, 1.0],
+        [2.0, 3.0]
+    ]
+
+    let res: f32[2, 2] = matmul(arr1, arr2)</pre>
     </body>
 </html>
