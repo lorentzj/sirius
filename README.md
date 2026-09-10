@@ -29,4 +29,4 @@ $ target/debug/srschk test.srs
 
 After `npm install`ing the dependencies in `docs/`, the `just docs` recipe will build the docs in `docs/public`. The recipe uses [wasm-pack](https://wasm-bindgen.github.io/wasm-pack/installer/) and [parcel](https://parceljs.org/). 
 
-The live editor requires [cross-origin isolated](https://web.dev/articles/coop-coep) headers (since it uses `SharedMemoryArray`), which are a hassle to set up locally. `npm run serve` uses [miniserve](https://github.com/svenstaro/miniserve) and expects a TLS certificate at `~/mkcert`.
+The live editor requires [cross-origin isolated](https://web.dev/articles/coop-coep) headers (since it uses `SharedArrayBuffer`), which are a hassle to set up locally. `npm run serve` uses [miniserve](https://github.com/svenstaro/miniserve) and expects a TLS certificate at `~/mkcert`.

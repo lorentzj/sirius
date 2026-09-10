@@ -20,12 +20,14 @@
     </head>
     <body>
         <div><h1>Sirius</h1></div>
-        
+
+        <p style="text-indent: 0;"><em>September 10, 2026</em></p>
+
         <figure>
             <img width=200px src="/imgs/tenrec_with_tensor.png" alt="cartoon of an excited lowland streaked tenrec holding a cube" title="excited lowland streaked tenrec with a tensor">
             <figcaption>A <a href="https://en.wikipedia.org/wiki/Lowland_streaked_tenrec">tenrec</a> with a tensor. All illustrations on this page were made by Kate Lorentz.</figcaption>
         </figure>
-        
+                
         <p><a href="https://github.com/lorentzj/sirius">Sirius</a> is a small, imperative, <a href="https://en.wikipedia.org/wiki/Total_functional_programming">total</a>, polynomially bounded language for pointful array programming.</p>
         
         <p>Having been stung too many times <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Conv3d.html">massaging PyTorch tensors</a>, I set off to create a type system that handles tensor shape bookkeeping. In the process, I explored a new part of PL design space and stumbled on an interesting feature set.</p>
@@ -69,7 +71,7 @@ fn test():
     # annotation is checked
     let res: f32[2, 2] = matmul(arr1, arr2)</pre>
 
-        <p>That program doesn't seem very interesting until you try to change it. The compiler rejects accessing <code>a[i+1]</code> in <code>dot</code>, adding an extra <code>yield</code> in <code>matmul</code>, changing the annotation of <code>res</code>, or modifying any of the typevar constraints in the function signatures. The typechecker is engineered to break comprehensibly when possible, with diagnostics that provide trivial disproofs or counterexamples. Here are some more examples:</p>
+        <p>That program doesn't seem very interesting until you try to change it. The compiler rejects accessing <code>a[i+1]</code> in <code>dot</code>, adding an extra <code>yield</code> in <code>matmul</code>, changing the annotation of <code>res</code>, or modifying any of the typevar constraints in the function signatures. The typechecker is engineered to break comprehensibly. Diagnostics provide trivial disproofs or counterexamples when possible. Here's some more code:</p>
 
         <pre class="editor"># polynomial expressions in typevars are valid types
 # "return.len == A + B" is proven in function body
@@ -234,15 +236,13 @@ fn test():
 
         <p>I have argued for imperative array programming, but I plan to build functional and array-oriented facilities over the imperative core, like map and filter, broadcasting, <a href="https://numpy.org/doc/stable/user/basics.indexing.html#advanced-indexing">fancy indexing</a>, and a checked <a href="https://iclr.cc/virtual/2022/oral/6603">einops</a> primitive integrated like regexes in Perl. The current scalar types are <code>f32</code>, <code>f64</code>, <code>i64</code>, and <code>bool</code>; abstracting over numerical types is another motivation for more general parametric polymorphism.</p>
 
-        <p>The <code>matmul</code> example glossed over the question of array memory layout, but the type system will ultimately track that information, perhaps allowing <code>@noalias</code>, <code>@dense</code>, and other obligations in signatures. There is no need for <code>yield</code> to favor row-major ordering; alternate bijective transforms could be supported with other <code>yield</code> modes for FFI or layout obligation purposes.</p>
+        <p>The <code>matmul</code> example glossed over the question of array memory layout. The type system will ultimately track that information, perhaps allowing <code>@noalias</code>, <code>@dense</code>, and other obligations in signatures. There is no need for <code>yield</code> to favor row-major ordering; alternate bijective maps could be supported with other <code>yield</code> modes for FFI or layout obligation purposes.</p>
 
-        <p>The short-circuit <code>?</code> operator, loop <code>break</code>s, and array slices are near-term design problems. Structs are a simple extension of the existing tuple type. <a href="https://nlp.seas.harvard.edu/NamedTensor">Named tensors</a> then slot in nicely, where <code>arr.shape</code> becomes a struct rather than a tuple.</p>
+        <p>The short-circuit <code>?</code> operator, loop <code>break</code>s, and array slices are near-term design problems. Structs are a simple extension of the existing tuple type. <a href="https://nlp.seas.harvard.edu/NamedTensor">Named tensors</a> then slot in nicely, where <code>arr.shape</code> becomes a struct rather than a tuple. Sum types and exhaustive pattern matching are table stakes.</p>
         
-        <p>The <code>Poly</code> algebra may be extended with integer division with <a href="https://en.wikipedia.org/wiki/Quasi-polynomial">quasi-polynomials</a>, but only at a steep complexity and runtime cost. The <a href="https://lexi-lambda.github.io/blog/2020/08/13/types-as-axioms-or-playing-god-with-static-types/">Alexis King-esque</a> constructive approach is to use <code>arr[I*J]</code> for strides, obviating their main use case anyway. Values should be liftable into <code>Poly</code>-space using, for instance, <code>val % N</code>, allowing implementation of data structures like hashmaps.</p>
+        <p>The <code>Poly</code> algebra may be extended with integer division with <a href="https://en.wikipedia.org/wiki/Quasi-polynomial">quasi-polynomials</a>, but only at a steep complexity and runtime cost. The <a href="https://lexi-lambda.github.io/blog/2020/08/13/types-as-axioms-or-playing-god-with-static-types/">Alexis King-esque</a> construction for strides is <code>arr[I*J]</code>, obviating its main use case anyway. Values should be liftable into <code>Poly</code>-space using, for instance, <code>val % N</code>, allowing implementation of data structures like hashmaps.</p>
         
-        <p>Since the counting engine can't express sublinear bounds, Sirius implementations should expose primitives like binary search and $O(n \log n)$ sort.</p>
-
-        <p>Some true <code>Poly</code> systems will always elude the constraint solver (one example today is the perfect square $A^2 - 2AB + B^2 \geq 0$), so solver development must be guided by systems from practical code for applications like machine learning. Runtime constraint <code>assert</code>s may be elided in unsafe optimized builds, offering an escape hatch.</p>
+        <p>Since the counting engine can't express sublinear bounds, Sirius should expose builtins like binary search and $\mathcal{O}(n \log n)$ sort. Some true <code>Poly</code> systems will always elude the constraint solver (one example today is the perfect square $A^2 - 2AB + B^2 \geq 0$), so solver development must be guided by systems from practical code for specific applications. Runtime constraint <code>assert</code>s can offer an escape hatch.</p>
 
         <div><h2 id="backend"><a href="#backend">#</a> Where's the Backend?</h2></div>
 
@@ -250,7 +250,7 @@ fn test():
 
         <p>ROCm is closing the performance gap with CUDA as both platforms evolve. AI accelerators are shipping with novel architectures. CPU core counts are rising. As single-core performance progress slows, parallelism increases. Programmers need new tools to harness this new hardware. We are entering the golden age of array languages. Meanwhile, advanced static analysis will become increasingly fashionable as LLM-assisted programming techniques mature.</p>
 
-        <p>I envision a high-level language that leverages types to drastically streamline optimization on highly parallel hardware. With <code>Poly</code> bounds on all memory and compute, the compiler can build tiling, rolling, and fusion strategies -- monomorphizing on shapes and eliding guards. Optimizing compilers <a href="https://godbolt.org/z/6xEz3Pan5">already</a> try to do this, but they must be conservative in the absence of statically guaranteed constraints. I'll try not to overclaim here as I am not yet initiated in <a href="https://arxiv.org/abs/1505.07716">the dark arts of automatic scheduling</a>.</p>
+        <p>Sirius has no defined scope yet, but its ambitions lean more towards a kernel DSL than a <a href="https://mojolang.org/">Mojo</a>-scale behemoth. I envision a high-level language that leverages types to drastically streamline optimization on highly parallel hardware. With <code>Poly</code> bounds on all memory and compute, the compiler can build tiling, rolling, and fusion strategies -- monomorphizing on shapes and eliding guards. Optimizing compilers <a href="https://godbolt.org/z/6xEz3Pan5">already</a> try to do this, but they must be conservative in the absence of statically guaranteed constraints. I'll try not to overclaim here as I am not yet initiated in <a href="https://arxiv.org/abs/1505.07716">the dark arts of automatic scheduling</a>.</p>
         
         <p>Sirius, or at least its affine fragment, is <a href="https://dl.acm.org/doi/full/10.1145/3674735">polyhedral</a> by construction, making it uniquely suited to an <a href="https://mlir.llvm.org/docs/Dialects/Affine/">MLIR</a> toolchain. The compiler can surface everything from memory layout (<span id="backlink_4" class="backlink">perhaps using <a href="https://arxiv.org/abs/2603.02298">CuTe</a>-style hierarchical layout algebra</span><sup><a href="#footnote_4">[4]</a></sup>) to runtime complexity, providing detailed performance diagnostics at compile time.</p>
 
@@ -265,6 +265,6 @@ fn test():
         <p id="footnote_1" class="footnote">[1] Low-ish. Annotation may be lessened in some cases, à la <a href="https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-elision">lifetime elision</a> in the Rust borrow checker. I will refrain from any kind of global inference because I mostly agree with  <a href="https://borretti.me/article/type-inference-was-a-mistake">Fernando Borretti on the topic</a>. Inference and solving strictly go per-function. <a href="#backlink_1">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
         <p id="footnote_2" class="footnote">[2] Solving arbitrary <code>Poly</code> constraints is impossible, courtesy of <a href="https://en.wikipedia.org/wiki/Hilbert%27s_tenth_problem">Matiyasevich et al</a>. For now, I'm sticking with <a href="https://github.com/Z3Prover/z3">Z3</a>'s <a href="https://microsoft.github.io/z3guide/docs/theories/Arithmetic">linear integer arithmetic</a> and a final pass to search for bounded-degree <a href="/api/doc/sirius/solver/t2/index.html">Handelman</a> representations. Although Z3 could safely check more sophisticated constraints, the checker will inevitably return some false positives. Happily, most constraints are trivial and obtain representationally without invoking Z3 at all. <a href="#backlink_2">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
         <p id="footnote_3" class="footnote">[3] The Dex paper (p. 11) remarks, “This captures one of the most common uses for the reshape operation... [while] not requiring the type system to solve systems of Diophantine equations to check which reshapes are valid.” Yeah, but what if we do? <a href="#backlink_3">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
-        <p id="footnote_4" class="footnote">[4] Cris Cecka exhibited the <em>Tao</em> of Sirius when, asked about compilation times, <a href="https://youtu.be/vzUhbDO_0qk?t=2981">he said</a> “I make absolutely sure that I never lose track of any static information, ever, because that's the Death of runtime.” <a href="#backlink_4">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
+        <p id="footnote_4" class="footnote">[4] Cris Cecka exhibited the <em>Tao</em> of Sirius when, asked about compilation times, <a href="https://youtu.be/vzUhbDO_0qk?t=2981">he said</a> “I make absolutely sure that I never lose track of any static information, ever, because that's the Death of runtime.” The programmer's computer is big so the user's computer can be small. <a href="#backlink_4">[<svg class="icon"><use href="/icons.svg#backlink"/></svg>]</a></p>
     </body>
 </html>
